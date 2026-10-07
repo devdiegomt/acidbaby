@@ -1,0 +1,104 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Fireboy, Watergirl & AcidBaby</title>
+  <style>
+    html, body {
+      margin: 0;
+      height: 100%;
+      background: #0d0b08;
+      overflow: hidden;
+    }
+    body {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 12px;
+    }
+    canvas {
+      flex: none;
+      display: block;
+      border-radius: 6px;
+      box-shadow: 0 0 40px rgba(0, 0, 0, 0.8);
+    }
+
+    /* Panel del editor de niveles */
+    #editor-panel {
+      flex: none;
+      box-sizing: border-box;
+      width: 330px;
+      height: 98vh;
+      overflow-y: auto;
+      padding: 12px 14px;
+      background: #1a150f;
+      border: 2px solid #6e5b3e;
+      border-radius: 10px;
+      color: #f3e6c8;
+      font: 13px "Segoe UI", system-ui, sans-serif;
+    }
+    #editor-panel[hidden] { display: none; }
+    #editor-panel header { display: flex; align-items: center; justify-content: space-between; }
+    #editor-panel h1 { margin: 0; font-size: 18px; color: #ffe9b8; }
+    #editor-panel h2 { margin: 0 0 6px; font-size: 14px; color: #ffe9b8; }
+    #editor-panel h3 { margin: 8px 0 4px; font-size: 11px; font-weight: 600; color: #9c8d70; text-transform: uppercase; letter-spacing: 0.05em; }
+    #editor-panel section { padding: 10px 0; border-bottom: 1px solid #3b3022; }
+    #editor-panel section:last-child { border-bottom: 0; }
+    #editor-panel label { display: block; margin: 4px 0; color: #d9c9a6; }
+    #editor-panel .row { display: flex; flex-wrap: wrap; gap: 6px; align-items: end; margin-top: 6px; }
+    #editor-panel .row label { margin: 0; }
+    #editor-panel input, #editor-panel select, #editor-panel textarea {
+      box-sizing: border-box;
+      background: #0d0b08;
+      color: #f3e6c8;
+      border: 1px solid #6e5b3e;
+      border-radius: 6px;
+      padding: 4px 6px;
+      font: inherit;
+    }
+    #editor-panel label > input:not([type="number"]) { width: 100%; margin-top: 2px; }
+    #editor-panel input[type="number"] { width: 58px; }
+    #editor-panel select { max-width: 190px; }
+    #editor-panel textarea { width: 100%; font: 11px Consolas, monospace; resize: vertical; }
+    #editor-panel button {
+      background: #2b2419;
+      color: #f3e6c8;
+      border: 1px solid #6e5b3e;
+      border-radius: 6px;
+      padding: 5px 9px;
+      font: inherit;
+      cursor: pointer;
+    }
+    #editor-panel button:hover:not(:disabled) { border-color: #ffe08a; }
+    #editor-panel button:disabled { opacity: 0.4; cursor: default; }
+    #editor-panel button.primary { background: #ffe08a; color: #1a150f; font-weight: 700; border-color: #ffe08a; }
+    #editor-panel .help { margin: 4px 0; color: #9c8d70; font-size: 12px; }
+    #editor-panel .good { margin: 0; color: #9dff8a; }
+    #editor-panel .bad { margin: 0; color: #f0a58f; }
+    #editor-panel ul { margin: 4px 0; padding-left: 18px; color: #f0a58f; }
+    #editor-panel .tiles { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; }
+    #editor-panel .tile { display: flex; align-items: center; gap: 6px; padding: 3px 6px; text-align: left; font-size: 12px; }
+    #editor-panel .tile.on { border-color: #ffe08a; background: #3b3022; }
+    #editor-panel .sw {
+      flex: none;
+      display: inline-grid;
+      place-items: center;
+      width: 20px;
+      height: 20px;
+      border-radius: 4px;
+      font: bold 12px Consolas, monospace;
+    }
+    #editor-panel .mech { display: flex; flex-wrap: wrap; gap: 4px 8px; align-items: center; padding: 6px; margin-bottom: 6px; border: 1px solid #3b3022; border-radius: 6px; }
+    #editor-panel .mech label { margin: 0; }
+    #editor-panel .mech input[type="number"] { width: 48px; }
+    #editor-panel .mech [data-act="del-mech"] { margin-left: auto; padding: 2px 7px; }
+  </style>
+</head>
+<body>
+  <canvas id="game"></canvas>
+  <script src="src/levels.js"></script>
+  <script src="src/editor.js"></script>
+  <script src="src/game.js"></script>
+</body>
+</html>
