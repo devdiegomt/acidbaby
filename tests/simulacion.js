@@ -28,7 +28,7 @@ game = game.replace(
      get grid(){return grid}, get fans(){return fans}, get doors(){return doors}, get enemies(){return enemies}, get items(){return items}, get shots(){return shots},
      get save(){return save}, isUnlocked, get levelIndex(){return levelIndex}, get lastResult(){return lastResult},
      get menuIndex(){return menuIndex}, get levelFrames(){return levelFrames}, setLevel(i, si = 0){ testLevel = null; seasonIndex = si; levelIndex = i; loadLevel(i); state = "playing"; }, get darts(){return darts}, get crumbles(){return crumbles}, get boss(){return boss}, solidAt,
-     SEASONS, get seasonIndex(){return seasonIndex}, get titleIndex(){return titleIndex}, isSeasonUnlocked, levelNumber, get flags(){return flags}, get checkpoint(){return checkpoint}, get retries(){return retries}, get toast(){return toast}, get level(){return level}, worldRange, get spikes(){return spikes}, get obsidian(){return obsidian}, get liquids(){return liquids}, starsOf, starCount };\n})();`,
+     SEASONS, get seasonIndex(){return seasonIndex}, get titleIndex(){return titleIndex}, isSeasonUnlocked, levelNumber, get flags(){return flags}, get checkpoint(){return checkpoint}, get retries(){return retries}, get toast(){return toast}, get level(){return level}, worldRange, get spikes(){return spikes}, get obsidian(){return obsidian}, get liquids(){return liquids}, starsOf, starCount, get golem(){return golem}, get rocks(){return rocks}, get waves(){return waves} };\n})();`,
 );
 // editor.js va antes que game.js (como en index.html); sin DOM solo define EditorCore.
 eval(fs.readFileSync(ROOT + "levels.js", "utf8") + "\nglobalThis.LEVELS = LEVELS;\n" + fs.readFileSync(ROOT + "levels2.js", "utf8") + "\nglobalThis.SEASON_2 = SEASON_2;\n" + fs.readFileSync(ROOT + "editor.js", "utf8") + "\n" + game);
@@ -1688,6 +1688,75 @@ for (const p of [acid, fire, water]) {
   walkTo(p, G.doors[p.ch.door].c);
 }
 check("Saltando al erizo, el ventilador los sube a las puertas", G.state === "won", G.state + " · " + G.players.map((p) => `${tile(p)} ♥${p.hearts}`).join(" / ") + (G.state === "dead" ? " · " + G.deathMessage : ""));
+// --- Nivel 1-6: el Gólem de magma ------------------------------------------------------------------
+console.log("\nNivel 1-6 (jefe)");
+const golemLevel = () => { G.setLevel(5, 1); run(1); fire = P("Fireboy"); water = P("Watergirl"); acid = P("AcidBaby"); };
+golemLevel();
+const gol = () => G.golem;
+// Mientras uno juega, los demás esperan quietos: aquí no se les hace daño (se prueba la mecánica).
+const safeRun = (n, until, actor) => { for (let i = 0; i < n && !(until && until()); i++) { for (const p of G.players) if (p !== actor) p.hurt = 5; run(1); } };
+const waterBarrels = () => G.boxes.filter((b) => b.fill === "water");
+check("Hay un Gólem y los dos dispensadores sueltan su barril", gol() && waterBarrels().length === 2);
+run(30);
+check("…el de la derecha cae al suelo", waterBarrels().some((b) => feetRow(b) === 16 && center(b) > 30 * 32));
+const x0 = gol().x;
+run(120);
+check("Tras la presentación el Gólem anda por el suelo", gol().state === "walk" && gol().x !== x0);
+// Sin agua no le pasa nada (ni una caja normal, ni un barril de lava).
+const lavaBarrel = Object.assign({ kind: "box", x: gol().x + 20, y: gol().y + 30, w: 28, h: 28, vx: 0, vy: 0, remX: 0, remY: 0, fill: "fire" });
+G.boxes.push(lavaBarrel);
+run(5);
+check("Un barril de lava no le hace nada", gol().hits === 0);
+G.boxes.splice(G.boxes.indexOf(lavaBarrel), 1);
+// Un barril de agua que le toca: un golpe, y el dispensador suelta otro al rato.
+const dropped = waterBarrels().find((b) => center(b) > 30 * 32);
+dropped.x = gol().x + 22; dropped.y = gol().y + 20;
+run(2);
+check("Un barril de agua que le toca le da un golpe y se gasta", gol().hits === 1 && gol().state === "hurt" && waterBarrels().length === 1);
+const stillWhileHurt = gol().x;
+run(30);
+check("…y se queda quieto un rato", gol().x === stillWhileHurt);
+run(170);
+check("…el dispensador suelta otro barril", waterBarrels().length === 2);
+// Fireboy sube por el ventilador a la repisa y le deja caer el barril encima cuando pasa por debajo.
+ride(fire, 1, 1);
+check("El ventilador sube a la repisa", feetRow(fire) === 10, tile(fire));
+const shelfBarrel = waterBarrels().find((b) => feetRow(b) === 10);
+walkTo(fire, Math.floor(center(shelfBarrel) / 32) - 1);
+safeRun(2000, () => gol().state === "walk" && gol().dir < 0 && gol().x < 13 * 32 && gol().x > 11 * 32, fire);
+down("KeyD"); safeRun(80, () => gol().hits === 2, fire); up("KeyD");
+safeRun(20, null, fire);
+check("Empujado desde la repisa, el barril le cae encima: segundo golpe", gol().hits === 2, `golpes ${gol().hits}`);
+// Watergirl empuja el barril del dispensador de la derecha contra él.
+safeRun(400, () => waterBarrels().some((b) => center(b) > 30 * 32 && feetRow(b) === 16));
+place(water, 34, 16);
+safeRun(20);
+safeRun(2000, () => gol().state === "walk" && gol().x > 22 * 32, water);
+down("ArrowLeft"); safeRun(200, () => gol().hits === 3 || !playing(), water); up("ArrowLeft");
+check("Empujado por el suelo contra él: tercer golpe", gol().hits === 3, `golpes ${gol().hits} ${tile(water)}`);
+safeRun(60);
+// Pisotón: ondas por el suelo que hay que saltar; las brasas caen en arco.
+safeRun(600, () => G.waves.length > 0);
+check("Da pisotones que mandan ondas por el suelo", G.waves.length === 2);
+safeRun(300, () => G.rocks.some((r) => r.ember));
+check("…y lanza brasas", G.rocks.some((r) => r.ember));
+const hurtBefore = acid.hearts;
+acid.hurt = 0;
+place(acid, Math.floor((gol().x + 36) / 32), 16);
+run(3);
+check("Tocarlo quema", acid.hearts < hurtBefore || G.state === "dead");
+golemLevel();
+G.golem.hits = 3; G.golem.state = "walk";
+const last = waterBarrels()[0];
+last.x = G.golem.x + 22; last.y = G.golem.y + 20;
+run(3);
+check("Al cuarto golpe se deshace…", G.golem.state === "dying");
+run(100);
+check("…se queda hecho obsidiana y el sello de las puertas se rompe", G.golem.state === "dead" && run(80) === undefined && [12, 13, 14, 15, 16].every((r) => G.grid[r][35] === " "));
+run(200);
+check("Sus barriles se evaporan y los dispensadores dejan de soltar más", waterBarrels().length === 0);
+for (const p of [fire, water, acid]) { place(p, 30, 16); run(2); walkTo(p, G.doors[p.ch.door].c); }
+check("Con el Gólem vencido se llega a las puertas", G.state === "won", G.players.map(tile).join(" / "));
 G.setLevel(0);
 
 process.exitCode = failures ? 1 : 0;

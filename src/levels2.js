@@ -6,6 +6,10 @@
 //   ≈ ♨    barril de agua / de lava: se empuja como una caja. Al llegar a un charco del elemento
 //          contrario (agua sobre lava, lava sobre agua) lo convierte entero en obsidiana y se gasta
 //   ■      obsidiana: suelo para todos (la forman los barriles; también se puede dibujar)
+//   Ω      el Gólem de magma (jefe del Mundo 1): anda por el suelo entre las columnas golem.left y
+//          golem.right, lanza brasas y da pisotones. Solo le hace daño un barril de agua que le toque
+//          (aguanta 4); al caer se rompen los sellos / del nivel
+//   ▼      dispensador: suelta un barril de agua, y otro al rato cada vez que el suyo se gasta
 //
 // Estrellas de cada nivel: completarlo, coger todas sus gemas y pasarlo sin perder un corazón
 // (ni volver a una bandera). Se pueden ganar en partidas distintas.
@@ -140,7 +144,7 @@ const SEASON_2 = {
             "#                #                         #",
             "#                #                         #",
             "#                #                         #",
-            "#   fwb ♨        #                    1 2 3#",
+            "#   fwb ♨        #             z      1 2 3#",
             "#  ########------#            ####   #######",
             "#                            %             #",
             "#                     ≈      %             #",
@@ -148,6 +152,31 @@ const SEASON_2 = {
             "#             z      ##      %             #",
             "# e               ⚑ ###      %e  ! ^       #",
             "###########~~~~~~######LLLLL################",
+          ],
+        },
+        {
+          name: "Corazón de magma",
+          hint: "El Gólem de magma solo teme al agua: echadle los barriles encima o ponédselos delante.",
+          golem: { name: "El Gólem de magma", left: 6, right: 31 },
+          map: [
+            "########################################",
+            "########################################",
+            "########################################",
+            "########  ####  ##  ####  #####  #######",
+            "##  ##     ##        ##     ##    ##  ##",
+            "#                                      #",
+            "#                                      #",
+            "#                                      #",
+            "#                                      #",
+            "#       ▼                              #",
+            "#    z                                 #",
+            "#  #######                       #######",
+            "#                                ▼ /   #",
+            "#                   e              /   #",
+            "#                               r  /   #",
+            "#                                  /   #",
+            "#^fwb               Ω              /123#",
+            "#############LL##########AA#############",
           ],
         },
       ],
