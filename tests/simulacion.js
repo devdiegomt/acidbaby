@@ -27,10 +27,11 @@ game = game.replace(
      get deathMessage(){return deathMessage}, get boxes(){return boxes}, get mechs(){return mechs}, get gems(){return gems},
      get grid(){return grid}, get fans(){return fans}, get doors(){return doors}, get enemies(){return enemies}, get items(){return items}, get shots(){return shots},
      get save(){return save}, isUnlocked, get levelIndex(){return levelIndex}, get lastResult(){return lastResult},
-     get menuIndex(){return menuIndex}, get levelFrames(){return levelFrames}, setLevel(i){ testLevel = null; levelIndex = i; loadLevel(i); state = "playing"; }, get darts(){return darts}, get crumbles(){return crumbles}, get boss(){return boss}, solidAt };\n})();`,
+     get menuIndex(){return menuIndex}, get levelFrames(){return levelFrames}, setLevel(i, si = 0){ testLevel = null; seasonIndex = si; levelIndex = i; loadLevel(i); state = "playing"; }, get darts(){return darts}, get crumbles(){return crumbles}, get boss(){return boss}, solidAt,
+     SEASONS, get seasonIndex(){return seasonIndex}, get titleIndex(){return titleIndex}, isSeasonUnlocked, levelNumber, get flags(){return flags}, get checkpoint(){return checkpoint}, get retries(){return retries}, get toast(){return toast}, get level(){return level}, worldRange };\n})();`,
 );
 // editor.js va antes que game.js (como en index.html); sin DOM solo define EditorCore.
-eval(fs.readFileSync(ROOT + "levels.js", "utf8") + "\nglobalThis.LEVELS = LEVELS;\n" + fs.readFileSync(ROOT + "editor.js", "utf8") + "\n" + game);
+eval(fs.readFileSync(ROOT + "levels.js", "utf8") + "\nglobalThis.LEVELS = LEVELS;\n" + fs.readFileSync(ROOT + "levels2.js", "utf8") + "\nglobalThis.SEASON_2 = SEASON_2;\n" + fs.readFileSync(ROOT + "editor.js", "utf8") + "\n" + game);
 
 const down = (code) => handlers.keydown({ code, repeat: false, preventDefault() {} });
 const up = (code) => handlers.keyup({ code });
@@ -1325,6 +1326,157 @@ fire.y = 13 * 32 + 2;
 walkTo(acid, 8);
 run(5);
 check("Quien se queda dentro de una barrera que ya no es suya sale al hueco libre", !G.solidAt(fire.x, fire.y, fire.w, fire.h, fire), `y=${fire.y}`);
+G.setLevel(0);
+
+// --- Temporada 2: temporadas, guardado y banderas de control ---------------------------------
+console.log("\nTemporada 2");
+const T2 = G.SEASONS[1];
+check("Hay dos temporadas y la segunda va por mundos", G.SEASONS.length === 2 && T2.worlds.length >= 1 && T2.levels.length >= 1);
+T2.levels.forEach((lv, i) => {
+  try { G.setLevel(i, 1); check(`Nivel ${G.levelNumber(i)} "${lv.name}" carga`, true); }
+  catch (e) { check(`Nivel T2 ${i + 1} carga`, false, e.message); }
+});
+check("Los niveles de la temporada 2 se numeran por mundo", G.levelNumber(0) === "1-1");
+check("Exportar e importar devuelve el mismo nivel (temporada 2)", T2.levels.every((lv) => JSON.stringify(E.parse(E.toText(lv))) === JSON.stringify(E.normalize(lv))));
+check("El editor ofrece los niveles de las dos temporadas", J.levels.length === LEVELS.length + T2.levels.length && J.levels.at(-1).label.startsWith("T2 1-1"));
+const withEmoji = { ...E.blankLevel(), map: E.blankLevel().map.map((row, r) => (r === 5 ? "#🚩" + row.slice(3) : row)) };
+check("Un emoji en el mapa se avisa con un mensaje claro", J.preview(withEmoji).some((p) => p.includes("emoji")));
+
+// La temporada 2 se abre al vencer al Guardián.
+const guardian = LEVELS.at(-1).name;
+delete G.save.levels[guardian];
+check("Sin vencer al Guardián la temporada 2 está cerrada", !G.isSeasonUnlocked(1));
+G.setLevel(0);
+G.state = "title";
+tap("ArrowRight");
+check("En la portada se marca la temporada 2…", G.titleIndex === 1);
+tap("Enter");
+check("…pero cerrada no se puede jugar", G.state === "title");
+G.setLevel(LEVELS.length - 1);
+run(1);
+for (const p of G.players) { const d = G.doors[p.ch.door]; place(p, d.c, d.r); }
+run(3);
+check("Vencer al Guardián abre la temporada 2 y lo anuncia", G.isSeasonUnlocked(1) && G.lastResult.newSeason?.id === "t2");
+tap("Escape");
+tap("Escape");
+check("ESC desde los niveles vuelve a la portada", G.state === "title" && G.titleIndex === 0);
+tap("ArrowRight");
+tap("Enter");
+check("ENTER en la temporada 2 abre sus niveles", G.state === "levels" && G.seasonIndex === 1 && G.levelIndex === 0);
+check("…y se recuerda para la próxima vez", saved().season === 1);
+tap("Enter");
+check("Se juega el primer nivel de la temporada 2", G.state === "playing" && G.level === T2.levels[0]);
+run(1);
+for (const p of G.players) { const d = G.doors[p.ch.door]; place(p, d.c, d.r); }
+run(3);
+check("Su récord se guarda aparte, con la temporada delante", saved().levels[`t2:${T2.levels[0].name}`]?.done === true && !saved().levels[T2.levels[0].name]);
+check("El récord de un nivel de la temporada 1 sigue con su nombre de siempre", saved().levels["Primeros pasos"]?.done === true);
+G.state = "levels";
+check("El menú enseña solo los niveles del mundo marcado", G.worldRange().start === 0 && G.worldRange().n === T2.worlds[0].levels.length);
+let drawError2 = null;
+for (const st of ["title", "levels", "playing", "paused", "dead", "won", "ending"]) {
+  G.state = st;
+  try { G.render(); } catch (e) { drawError2 = `${st}: ${e.message}`; }
+}
+check("Todas las pantallas de la temporada 2 se dibujan sin errores", !drawError2, drawError2 || "");
+
+// Banderas de control (en el nivel 1-1).
+const flagLevel = () => { G.setLevel(0, 1); run(1); fire = P("Fireboy"); water = P("Watergirl"); acid = P("AcidBaby"); };
+flagLevel();
+const flag = G.flags[0];
+check("La bandera está en el mapa y apagada", flag && !flag.on && G.grid[flag.r][flag.c] === " ");
+place(fire, flag.c, flag.r); place(water, flag.c - 1, flag.r);
+run(5);
+check("Con dos junto a la bandera no se enciende", !flag.on && !G.checkpoint);
+place(acid, flag.c + 1, flag.r);
+run(5);
+check("Con los tres junto a ella se enciende y avisa", G.flags[0].on && G.checkpoint && G.toast);
+const rubyAfter = G.gems.find((g) => g.type === "fire" && g.r === 16 && g.c > 30);
+place(fire, rubyAfter.c, rubyAfter.r);
+run(3);
+check("(Fireboy coge un rubí después de la bandera)", rubyAfter.taken);
+fire.hearts = 1;
+const framesAtDeath = G.levelFrames;
+place(water, 7, 16);
+run(5);
+check("Watergirl cae en la lava…", G.state === "dead");
+check("…y el aviso dice que se vuelve a la bandera", G.checkpoint !== null);
+run(200);
+const near = (p) => Math.abs(feetRow(p) - flag.r) <= 1 && Math.abs(center(p) / 32 - flag.c) <= 2;
+check("Al rato vuelven los tres a la bandera", G.state === "playing" && G.players.every(near), G.players.map(tile).join(" / "));
+check("…con las vidas llenas y un rato invencibles", G.players.every((p) => p.hearts === 3 && p.hurt > 0));
+check("…y lo cogido después de la bandera vuelve a su sitio", !G.gems.find((g) => g.type === "fire" && g.r === 16 && g.c > 30).taken);
+check("Se cuentan las vueltas a la bandera", G.retries === 1);
+check("El reloj no vuelve atrás", G.levelFrames > framesAtDeath, `${framesAtDeath} → ${G.levelFrames}`);
+place(fire, 30, 16);
+tap("KeyR");
+check("R también vuelve a la bandera", G.retries === 2 && near(P("Fireboy")));
+tap("Escape");
+check("En la pausa aparece «Volver a la bandera»", G.state === "paused");
+tap("ArrowDown");
+tap("Enter");
+check("…y funciona", G.state === "playing" && G.retries === 3);
+tap("Escape"); tap("ArrowDown"); tap("ArrowDown"); tap("Enter");
+check("«Reiniciar nivel» vuelve al principio de verdad y apaga la bandera", G.state === "playing" && !G.checkpoint && !G.flags[0].on && G.retries === 0);
+check("Sin bandera, la pausa es la de siempre", (tap("Escape"), tap("ArrowDown"), tap("ArrowDown"), G.menuIndex === 2));
+tap("Escape");
+tap("Escape");
+G.setLevel(0, 1);
+run(1);
+fire = P("Fireboy"); water = P("Watergirl"); acid = P("AcidBaby");
+place(fire, flag.c, flag.r); place(water, flag.c - 1, flag.r); place(acid, flag.c + 1, flag.r);
+run(3);
+const cp = G.checkpoint;
+G.setLevel(0, 1);
+check("Un nivel recién cargado no tiene bandera encendida", !G.checkpoint && cp);
+sandbox((g) => { g[16][10] = "⚑"; g[16][6] = "}"; });
+place(fire, 10, 16); place(water, 9, 16); place(acid, 11, 16);
+run(3);
+walkTo(acid, 6);
+check("(Tras un cambio de personaje…)", acid.ch.name === "Fireboy");
+tap("KeyR");
+const [pa, pb, pc] = G.players;
+check("…volver a la bandera devuelve a cada uno su personaje y sus teclas", pa.ch.name === "Fireboy" && pa.controls.left === "KeyA" && pc.ch.name === "AcidBaby" && pc.controls.left === "KeyG" && pb.controls.left === "ArrowLeft");
+
+// El nivel 1-1 se puede pasar entero con las teclas.
+console.log("\nNivel 1-1");
+flagLevel();
+// Anda a la derecha hasta la columna c saltando los charcos que no son suyos.
+function runRightTo(p, c) {
+  const k = keysOf(p);
+  const pool = { L: "fire", "~": "water", A: "acid" };
+  let jumping = 0;
+  down(k.r);
+  for (let i = 0; i < 900 && center(p) < c * 32 + 16 && playing(); i++) {
+    // Salta cuando el charco empieza justo delante de los pies.
+    const ahead = pool[G.grid[feetRow(p) + 1]?.[Math.floor((p.x + p.w + 8) / 32)]];
+    if (p.onGround && !jumping && ahead && ahead !== p.ch.immune) { jumping = 16; down(k.j); }
+    if (jumping && --jumping === 0) up(k.j);
+    run(1);
+  }
+  up(k.r); up(k.j);
+  run(25);
+}
+for (const p of [acid, water, fire]) runRightTo(p, 17);
+check("Los tres cruzan los charcos de los demás saltando", playing() && G.players.every((p) => center(p) > 14 * 32), G.players.map(tile).join(" / "));
+check("…y cada uno coge la gema de su charco", G.gems.filter((g) => g.c < 18).every((g) => g.taken));
+for (const [p, c] of [[acid, 22], [water, 21], [fire, 20]]) { const k = keysOf(p); hold([k.r, k.j], 30); walkTo(p, c); }
+check("Suben a la roca y encienden la bandera", G.flags[0].on, G.players.map(tile).join(" / "));
+// Muelle de abajo → piso del medio → muelle de arriba → piso de las puertas.
+function climbSprings(p) {
+  const k = keysOf(p);
+  // Andando a la derecha se pasa por encima del muelle y sale lanzado hacia el piso del medio.
+  hold([k.r], 300, () => p.onGround && feetRow(p) === 11);
+  walkTo(p, 40);
+  hold([k.r], 60, () => p.vy < -5); // pisa el muelle de arriba…
+  hold([k.l], 120, () => p.onGround && feetRow(p) === 6); // …y se echa a la izquierda
+  return feetRow(p);
+}
+for (const p of [fire, water, acid]) climbSprings(p);
+check("Los dos muelles los suben al piso de las puertas", playing() && G.players.every((p) => feetRow(p) === 6), G.players.map(tile).join(" / "));
+walkTo(water, 37);
+for (const p of [fire, water, acid]) walkTo(p, G.doors[p.ch.door].c);
+check("…y llegan a sus puertas: nivel completado", G.state === "won", G.state + " " + G.players.map(tile).join(" / "));
 G.setLevel(0);
 
 process.exitCode = failures ? 1 : 0;

@@ -43,6 +43,8 @@
 //   {      jefe final (el Guardián): flota entre las columnas boss.left y boss.right; su ojo
 //          queda a la altura de quien esté de pie en la fila boss.aimRow (ver el nivel "El Guardián")
 //   /      sello: sólido; se rompe solo (entero) cuando cae el jefe
+//   ⚑      bandera de control (Temporada 2, ver levels2.js): con los tres junto a ella, al caer
+//          se vuelve ahí en vez de al principio
 //
 // Mecanismos (se configuran en "mechanisms", usando cualquier otra letra):
 //   letra minúscula  → casillas de la plataforma / compuerta que se mueve
