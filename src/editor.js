@@ -89,6 +89,7 @@
       map: data.map.map((row) => row.padEnd(w, " ")),
     };
     if (data.boss && typeof data.boss === "object") clean.boss = { ...data.boss }; // configuración del jefe final
+    if (data.golem && typeof data.golem === "object") clean.golem = { ...data.golem }; // la del Gólem de magma
     return clean;
   }
 
@@ -106,9 +107,10 @@
       }
       lines.push("  },");
     }
-    if (data.boss) {
-      const fields = Object.entries(data.boss).map(([k, v]) => `${k}: ${q(v)}`);
-      lines.push(`  boss: { ${fields.join(", ")} },`);
+    for (const cfg of ["boss", "golem"]) {
+      if (!data[cfg]) continue;
+      const fields = Object.entries(data[cfg]).map(([k, v]) => `${k}: ${q(v)}`);
+      lines.push(`  ${cfg}: { ${fields.join(", ")} },`);
     }
     lines.push("  map: [", ...data.map.map((row) => `    ${q(row)},`), "  ],", "},");
     return lines.join("\n");
@@ -255,6 +257,7 @@
       ["@", "Escarabajo", "#9b4dca"], ["&", "Murciélago", "#8a63c4"], ["!", "Erizo (no se pisa)", "#8a5a2b"],
       [":", "Fantasma (atraviesa paredes)", "#e8f0ff"], ["<", "Torreta hacia la izquierda", "#4a4f5c"], [">", "Torreta hacia la derecha", "#4a4f5c"],
       ["{", "Jefe final (el Guardián)", "#5a4a33"], ["/", "Sello (cae con el jefe)", "#c86bff"],
+      ["Ω", "Gólem de magma (jefe)", "#ff8a3d"], ["▼", "Dispensador de barriles de agua", "#4a4f5c"],
     ]],
   ];
   const LABELS = Object.fromEntries(PALETTE.flatMap(([, tiles]) => tiles.map(([ch, label]) => [ch, label])));
@@ -297,6 +300,7 @@
     grid = toGrid(clean.map);
     data = { name: clean.name, hint: clean.hint, mechanisms: clean.mechanisms };
     if (clean.boss) data.boss = clean.boss;
+    if (clean.golem) data.golem = clean.golem;
   }
 
   // Tras cada cambio: guarda el borrador, vuelve a cargar la vista previa y refresca el panel.

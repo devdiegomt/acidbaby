@@ -60,6 +60,19 @@
   const BOSS_SLAM_RATE = 420; // desde la fase 2
   const BOSS_GROUND_TIME = 100; // frames en el suelo tras estrellarse
 
+  // Jefe del Mundo 1 (Temporada 2): el Gólem de magma. Anda por el suelo y solo le hace daño el agua:
+  // hay que echarle encima (o ponerle delante) los barriles que sueltan los dispensadores.
+  const GOLEM_TILE = "Ω";
+  const DISPENSER_TILE = "▼";
+  const GOLEM_W = 72;
+  const GOLEM_H = 80;
+  const GOLEM_HP = 4; // barriles de agua que aguanta
+  const GOLEM_SPEED = [0.9, 1.2, 1.5, 1.9]; // según los golpes que lleva
+  const GOLEM_STOMP_RATE = [320, 270, 220, 170]; // pisotón: ondas por el suelo
+  const GOLEM_EMBER_RATE = [170, 145, 120, 95]; // brasas en arco
+  const GOLEM_HURT = 70; // frames quieto (y sin recibir daño) tras un golpe
+  const DISPENSER_DELAY = 150; // lo que tarda un dispensador en soltar otro barril
+
   const FONT = '"Segoe UI", system-ui, sans-serif';
   const MECH_COLORS = ["#f2c14e", "#c86bff", "#ff6fa8", "#4fd6c8", "#f0f0f0"];
 
@@ -449,6 +462,8 @@
   let cleanRun = true; // nadie ha perdido un corazón ni ha vuelto a una bandera (tercera estrella)
   let toast = null; // aviso breve en pantalla: { text, frames }
   let boss = null; // jefe final (si el nivel tiene)
+  let golem = null; // Gólem de magma (jefe del Mundo 1 de la temporada 2)
+  let dispensers = []; // sueltan barriles de agua: { c, r, wait }
   let rocks = []; // rocas que suelta el jefe
   let waves = []; // ondas de choque cuando se estrella contra el suelo
   let shake = 0; // frames que le quedan a la sacudida de pantalla
@@ -527,6 +542,8 @@
     retries = 0;
     toast = null;
     boss = null;
+    golem = null;
+    dispensers = [];
     rocks = [];
     waves = [];
     shake = 0;
@@ -592,6 +609,14 @@
         }
         if (t === FLAG_TILE) {
           flags.push({ c, r, on: false });
+          continue;
+        }
+        if (t === GOLEM_TILE) {
+          golem = makeGolem(c, r);
+          continue;
+        }
+        if (t === DISPENSER_TILE) {
+          dispensers.push({ c, r, wait: 0 });
           continue;
         }
         if (CHARACTERS.some((ch) => ch.spawn === t)) spawns[t] = { c, r };
@@ -703,7 +728,7 @@
   function liveState() {
     return {
       grid, liquids, breakables, dissolving, barriers, fans, doors, boxes, gems, mechs, portals,
-      enemies, items, springs, crumbles, spikes, flags, obsidian, boss, bossDefeatedAt,
+      enemies, items, springs, crumbles, spikes, flags, obsidian, boss, bossDefeatedAt, golem, dispensers,
       players: players.map((p) => ({
         ...p,
         ch: CHARACTERS.indexOf(p.ch),
@@ -726,7 +751,7 @@
   function backToCheckpoint() {
     const s = structuredClone(checkpoint);
     ({ grid, liquids, breakables, dissolving, barriers, fans, doors, boxes, gems, mechs, portals } = s);
-    ({ enemies, items, springs, crumbles, spikes, flags, obsidian, boss, bossDefeatedAt } = s);
+    ({ enemies, items, springs, crumbles, spikes, flags, obsidian, boss, bossDefeatedAt, golem, dispensers } = s);
     players = s.players.map((p) =>
       Object.assign(p, {
         ch: CHARACTERS[p.ch],
@@ -1656,7 +1681,7 @@
       r.y += r.vy;
       const hit = players.find((p) => p.alive && intersects(r.x, r.y, r.w, r.h, p));
       if (hit) {
-        if (hit.hurt === 0) hurtPlayer(hit, r, "fue golpeado por una roca");
+        if (hit.hurt === 0) hurtPlayer(hit, r, r.cause || "fue golpeado por una roca");
         r.dead = true;
       } else if (solidAt(r.x, r.y, r.w, r.h, null)) {
         burst(r.x + r.w / 2, r.y + r.h, ["#8a7a62", "#5a4a33"], 6);
@@ -1668,7 +1693,7 @@
     for (const w of waves) {
       w.x += w.vx;
       const hit = players.find((p) => p.alive && intersects(w.x, w.y, w.w, w.h, p));
-      if (hit && hit.hurt === 0) hurtPlayer(hit, w, "no saltó la onda del Guardián");
+      if (hit && hit.hurt === 0) hurtPlayer(hit, w, w.cause || "no saltó la onda del Guardián");
       if (solidAt(w.x, w.y, w.w, w.h - 2, null) || w.x < -40 || w.x > W + 40) w.dead = true;
       if (state !== "playing") break;
     }
@@ -1687,8 +1712,163 @@
     rocks = [];
     waves = [];
     darts = [];
+    breakSeals();
+  }
+
+  function breakSeals() {
     for (const br of breakables) {
       if (br.type === SEAL_TILE && grid[br.r][br.c] === SEAL_TILE && !dissolving.has(key(br.c, br.r))) startDissolve(br.c, br.r);
+    }
+  }
+
+  // ---------------------------------------------------------------------------
+  // Gólem de magma: patrulla el suelo, lanza brasas y da pisotones; cada barril de agua que
+  // le toca lo enfría (un golpe). Al cuarto se queda hecho obsidiana y se rompe el sello.
+  // ---------------------------------------------------------------------------
+  function makeGolem(c, r) {
+    const cfg = level.golem || {};
+    return {
+      name: cfg.name || "El Gólem de magma",
+      x: c * T + T / 2 - GOLEM_W / 2,
+      y: (r + 1) * T - GOLEM_H,
+      minX: (cfg.left ?? 3) * T,
+      maxX: ((cfg.right ?? grid[0].length - 4) + 1) * T - GOLEM_W,
+      dir: -1,
+      hits: 0,
+      state: "intro", // intro | walk | stomp | hurt | dying | dead
+      timer: 90,
+      stompTimer: GOLEM_STOMP_RATE[0],
+      emberTimer: GOLEM_EMBER_RATE[0] / 2,
+      flash: 0,
+      anim: 0,
+    };
+  }
+
+  const golemBody = (g) => ({ x: g.x + 8, y: g.y + 10, w: GOLEM_W - 16, h: GOLEM_H - 10 });
+
+  function updateGolem() {
+    const g = golem;
+    if (g.flash > 0) g.flash--;
+    g.anim++;
+    updateRocksAndWaves();
+    if (g.state === "dead" || state !== "playing") return;
+    if (g.state === "dying") {
+      shake = Math.max(shake, 3);
+      if (g.timer % 6 === 0) {
+        burst(g.x + Math.random() * GOLEM_W, g.y + Math.random() * GOLEM_H, ["#1b1726", "#6f63a0", "#ff8a3d", "#e8e8f0"], 10);
+        sound.play("crumble");
+      }
+      if (--g.timer <= 0) defeatGolem(g);
+      return;
+    }
+    if (g.state === "intro") {
+      if (--g.timer <= 0) g.state = "walk";
+      return;
+    }
+
+    // Un barril de agua que le toca se gasta y le da un golpe (mientras se recupera, no).
+    const body = golemBody(g);
+    if (g.state !== "hurt") {
+      const barrel = boxes.find((b) => b.fill === "water" && intersects(body.x, body.y, body.w, body.h, b));
+      if (barrel) {
+        boxes = boxes.filter((b) => b !== barrel);
+        hitGolem(g);
+        return;
+      }
+    }
+
+    const lvl = Math.min(g.hits, GOLEM_SPEED.length - 1);
+    if (g.state === "hurt") {
+      if (--g.timer <= 0) g.state = "walk";
+    } else if (g.state === "walk") {
+      g.x += g.dir * GOLEM_SPEED[lvl];
+      if (g.x <= g.minX) [g.x, g.dir] = [g.minX, 1];
+      if (g.x >= g.maxX) [g.x, g.dir] = [g.maxX, -1];
+      if (--g.emberTimer <= 0) {
+        g.emberTimer = GOLEM_EMBER_RATE[lvl];
+        for (const vx of [-2.6, -1.1, 1.1, 2.6]) {
+          rocks.push({ x: g.x + GOLEM_W / 2 - 7, y: g.y + 6, w: 14, h: 14, vx, vy: -7, ember: true, cause: "se quemó con una brasa del Gólem" });
+        }
+        sound.play("shot");
+      }
+      if (--g.stompTimer <= 0) {
+        g.state = "stomp";
+        g.timer = 40;
+      }
+    } else if (g.state === "stomp") {
+      // Levanta un pie y lo deja caer: ondas de choque a los dos lados.
+      if (--g.timer <= 0) {
+        g.state = "walk";
+        g.stompTimer = GOLEM_STOMP_RATE[lvl];
+        shake = 18;
+        const floorY = g.y + GOLEM_H;
+        const cause = "no saltó la onda del Gólem";
+        waves.push({ x: g.x - 24, y: floorY - 14, w: 22, h: 14, vx: -4, cause }, { x: g.x + GOLEM_W + 2, y: floorY - 14, w: 22, h: 14, vx: 4, cause });
+        burst(g.x + GOLEM_W / 2, floorY, ["#ff8a3d", "#ffd166", "#5a4a33"], 30);
+        sound.play("boom");
+      }
+    }
+
+    // Tocarlo quema.
+    for (const p of players) {
+      if (p.alive && p.hurt === 0 && intersects(body.x, body.y, body.w, body.h, p)) {
+        hurtPlayer(p, { x: g.x, w: GOLEM_W }, "se quemó con el Gólem de magma");
+        if (state !== "playing") return;
+      }
+    }
+  }
+
+  function hitGolem(g) {
+    g.hits++;
+    g.flash = 24;
+    shake = Math.max(shake, 8);
+    burst(g.x + GOLEM_W / 2, g.y + GOLEM_H / 3, ["#e8e8f0", "#ffffff", "#9fd8ff", "#b9b4cc"], 40); // vapor
+    sound.play("hiss");
+    sound.play("bossHit");
+    if (g.hits >= GOLEM_HP) {
+      g.state = "dying";
+      g.timer = 90;
+      sound.play("roar");
+      return;
+    }
+    g.state = "hurt";
+    g.timer = GOLEM_HURT;
+    g.stompTimer = Math.min(g.stompTimer, GOLEM_STOMP_RATE[g.hits]);
+  }
+
+  function defeatGolem(g) {
+    g.state = "dead";
+    bossDefeatedAt = levelFrames;
+    shake = 30;
+    burst(g.x + GOLEM_W / 2, g.y + GOLEM_H / 2, ["#1b1726", "#6f63a0", "#ff8a3d", "#ffffff"], 90);
+    sound.play("boom");
+    sound.play("win");
+    for (const e of enemies) if (e.alive) defeatEnemy(e);
+    rocks = [];
+    waves = [];
+    // Los barriles de los dispensadores se evaporan (así ninguno acaba tapando una puerta).
+    for (const b of boxes) if (b.from) burst(b.x + b.w / 2, b.y + b.h / 2, ["#e8e8f0", "#9fd8ff"], 12);
+    boxes = boxes.filter((b) => !b.from);
+    breakSeals();
+  }
+
+  // Los dispensadores sueltan un barril de agua cuando el suyo se ha gastado (al rato).
+  function updateDispensers() {
+    if (golem && (golem.state === "dying" || golem.state === "dead")) return;
+    for (const d of dispensers) {
+      const id = key(d.c, d.r);
+      if (boxes.some((b) => b.from === id)) continue;
+      if (d.wait > 0) {
+        d.wait--;
+        continue;
+      }
+      const x = d.c * T + (T - BOX) / 2;
+      const y = (d.r + 1) * T - BOX;
+      if (boxes.some((b) => intersects(x, y, BOX, BOX, b))) continue;
+      boxes.push(Object.assign(makeBody("box", x, y, BOX, BOX), { fill: "water", from: id }));
+      d.wait = DISPENSER_DELAY;
+      burst(x + BOX / 2, y, ["#a8e6ff", "#1f7bff", "#ffffff"], 10);
+      sound.play("clink");
     }
   }
 
@@ -1987,6 +2167,8 @@
         updateShots();
         updateDarts();
         if (boss && state === "playing") updateBoss();
+        if (golem && state === "playing") updateGolem();
+        updateDispensers();
         updateBreakables();
         collectGems();
         collectItems();
@@ -3824,6 +4006,22 @@
 
   function drawRocksAndWaves(t) {
     for (const r of rocks) {
+      if (r.ember) {
+        // Brasa del Gólem: bola de lava con estela
+        ctx.save();
+        ctx.shadowColor = "#ff6a1f";
+        ctx.shadowBlur = 12;
+        ctx.fillStyle = "#ff8a3d";
+        ctx.beginPath();
+        ctx.arc(r.x + r.w / 2, r.y + r.h / 2, r.w / 2, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.fillStyle = "#ffd166";
+        ctx.beginPath();
+        ctx.arc(r.x + r.w / 2 - 2, r.y + r.h / 2 - 2, r.w / 4, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.restore();
+        continue;
+      }
       ctx.fillStyle = "#8a7a62";
       ctx.beginPath();
       ctx.arc(r.x + r.w / 2, r.y + r.h / 2, r.w / 2, 0, Math.PI * 2);
@@ -3842,6 +4040,152 @@
       ctx.closePath();
       ctx.fill();
       ctx.restore();
+    }
+  }
+
+  // Mezcla dos colores #rrggbb (k = 0 → a, k = 1 → b).
+  function mix(a, b, k) {
+    const pa = [1, 3, 5].map((i) => parseInt(a.slice(i, i + 2), 16));
+    const pb = [1, 3, 5].map((i) => parseInt(b.slice(i, i + 2), 16));
+    return `rgb(${pa.map((v, i) => Math.round(v + (pb[i] - v) * k)).join(",")})`;
+  }
+
+  // Gólem de magma: roca oscura con grietas de lava que se van enfriando con cada golpe.
+  function drawGolem(t) {
+    const g = golem;
+    if (!g) return;
+    const ground = g.y + GOLEM_H;
+    if (g.state === "dead") {
+      // Queda un montón de obsidiana
+      ctx.fillStyle = "#1b1726";
+      ctx.beginPath();
+      ctx.moveTo(g.x - 6, ground);
+      ctx.lineTo(g.x + 14, ground - 22);
+      ctx.lineTo(g.x + 30, ground - 30);
+      ctx.lineTo(g.x + 48, ground - 20);
+      ctx.lineTo(g.x + 62, ground - 26);
+      ctx.lineTo(g.x + GOLEM_W + 6, ground);
+      ctx.closePath();
+      ctx.fill();
+      ctx.strokeStyle = "#6f63a0";
+      ctx.lineWidth = 1.5;
+      ctx.stroke();
+      return;
+    }
+    const cool = g.hits / GOLEM_HP;
+    const lava = mix("#ffb347", "#6f63a0", cool);
+    const rock = mix("#4a2f24", "#2c2640", cool);
+    const shakeX = g.state === "dying" ? Math.sin(t * 60) * 3 : g.state === "stomp" ? Math.sin(t * 40) * 1.5 : 0;
+    const lift = g.state === "stomp" ? Math.min(14, (40 - g.timer) * 0.6) : 0; // pie levantado
+    const step = g.state === "walk" ? Math.sin(g.anim * 0.12) * 3 : 0;
+    const x = g.x + shakeX;
+    const y = g.y - Math.abs(step) * 0.5;
+    const face = g.dir;
+
+    ctx.save();
+    if (g.state === "hurt" && g.timer % 10 < 5) ctx.globalAlpha = 0.75;
+    ctx.shadowColor = lava;
+    ctx.shadowBlur = 18 * (1 - cool) + 4;
+    // Piernas
+    ctx.fillStyle = rock;
+    ctx.fillRect(x + 12, ground - 22 - lift * (face > 0 ? 0 : 1) + step, 18, 22 + lift * (face > 0 ? 0 : 1) - step);
+    ctx.fillRect(x + GOLEM_W - 30, ground - 22 - lift * (face > 0 ? 1 : 0) - step, 18, 22 + lift * (face > 0 ? 1 : 0) + step);
+    // Cuerpo
+    roundRectPath(ctx, x + 4, y + 18, GOLEM_W - 8, GOLEM_H - 38, 14);
+    ctx.fill();
+    // Brazos
+    roundRectPath(ctx, x - 6, y + 28 - step, 14, 36, 6);
+    ctx.fill();
+    roundRectPath(ctx, x + GOLEM_W - 8, y + 28 + step, 14, 36, 6);
+    ctx.fill();
+    // Cabeza
+    roundRectPath(ctx, x + 18, y, GOLEM_W - 36, 26, 8);
+    ctx.fill();
+    ctx.restore();
+
+    // Grietas de lava
+    ctx.strokeStyle = lava;
+    ctx.lineWidth = 3;
+    ctx.lineCap = "round";
+    ctx.beginPath();
+    ctx.moveTo(x + 16, y + 26);
+    ctx.lineTo(x + 28, y + 40);
+    ctx.lineTo(x + 22, y + 52);
+    ctx.moveTo(x + GOLEM_W - 16, y + 30);
+    ctx.lineTo(x + GOLEM_W - 30, y + 44);
+    ctx.lineTo(x + GOLEM_W - 24, y + 58);
+    ctx.moveTo(x + GOLEM_W / 2 - 4, y + 22);
+    ctx.lineTo(x + GOLEM_W / 2 + 4, y + 34);
+    ctx.stroke();
+    ctx.lineCap = "butt";
+    // Núcleo que late
+    ctx.fillStyle = lava;
+    ctx.globalAlpha = 0.6 + Math.sin(t * 5) * 0.3;
+    ctx.beginPath();
+    ctx.arc(x + GOLEM_W / 2, y + 44, 7, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.globalAlpha = 1;
+    // Ojos (miran hacia donde anda)
+    ctx.fillStyle = g.state === "hurt" ? "#e8e8f0" : "#ffe08a";
+    ctx.fillRect(x + GOLEM_W / 2 - 12 + face * 3, y + 9, 7, 5);
+    ctx.fillRect(x + GOLEM_W / 2 + 5 + face * 3, y + 9, 7, 5);
+    // Destello al recibir un golpe
+    if (g.flash > 0) {
+      ctx.fillStyle = `rgba(255,255,255,${g.flash / 40})`;
+      roundRectPath(ctx, x - 6, y, GOLEM_W + 12, GOLEM_H, 14);
+      ctx.fill();
+    }
+  }
+
+  // Dispensador: un caño en el techo de la casilla que gotea agua.
+  function drawDispensers(t) {
+    for (const d of dispensers) {
+      const x = d.c * T;
+      const y = d.r * T;
+      ctx.fillStyle = "#4a4f5c";
+      ctx.fillRect(x + 4, y, T - 8, 8);
+      ctx.fillStyle = "#6d7688";
+      ctx.fillRect(x + 9, y + 8, T - 18, 5);
+      ctx.fillStyle = "#1f7bff";
+      ctx.fillRect(x + 8, y + 3, T - 16, 2);
+      const phase = (t * 1.5 + d.c * 0.3) % 1;
+      ctx.globalAlpha = 1 - phase;
+      ctx.fillStyle = "#a8e6ff";
+      ctx.beginPath();
+      ctx.arc(x + T / 2, y + 14 + phase * 14, 2, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.globalAlpha = 1;
+    }
+  }
+
+  function drawGolemBar() {
+    const g = golem;
+    if (g.state === "dead") {
+      const since = levelFrames - bossDefeatedAt;
+      if (since < 240) {
+        ctx.save();
+        ctx.globalAlpha = Math.min(1, since / 20, (240 - since) / 40);
+        ctx.fillStyle = "rgba(10,8,5,0.75)";
+        ctx.fillRect(0, H / 2 - 50, W, 100);
+        text(`¡${g.name} se ha enfriado!`, W / 2, H / 2 - 12, 34, "#ffe08a");
+        text("El sello de las puertas se rompe…", W / 2, H / 2 + 26, 18, "#d9c9a6", "center", "normal");
+        ctx.restore();
+      }
+      return;
+    }
+    const w = Math.min(420, W - 120);
+    const x = W / 2 - w / 2;
+    const y = T + 12;
+    text(g.name, W / 2, y, 15, "#ffe9b8");
+    const seg = w / GOLEM_HP;
+    for (let i = 0; i < GOLEM_HP; i++) {
+      const sx = x + i * seg;
+      ctx.fillStyle = "rgba(0,0,0,0.6)";
+      ctx.fillRect(sx + 2, y + 12, seg - 4, 10);
+      if (i >= g.hits) {
+        ctx.fillStyle = mix("#ffb347", "#ff4d1f", i / GOLEM_HP);
+        ctx.fillRect(sx + 2, y + 12, seg - 4, 10);
+      }
     }
   }
 
@@ -3892,6 +4236,7 @@
     drawCrumbles(t);
     drawLiquids(t);
     drawObsidian();
+    drawDispensers(t);
     drawSpikes();
     drawSprings();
     drawFlags(t);
@@ -3906,6 +4251,7 @@
     drawBoxes(t);
     drawEnemies(t);
     drawBoss(t);
+    drawGolem(t);
     for (const p of players) if (p.alive) drawPlayer(p, t);
     drawShots();
     drawDarts();
@@ -3931,6 +4277,7 @@
     else {
       drawHud();
       if (boss && levelFrames > HINT_FRAMES / 2) drawBossBar(t);
+      else if (golem && levelFrames > HINT_FRAMES / 2) drawGolemBar();
       else drawToast(drawHint());
       if (state === "paused") drawPause();
       else if (state === "dead") drawDead();
