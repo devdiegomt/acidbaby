@@ -2135,8 +2135,10 @@
   };
   // El tema sale de la temporada del nivel (los del editor, con el del templo).
   const themeOf = (lv) => THEMES[SEASONS.find((s) => s.levels.includes(lv))?.theme] || THEMES.temple;
+  let levelTheme = THEMES.temple; // el del nivel cargado (lo fija buildBackground)
 
-  function drawStone(g, x, y, row, theme) {
+  // También la usan los bloques que se pueden romper (muro agrietado, sello), con el tema del nivel.
+  function drawStone(g, x, y, row, theme = levelTheme) {
     g.fillStyle = theme.stone;
     g.fillRect(x, y, T, T);
     g.fillStyle = theme.joints;
@@ -2152,7 +2154,7 @@
     bg.height = H;
     const g = bg.getContext("2d");
 
-    const theme = themeOf(level);
+    const theme = (levelTheme = themeOf(level));
     const grad = g.createLinearGradient(0, 0, 0, H);
     grad.addColorStop(0, theme.sky[0]);
     grad.addColorStop(1, theme.sky[1]);

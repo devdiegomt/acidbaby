@@ -118,6 +118,14 @@ for (const st of ["title", "levels", "playing", "paused", "dead", "won", "ending
   try { G.render(); } catch (e) { drawError = `${st}: ${e.message}`; }
 }
 check("Todas las pantallas se dibujan sin errores", !drawError, drawError || "");
+// Cada nivel de cada temporada se dibuja entero (cada pieza tiene su forma de pintarse).
+let levelDrawError = null;
+G.SEASONS.forEach((season, si) => season.levels.forEach((lv, i) => {
+  G.setLevel(i, si);
+  try { G.render(); } catch (e) { levelDrawError ??= `${season.id} "${lv.name}": ${e.message}`; }
+}));
+G.setLevel(0);
+check("Todos los niveles de las dos temporadas se dibujan sin errores", !levelDrawError, levelDrawError || "");
 
 // --- Nivel 1 -----------------------------------------------------------------
 console.log("\nNivel 1");
