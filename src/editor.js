@@ -249,6 +249,7 @@
       ["^", "Ventilador", "#6d7688"], [";", "Muelle", "#f2c14e"], ["7", "Portal morado A", "#c86bff"], ["8", "Portal morado B", "#c86bff"],
       ["9", "Portal turquesa A", "#4fd6c8"], ["0", "Portal turquesa B", "#4fd6c8"],
       ["⚑", "Bandera de control", "#ffe08a"],
+      ["≈", "Barril de agua", "#1f7bff"], ["♨", "Barril de lava", "#ff5a1f"], ["■", "Obsidiana", "#1b1726"],
     ]],
     ["Bichos", [
       ["@", "Escarabajo", "#9b4dca"], ["&", "Murciélago", "#8a63c4"], ["!", "Erizo (no se pisa)", "#8a5a2b"],

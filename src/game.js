@@ -71,6 +71,11 @@
   const LIQUID_BY_TILE = { L: "fire", "~": "water", A: "acid" };
   const GEM_BY_TILE = { r: "fire", z: "water", e: "acid" };
   const BOX_TILE = "x";
+  // Barriles (Temporada 2): se empujan como cajas; al llegar a un charco del elemento contrario
+  // lo convierten entero en obsidiana, que es suelo para todos. El barril se gasta.
+  const BARREL_BY_TILE = { "≈": "water", "♨": "fire" };
+  const MIXES_WITH = { water: "fire", fire: "water" }; // agua + lava → obsidiana
+  const OBSIDIAN_TILE = "■";
   const FAN_TILE = "^";
   // Bloques que un personaje rompe al tocarlos (junto con todos los del mismo tipo pegados).
   const BREAKABLE = {
@@ -240,6 +245,15 @@
   const isSeasonUnlocked = (si) => unlockAll || si === 0 || !!recordIn(SEASONS[si - 1], SEASONS[si - 1].levels.length - 1)?.done;
   const isUnlocked = (i) => unlockAll || (i === 0 ? isSeasonUnlocked(seasonIndex) : !!recordOf(i - 1)?.done);
   // "Nivel 7" en la temporada 1; "2-3" (mundo 2, nivel 3) en las que van por mundos.
+  // Estrellas de un nivel: completarlo, todas sus gemas y sin perder un corazón (ni volver a una
+  // bandera). Se pueden ganar en partidas distintas.
+  const STAR_NAMES = ["Completado", "Todas las gemas", "Sin perder un corazón"];
+  function starsOf(s, i) {
+    const rec = recordIn(s, i);
+    const done = !!rec?.done;
+    return [done, done && rec.bestGems >= levelGemTotal(i, s), done && !!rec.clean];
+  }
+  const starCount = (s) => s.levels.reduce((n, _, i) => n + starsOf(s, i).filter(Boolean).length, 0);
   const levelNumber = (i) => (seasonIndex === 0 ? String(i + 1) : `${season().where[i].world + 1}-${season().where[i].num + 1}`);
 
   // ---------------------------------------------------------------------------
@@ -370,6 +384,10 @@
         tone(990, 0.1, { vol: 0.08, delay: 0.05 });
       },
       locked: () => tone(150, 0.18, { type: "sawtooth", vol: 0.1, to: 110 }),
+      hiss: () => {
+        noise(0.6, { vol: 0.2, freq: 4500, filter: "highpass" }); // vapor
+        tone(140, 0.4, { type: "triangle", vol: 0.12, to: 70 });
+      },
       flag: () => [523, 659, 784, 1047].forEach((f, i) => tone(f, 0.14, { type: "triangle", vol: 0.14, delay: i * 0.07 })),
       respawn: () => {
         tone(400, 0.3, { type: "sine", vol: 0.14, to: 900 });
@@ -425,8 +443,10 @@
   let crumbles = []; // tablones frágiles: { c, r, t (frames hasta caer), gone (frames hasta volver) }
   let spikes = [];
   let flags = []; // banderas de control: { c, r, on }
+  let obsidian = []; // casillas de obsidiana: { c, r, age } (age: frames desde que se formó)
   let checkpoint = null; // copia del nivel al encender la última bandera (para volver ahí al caer)
   let retries = 0; // veces que se ha vuelto a una bandera en este intento
+  let cleanRun = true; // nadie ha perdido un corazón ni ha vuelto a una bandera (tercera estrella)
   let toast = null; // aviso breve en pantalla: { text, frames }
   let boss = null; // jefe final (si el nivel tiene)
   let rocks = []; // rocas que suelta el jefe
@@ -449,7 +469,7 @@
   }
 
   function isSolidTile(t) {
-    return t === "#" || t === CRUMBLE_TILE || t in BREAKABLE || t in LIQUID_BY_TILE || t in BARRIER_BY_TILE;
+    return t === "#" || t === OBSIDIAN_TILE || t === CRUMBLE_TILE || t in BREAKABLE || t in LIQUID_BY_TILE || t in BARRIER_BY_TILE;
   }
 
   // Como isSolidTile, pero cada personaje atraviesa la barrera de su elemento.
@@ -501,6 +521,8 @@
     crumbles = [];
     spikes = [];
     flags = [];
+    obsidian = [];
+    cleanRun = true;
     checkpoint = null;
     retries = 0;
     toast = null;
@@ -551,6 +573,10 @@
           crumbles.push({ c, r, t: 0, gone: 0 });
           continue;
         }
+        if (t === OBSIDIAN_TILE) {
+          obsidian.push({ c, r, age: Infinity });
+          continue;
+        }
         grid[r][c] = " ";
         if (t === SPRING_TILE) {
           springs.push({ c, r, squash: 0 });
@@ -572,6 +598,9 @@
         else if (CHARACTERS.some((ch) => ch.door === t)) doors[t] = { c, r };
         else if (t in GEM_BY_TILE) gems.push({ c, r, type: GEM_BY_TILE[t], taken: false });
         else if (t === BOX_TILE) boxes.push(makeBody("box", c * T + (T - BOX) / 2, (r + 1) * T - BOX, BOX, BOX));
+        else if (t in BARREL_BY_TILE) {
+          boxes.push(Object.assign(makeBody("box", c * T + (T - BOX) / 2, (r + 1) * T - BOX, BOX, BOX), { fill: BARREL_BY_TILE[t] }));
+        }
         else if (t === FAN_TILE) fans.push({ c, r, mech: null, on: true, top: r });
         else if (t in PORTAL_PAIR) portals.push({ c, r, id: t });
         else if (t in ITEM_BY_TILE) items.push({ c, r, type: ITEM_BY_TILE[t], taken: false });
@@ -674,7 +703,7 @@
   function liveState() {
     return {
       grid, liquids, breakables, dissolving, barriers, fans, doors, boxes, gems, mechs, portals,
-      enemies, items, springs, crumbles, spikes, flags, boss, bossDefeatedAt,
+      enemies, items, springs, crumbles, spikes, flags, obsidian, boss, bossDefeatedAt,
       players: players.map((p) => ({
         ...p,
         ch: CHARACTERS.indexOf(p.ch),
@@ -697,7 +726,7 @@
   function backToCheckpoint() {
     const s = structuredClone(checkpoint);
     ({ grid, liquids, breakables, dissolving, barriers, fans, doors, boxes, gems, mechs, portals } = s);
-    ({ enemies, items, springs, crumbles, spikes, flags, boss, bossDefeatedAt } = s);
+    ({ enemies, items, springs, crumbles, spikes, flags, obsidian, boss, bossDefeatedAt } = s);
     players = s.players.map((p) =>
       Object.assign(p, {
         ch: CHARACTERS[p.ch],
@@ -718,6 +747,7 @@
     shake = 0;
     toast = null;
     retries++;
+    cleanRun = false;
     state = "playing";
     for (const p of players) burst(p.x + p.w / 2, p.y + p.h / 2, ["#ffe08a", "#ffffff", p.ch.color], 16);
     sound.play("respawn");
@@ -1082,6 +1112,41 @@
       b.vy = Math.min(b.vy + GRAVITY, MAX_FALL);
       if (!moveY(b, b.vy)) b.vy = 0;
     }
+    // Un barril encima de un charco del elemento contrario lo solidifica.
+    for (const b of boxes) {
+      if (!b.fill || !isOnGround(b)) continue;
+      const c = Math.floor((b.x + b.w / 2) / T);
+      const r = Math.floor((b.y + b.h) / T);
+      if (LIQUID_BY_TILE[tileAt(c, r)] === MIXES_WITH[b.fill]) {
+        solidify(c, r);
+        b.used = true;
+        const el = ELEMENTS[b.fill];
+        burst(b.x + b.w / 2, b.y + b.h / 2, [el.top, el.body, "#9a6a35", "#e8e8f0"], 24);
+      }
+    }
+    boxes = boxes.filter((b) => !b.used);
+    for (const o of obsidian) if (o.age < 90) o.age++;
+  }
+
+  // Convierte en obsidiana el charco entero (todas las casillas del mismo líquido pegadas).
+  function solidify(c0, r0) {
+    const type = tileAt(c0, r0);
+    const queue = [[c0, r0]];
+    const seen = new Set([key(c0, r0)]);
+    while (queue.length) {
+      const [c, r] = queue.shift();
+      grid[r][c] = OBSIDIAN_TILE;
+      obsidian.push({ c, r, age: 0 });
+      burst(c * T + T / 2, r * T + 4, ["#e8e8f0", "#b9b4cc", "#ffffff"], 6); // vapor
+      for (const [nc, nr] of [[c + 1, r], [c - 1, r], [c, r + 1], [c, r - 1]]) {
+        if (tileAt(nc, nr) === type && !seen.has(key(nc, nr))) {
+          seen.add(key(nc, nr));
+          queue.push([nc, nr]);
+        }
+      }
+    }
+    liquids = liquids.filter((l) => grid[l.r][l.c] !== OBSIDIAN_TILE);
+    sound.play("hiss");
   }
 
   // Devuelve el elemento que mata al personaje si está pisando un charco ajeno.
@@ -1138,6 +1203,7 @@
       return;
     }
     p.hearts--;
+    cleanRun = false;
     if (p.hearts <= 0) {
       killPlayer(p, `${p.ch.name} ${cause}`, ["#5a3d6b", "#2b1d33"]);
       return;
@@ -1641,6 +1707,7 @@
     const prev = recordOf(levelIndex);
     const taken = gemCount().taken;
     const nextSeasonWasOpen = isSeasonUnlocked(seasonIndex + 1);
+    const starsBefore = starsOf(season(), levelIndex);
     lastResult = {
       first: !prev?.done,
       time: !!prev?.done && levelFrames < prev.bestFrames,
@@ -1650,7 +1717,11 @@
       done: true,
       bestFrames: prev?.done ? Math.min(prev.bestFrames, levelFrames) : levelFrames,
       bestGems: Math.max(prev?.bestGems || 0, taken),
+      clean: !!prev?.clean || cleanRun,
     };
+    lastResult.stars = starsOf(season(), levelIndex);
+    lastResult.newStars = lastResult.stars.map((on, k) => on && !starsBefore[k]);
+    lastResult.run = [true, taken === gems.length, cleanRun]; // lo conseguido en esta partida
     // Terminar una temporada abre la siguiente.
     lastResult.newSeason = SEASONS[seasonIndex + 1] && !nextSeasonWasOpen && isSeasonUnlocked(seasonIndex + 1) ? SEASONS[seasonIndex + 1] : null;
     writeSave();
@@ -2548,6 +2619,37 @@
     }
   }
 
+  // Obsidiana: cristal negro violáceo con vetas; recién formada aún brilla del calor.
+  function drawObsidian() {
+    for (const o of obsidian) {
+      const x = o.c * T;
+      const y = o.r * T;
+      ctx.fillStyle = "#1b1726";
+      ctx.fillRect(x, y, T, T);
+      ctx.fillStyle = "#2c2640";
+      ctx.beginPath();
+      ctx.moveTo(x, y + T);
+      ctx.lineTo(x + 10 + ((o.c * 7) % 12), y + 3);
+      ctx.lineTo(x + T, y + 12);
+      ctx.lineTo(x + T, y + T);
+      ctx.fill();
+      ctx.strokeStyle = "#6f63a0";
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.moveTo(x + 4, y + 10 + ((o.c * 5) % 8));
+      ctx.lineTo(x + 14, y + 6);
+      ctx.moveTo(x + 18, y + 20);
+      ctx.lineTo(x + 27, y + 15 + ((o.c * 3) % 6));
+      ctx.stroke();
+      ctx.fillStyle = "#8a7fb8";
+      ctx.fillRect(x, y, T, 2);
+      if (o.age < 90) {
+        ctx.fillStyle = `rgba(255,120,40,${0.6 * (1 - o.age / 90)})`;
+        ctx.fillRect(x, y, T, T);
+      }
+    }
+  }
+
   // Bandera de control: gris hasta que se enciende; encima, quién está ya junto a ella.
   function drawFlags(t) {
     for (const f of flags) {
@@ -3071,8 +3173,32 @@
     }
   }
 
-  function drawBoxes() {
+  // Barril: duelas de madera con aros y una franja del color de lo que lleva dentro.
+  function drawBarrel(b, t) {
+    const { x, y, w, h } = b;
+    const el = ELEMENTS[b.fill];
+    ctx.fillStyle = "#8a5a2b";
+    roundRectPath(ctx, x + 1, y, w - 2, h, 7);
+    ctx.fill();
+    ctx.fillStyle = el.body;
+    ctx.fillRect(x + 3, y + h / 2 - 5, w - 6, 10);
+    ctx.fillStyle = el.top;
+    ctx.globalAlpha = 0.5 + Math.sin(t * 4 + x) * 0.3;
+    ctx.fillRect(x + 6, y + h / 2 - 3, w - 12, 2);
+    ctx.globalAlpha = 1;
+    ctx.fillStyle = "#3d3d46";
+    ctx.fillRect(x + 1, y + 4, w - 2, 3);
+    ctx.fillRect(x + 1, y + h - 7, w - 2, 3);
+    ctx.fillStyle = "rgba(255,255,255,0.15)";
+    ctx.fillRect(x + 6, y + 2, 2, h - 4);
+  }
+
+  function drawBoxes(t) {
     for (const b of boxes) {
+      if (b.fill) {
+        drawBarrel(b, t);
+        continue;
+      }
       const { x, y, w, h } = b;
       ctx.fillStyle = "#9a6a35";
       ctx.fillRect(x, y, w, h);
@@ -3345,7 +3471,15 @@
       if (open) {
         const done = s.levels.filter((lv, k) => recordIn(s, k)?.done).length;
         const total = s.levels.length;
-        text(`${done} / ${total} ${total === 1 ? "nivel" : "niveles"}`, r.x + r.w / 2, r.y + 42, 13, "#9c8d70", "center", "normal");
+        // "3 / 5 niveles · ★ 7 / 15", con la estrella dibujada.
+        const left = `${done} / ${total} ${total === 1 ? "nivel" : "niveles"} · `;
+        const right = `${starCount(s)} / ${total * 3}`;
+        ctx.font = `normal 13px ${FONT}`;
+        const lw = ctx.measureText(left).width;
+        const x0 = r.x + r.w / 2 - (lw + 19 + ctx.measureText(right).width) / 2;
+        text(left, x0, r.y + 42, 13, "#9c8d70", "left", "normal");
+        drawStar(x0 + lw + 9, r.y + 41, 6, true);
+        text(right, x0 + lw + 19, r.y + 42, 13, "#9c8d70", "left", "normal");
       } else {
         const prev = SEASONS[i - 1];
         const why = `Termina «${prev.levels[prev.levels.length - 1].name}» para abrirla`;
@@ -3364,6 +3498,27 @@
   // Total de gemas de un nivel sin tener que cargarlo.
   function levelGemTotal(i, s = season()) {
     return s.levels[i].map.join("").split("").filter((ch) => ch in GEM_BY_TILE).length;
+  }
+
+  function starPath(cx, cy, r) {
+    ctx.beginPath();
+    for (let k = 0; k < 10; k++) {
+      const a = -Math.PI / 2 + (k * Math.PI) / 5;
+      const rr = k % 2 ? r * 0.45 : r;
+      ctx.lineTo(cx + Math.cos(a) * rr, cy + Math.sin(a) * rr);
+    }
+    ctx.closePath();
+  }
+
+  function drawStar(cx, cy, r, on) {
+    starPath(cx, cy, r);
+    ctx.fillStyle = on ? "#ffd84d" : "rgba(255,255,255,0.12)";
+    ctx.fill();
+    if (on) {
+      ctx.strokeStyle = "#b8860b";
+      ctx.lineWidth = 1.5;
+      ctx.stroke();
+    }
   }
 
   function drawPadlock(cx, cy, color) {
@@ -3458,7 +3613,7 @@
         return;
       }
       if (rec?.done) {
-        text("✓", r.x + r.w - 18, y + 20, 18, "#9dff8a");
+        starsOf(season(), i).forEach((on, k) => drawStar(r.x + r.w - 40 + k * 13, y + 16, 6, on));
         ctx.fillStyle = rec.bestGems === total ? "#ffe08a" : "#bfae88";
         gemPath(cx - 24, at(116), 7);
         ctx.fill();
@@ -3474,9 +3629,11 @@
     const last = levelCardRect(n - 1);
     const footer = Math.min(H - 30, last.y + last.h + 50);
     ctx.fillStyle = "#ffe08a";
-    gemPath(W / 2 - 52, footer - 30, 7);
+    gemPath(W / 2 - 112, footer - 30, 7);
     ctx.fill();
-    text(`${gemsTaken} / ${gemsTotal} gemas`, W / 2 - 40, footer - 30, 16, "#f3e6c8", "left");
+    text(`${gemsTaken} / ${gemsTotal} gemas`, W / 2 - 100, footer - 30, 16, "#f3e6c8", "left");
+    drawStar(W / 2 + 92, footer - 30, 8, true);
+    text(`${starCount(season())} / ${seasonLevels().length * 3}`, W / 2 + 104, footer - 30, 16, "#f3e6c8", "left");
     const keys = worlds > 1 ? "← →: elegir · ↑ ↓: mundo" : "← →: elegir";
     text(`${keys} · ENTER o clic: jugar · ESC: volver`, W / 2, footer, 15, "#9c8d70", "center", "normal");
   }
@@ -3530,16 +3687,26 @@
       ctx.globalAlpha = 1;
       return;
     }
+    // Las tres estrellas, con las nuevas latiendo.
+    const stars = lastResult?.stars || [true, false, false];
+    stars.forEach((on, k) => {
+      const cx = W / 2 + (k - 1) * 150;
+      const fresh = lastResult?.newStars?.[k];
+      drawStar(cx, H / 2 + 50, fresh ? 18 + Math.sin(t * 6) * 3 : 16, on);
+      const color = lastResult?.run?.[k] ? "#ffe9b8" : "#7a6d55";
+      text(STAR_NAMES[k], cx, H / 2 + 78, 13, color, "center", fresh ? "bold" : "normal");
+    });
     const isLast = levelIndex + 1 >= seasonLevels().length;
     const news = [];
+    if (lastResult?.newStars?.some(Boolean)) news.push("¡Estrella nueva!");
     if (retries) news.push(`Vueltas a la bandera: ${retries}`);
     if (lastResult?.first && !isLast) news.push(`Desbloqueado: ${seasonLevels()[levelIndex + 1].name}`);
     if (lastResult?.newSeason) news.push(`¡Desbloqueada la ${lastResult.newSeason.name}!`);
     if (lastResult?.time) news.push("¡Nuevo récord de tiempo!");
     if (lastResult?.gems) news.push("¡Más gemas que nunca!");
-    news.forEach((msg, i) => text(msg, W / 2, H / 2 + 46 + i * 26, 18, "#9dff8a"));
+    news.forEach((msg, i) => text(msg, W / 2, H / 2 + 110 + i * 24, 17, "#9dff8a"));
 
-    const y = H / 2 + 60 + news.length * 26;
+    const y = H / 2 + 120 + news.length * 24;
     ctx.globalAlpha = 0.6 + Math.sin(t * 4) * 0.4;
     text(`ENTER: ${isLast ? "final" : "siguiente nivel"}`, W / 2, y + 16, 22, "#ffffff");
     ctx.globalAlpha = 1;
@@ -3591,7 +3758,8 @@
     ctx.fillStyle = "rgba(255,233,184,0.25)";
     ctx.fillRect(left, y - 18, right - left, 1);
     text("Total", left, y, 18, "#ffe9b8", "left");
-    text(`${formatTime(frames)}   ·   ${taken}/${total} gemas`, right, y, 18, taken === total ? "#ffe08a" : "#ffe9b8", "right");
+    const stars = starCount(season());
+    text(`${formatTime(frames)}   ·   ${taken}/${total} gemas   ·   ★ ${stars}/${LV.length * 3}`, right, y, 18, taken === total ? "#ffe08a" : "#ffe9b8", "right");
     if (taken < total) text("Aún quedan gemas por encontrar…", W / 2, y + 32, 16, "#bfae88", "center", "normal");
     const next = SEASONS[seasonIndex + 1];
     if (next && isSeasonUnlocked(seasonIndex + 1)) {
@@ -3723,6 +3891,7 @@
     drawBreakables(t);
     drawCrumbles(t);
     drawLiquids(t);
+    drawObsidian();
     drawSpikes();
     drawSprings();
     drawFlags(t);
@@ -3734,7 +3903,7 @@
     drawPortals(t);
     drawGems(t);
     drawItems(t);
-    drawBoxes();
+    drawBoxes(t);
     drawEnemies(t);
     drawBoss(t);
     for (const p of players) if (p.alive) drawPlayer(p, t);

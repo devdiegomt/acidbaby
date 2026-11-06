@@ -45,6 +45,8 @@
 //   /      sello: sólido; se rompe solo (entero) cuando cae el jefe
 //   ⚑      bandera de control (Temporada 2, ver levels2.js): con los tres junto a ella, al caer
 //          se vuelve ahí en vez de al principio
+//   ≈ ♨    barril de agua / de lava (Temporada 2): al llegar a un charco del elemento contrario
+//          lo convierte en obsidiana ■, suelo para todos
 //
 // Mecanismos (se configuran en "mechanisms", usando cualquier otra letra):
 //   letra minúscula  → casillas de la plataforma / compuerta que se mueve

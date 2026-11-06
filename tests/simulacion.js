@@ -28,7 +28,7 @@ game = game.replace(
      get grid(){return grid}, get fans(){return fans}, get doors(){return doors}, get enemies(){return enemies}, get items(){return items}, get shots(){return shots},
      get save(){return save}, isUnlocked, get levelIndex(){return levelIndex}, get lastResult(){return lastResult},
      get menuIndex(){return menuIndex}, get levelFrames(){return levelFrames}, setLevel(i, si = 0){ testLevel = null; seasonIndex = si; levelIndex = i; loadLevel(i); state = "playing"; }, get darts(){return darts}, get crumbles(){return crumbles}, get boss(){return boss}, solidAt,
-     SEASONS, get seasonIndex(){return seasonIndex}, get titleIndex(){return titleIndex}, isSeasonUnlocked, levelNumber, get flags(){return flags}, get checkpoint(){return checkpoint}, get retries(){return retries}, get toast(){return toast}, get level(){return level}, worldRange };\n})();`,
+     SEASONS, get seasonIndex(){return seasonIndex}, get titleIndex(){return titleIndex}, isSeasonUnlocked, levelNumber, get flags(){return flags}, get checkpoint(){return checkpoint}, get retries(){return retries}, get toast(){return toast}, get level(){return level}, worldRange, get spikes(){return spikes}, get obsidian(){return obsidian}, get liquids(){return liquids}, starsOf, starCount };\n})();`,
 );
 // editor.js va antes que game.js (como en index.html); sin DOM solo define EditorCore.
 eval(fs.readFileSync(ROOT + "levels.js", "utf8") + "\nglobalThis.LEVELS = LEVELS;\n" + fs.readFileSync(ROOT + "levels2.js", "utf8") + "\nglobalThis.SEASON_2 = SEASON_2;\n" + fs.readFileSync(ROOT + "editor.js", "utf8") + "\n" + game);
@@ -1346,7 +1346,7 @@ T2.levels.forEach((lv, i) => {
 });
 check("Los niveles de la temporada 2 se numeran por mundo", G.levelNumber(0) === "1-1");
 check("Exportar e importar devuelve el mismo nivel (temporada 2)", T2.levels.every((lv) => JSON.stringify(E.parse(E.toText(lv))) === JSON.stringify(E.normalize(lv))));
-check("El editor ofrece los niveles de las dos temporadas", J.levels.length === LEVELS.length + T2.levels.length && J.levels.at(-1).label.startsWith("T2 1-1"));
+check("El editor ofrece los niveles de las dos temporadas", J.levels.length === LEVELS.length + T2.levels.length && J.levels.some((l) => l.label.startsWith("T2 1-1. ")));
 const withEmoji = { ...E.blankLevel(), map: E.blankLevel().map.map((row, r) => (r === 5 ? "#🚩" + row.slice(3) : row)) };
 check("Un emoji en el mapa se avisa con un mensaje claro", J.preview(withEmoji).some((p) => p.includes("emoji")));
 
@@ -1456,9 +1456,11 @@ function runRightTo(p, c) {
   let jumping = 0;
   down(k.r);
   for (let i = 0; i < 900 && center(p) < c * 32 + 16 && playing(); i++) {
-    // Salta cuando el charco empieza justo delante de los pies.
-    const ahead = pool[G.grid[feetRow(p) + 1]?.[Math.floor((p.x + p.w + 8) / 32)]];
-    if (p.onGround && !jumping && ahead && ahead !== p.ch.immune) { jumping = 16; down(k.j); }
+    // Salta cuando un charco ajeno (o unos pinchos) empieza justo delante de los pies.
+    const c = Math.floor((p.x + p.w + 8) / 32);
+    const ahead = pool[G.grid[feetRow(p) + 1]?.[c]];
+    const spike = G.spikes.some((s) => s.c === c && s.r === feetRow(p));
+    if (p.onGround && !jumping && ((ahead && ahead !== p.ch.immune) || spike)) { jumping = 16; down(k.j); }
     if (jumping && --jumping === 0) up(k.j);
     run(1);
   }
@@ -1485,6 +1487,123 @@ check("Los dos muelles los suben al piso de las puertas", playing() && G.players
 walkTo(water, 37);
 for (const p of [fire, water, acid]) walkTo(p, G.doors[p.ch.door].c);
 check("…y llegan a sus puertas: nivel completado", G.state === "won", G.state + " " + G.players.map(tile).join(" / "));
+G.setLevel(0);
+
+// --- Barriles, obsidiana y estrellas ------------------------------------------------------------
+console.log("\nBarriles y estrellas");
+const pool = (g, c0, c1, ch) => { for (let c = c0; c <= c1; c++) g[17][c] = ch; };
+sandbox((g) => { pool(g, 14, 17, "L"); g[16][10] = "≈"; });
+walkTo(fire, 8);
+hold(["KeyD"], 200, () => G.boxes.length === 0);
+run(5);
+check("Un barril de agua empujado a la lava la convierte entera en obsidiana", [14, 15, 16, 17].every((c) => G.grid[17][c] === "■") && G.obsidian.length === 4);
+check("…el barril se gasta", G.boxes.length === 0);
+check("…y ya no hay lava en esa casilla", !G.liquids.some((l) => l.r === 17 && l.c >= 14 && l.c <= 17));
+walkTo(water, 20);
+check("Watergirl cruza la obsidiana sin quemarse", playing() && center(water) > 19 * 32, tile(water));
+sandbox((g) => { pool(g, 14, 17, "L"); g[16][10] = "♨"; });
+walkTo(fire, 8);
+hold(["KeyD"], 150);
+check("Un barril de lava sobre la lava no hace nada", G.boxes.length === 1 && G.grid[17][15] === "L");
+sandbox((g) => { pool(g, 14, 17, "A"); g[16][10] = "≈"; });
+walkTo(acid, 8);
+hold(["KeyJ"], 150);
+check("Un barril de agua sobre el ácido tampoco", G.boxes.length === 1 && G.grid[17][15] === "A");
+sandbox((g) => { pool(g, 14, 17, "~"); g[16][10] = "♨"; g[16][5] = "⚑"; });
+place(fire, 4, 16); place(water, 5, 16); place(acid, 6, 16);
+run(5);
+check("(Bandera encendida antes de usar el barril)", G.flags[0].on);
+walkTo(fire, 8);
+hold(["KeyD"], 200, () => G.boxes.length === 0);
+check("Un barril de lava convierte el agua en obsidiana", G.grid[17][15] === "■");
+tap("KeyR");
+check("Al volver a la bandera vuelven el charco y el barril", G.grid[17][15] === "~" && G.boxes.length === 1 && G.boxes[0].fill === "fire" && G.obsidian.length === 0);
+
+// Estrellas (en el nivel 1-2, llegando directamente a las puertas).
+const toDoors = () => { for (const p of G.players) { const d = G.doors[p.ch.door]; place(p, d.c, d.r); } run(3); };
+G.setLevel(1, 1); run(1);
+toDoors();
+check("Pasarlo sin gemas y sin daño da dos estrellas", G.state === "won" && G.starsOf(T2, 1).join() === "true,false,true" && G.lastResult.newStars.join() === "true,false,true");
+G.setLevel(1, 1); run(1);
+G.gems.forEach((g) => (g.taken = true));
+const before13 = G.starCount(T2);
+toDoors();
+check("Con todas las gemas se gana la de las gemas (y se guardan las que ya había)", G.starsOf(T2, 1).every(Boolean) && G.starCount(T2) === before13 + 1);
+check("Las estrellas se guardan", saved().levels[`t2:${T2.levels[1].name}`]?.clean === true);
+G.setLevel(2, 1); run(1);
+fire = P("Fireboy");
+const spikeAt = G.spikes[0];
+place(fire, spikeAt.c - 2, spikeAt.r);
+walkTo(fire, spikeAt.c);
+check("(Fireboy se clava unos pinchos)", fire.hearts === 2);
+toDoors();
+check("Perder un corazón no da la estrella de «sin perder un corazón»", G.state === "won" && G.starsOf(T2, 2).join() === "true,false,false");
+G.state = "won";
+let wonDrawError = null;
+try { G.render(); } catch (e) { wonDrawError = e.message; }
+check("La pantalla de victoria con estrellas se dibuja", !wonDrawError, wonDrawError || "");
+
+// --- Nivel 1-2: barriles ---------------------------------------------------------------------
+console.log("\nNivel 1-2");
+level12();
+function level12() { G.setLevel(1, 1); run(1); fire = P("Fireboy"); water = P("Watergirl"); acid = P("AcidBaby"); }
+const barrel = (fill) => G.boxes.find((b) => b.fill === fill);
+walkTo(fire, 5);
+hold(["KeyD"], 120, () => G.boxes.length < 2);
+check("Empujando primero el barril de lava se atasca contra el de agua", G.boxes.length === 2 && barrel("fire").x + 28 >= barrel("water").x - 2);
+level12();
+walkTo(fire, 5);
+hold(["KeyD", "KeyW"], 40);
+check("(Fireboy salta por encima del barril de lava)", center(fire) > barrel("fire").x + 28);
+hold(["KeyD"], 200, () => !barrel("water"));
+run(10);
+check("El barril de agua convierte la lava en obsidiana", !barrel("water") && G.grid[17][15] === "■");
+walkTo(fire, 4);
+hold(["KeyA", "KeyW"], 25);
+walkTo(fire, 5);
+hold(["KeyD"], 400, () => !barrel("fire"));
+run(10);
+check("…y el de lava, el agua", !barrel("fire") && G.grid[17][25] === "■", tile(fire));
+for (const p of [water, acid, fire]) walkTo(p, 25);
+check("Los tres cruzan por la obsidiana", playing() && G.players.every((p) => center(p) > 24 * 32));
+jumpAt(water, 25);
+for (const p of [fire, water, acid]) walkTo(p, G.doors[p.ch.door].c);
+check("…y llegan a sus puertas", G.state === "won");
+
+// --- Nivel 1-3: una sola gota (las dos rutas) ---------------------------------------------------
+console.log("\nNivel 1-3");
+function level13() { G.setLevel(2, 1); run(1); fire = P("Fireboy"); water = P("Watergirl"); acid = P("AcidBaby"); }
+level13();
+walkTo(fire, 16);
+hold(["KeyD"], 200, () => G.boxes.length === 0);
+check("Atajo: el barril empujado a la derecha hace un puente sobre la lava", G.grid[17][23] === "■" && G.grid[17][8] === "L");
+for (const p of [fire, water, acid]) walkTo(p, G.doors[p.ch.door].c);
+check("…y los tres llegan a sus puertas", G.state === "won");
+
+level13();
+walkTo(fire, 16);
+hold(["KeyD", "KeyW"], 30);
+walkTo(fire, 19);
+check("(Fireboy salta por encima del barril)", center(fire) > center(G.boxes[0]) && G.grid[17][23] === "L");
+hold(["KeyA"], 400, () => G.boxes.length === 0);
+check("Gemas: empujado a la izquierda convierte el charco del escondite", G.grid[17][8] === "■" && G.grid[17][23] === "L");
+for (const p of [water, acid]) walkTo(p, p === water ? 1 : 5);
+check("Watergirl y AcidBaby cogen sus gemas", G.gems.filter((g) => g.r === 16 && g.c < 7).every((g) => g.taken));
+// El ventilador sube al camino alto; de ahí, a la derecha (pinchos, tablones frágiles sobre la lava).
+function highRoad(p) {
+  const k = keysOf(p);
+  ride(p, 3, 1);
+  const ok = feetRow(p) === 10;
+  runRightTo(p, 27);
+  hold([k.r], 120, () => p.onGround && feetRow(p) === 16);
+  run(10);
+  return ok;
+}
+const rose = [water, acid, fire].map(highRoad);
+check("El ventilador sube al camino alto", rose.every(Boolean));
+check("Por el camino alto los tres bajan junto a las puertas", playing() && G.players.every((p) => feetRow(p) === 16 && center(p) > 27 * 32), G.players.map(tile).join(" / ") + " " + G.deathMessage);
+for (const p of [fire, water, acid]) walkTo(p, G.doors[p.ch.door].c);
+check("…y llegan a sus puertas", G.state === "won");
 G.setLevel(0);
 
 process.exitCode = failures ? 1 : 0;
