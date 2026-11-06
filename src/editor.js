@@ -248,6 +248,7 @@
     ["Mecánica", [
       ["^", "Ventilador", "#6d7688"], [";", "Muelle", "#f2c14e"], ["7", "Portal morado A", "#c86bff"], ["8", "Portal morado B", "#c86bff"],
       ["9", "Portal turquesa A", "#4fd6c8"], ["0", "Portal turquesa B", "#4fd6c8"],
+      ["⚑", "Bandera de control", "#ffe08a"],
     ]],
     ["Bichos", [
       ["@", "Escarabajo", "#9b4dca"], ["&", "Murciélago", "#8a63c4"], ["!", "Erizo (no se pisa)", "#8a5a2b"],
@@ -383,7 +384,7 @@
       changed();
     });
     $("#ed-mechs").addEventListener("change", onMechChange);
-    $("#ed-game").innerHTML = LEVELS.map((lv, i) => `<option value="${i}">${i + 1}. ${escapeHtml(lv.name)}</option>`).join("");
+    $("#ed-game").innerHTML = globalThis.Juego.levels.map(({ label }, i) => `<option value="${i}">${escapeHtml(label)}</option>`).join("");
 
     const canvas = document.getElementById("game");
     canvas.addEventListener("pointerdown", onPointerDown);
@@ -400,7 +401,7 @@
   const isEditing = () => panel && !panel.hidden && globalThis.Juego?.state === "editor";
 
   function swatch(ch, color) {
-    const light = ["=", "$", "?", "*", "+", "e", "^", ";", ".", ":"].includes(ch);
+    const light = ["=", "$", "?", "*", "+", "e", "^", ";", ".", ":", "⚑"].includes(ch);
     return `<span class="sw" style="background:${color};color:${light ? "#1a150f" : "#fff"}">${ch === " " ? "␣" : escapeHtml(ch)}</span>`;
   }
 
@@ -508,7 +509,7 @@
       renderPanel();
       message(`Borrado «${gone.name}» de tus niveles.`);
     } else if (act === "load-game") {
-      replaceLevel(LEVELS[Number($("#ed-game").value)]);
+      replaceLevel(globalThis.Juego.levels[Number($("#ed-game").value)].data);
     } else if (act === "export") {
       $("#ed-text").value = toText(current());
       message("Listo para copiar.");

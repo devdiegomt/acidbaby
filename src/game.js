@@ -28,6 +28,7 @@
   const FAN_CENTERING = 0.03; // fuerza con la que la corriente centra a quien no pulsa nada
   const CORNER_CORRECTION = 10; // píxeles que se desliza quien choca de cabeza contra una esquina
   const HINT_FRAMES = 8 * 60;
+  const TOAST_FRAMES = 4 * 60;
   const MAX_HEARTS = 3; // vidas de cada personaje en cada nivel
   const HURT_FRAMES = 90; // invencibilidad tras recibir un golpe
   const KNOCKBACK = 5; // empujón al recibir un golpe
@@ -87,6 +88,7 @@
   const SPIKES_TILE = ".";
   const BOSS_TILE = "{";
   const SEAL_TILE = "/";
+  const FLAG_TILE = "⚑"; // bandera de control (Temporada 2)
   // Barreras de energía: sólidas para todos menos para el personaje de su elemento.
   const BARRIER_BY_TILE = { 4: "fire", 5: "water", 6: "acid" };
   // Portales: cada uno lleva a su pareja.
@@ -198,12 +200,47 @@
     }
   }
 
-  const save = Object.assign({ levels: {}, muted: false }, readSave());
+  const save = Object.assign({ levels: {}, muted: false, season: 0 }, readSave());
   let unlockAll = false; // con ?nivel=N se puede jugar cualquier nivel
 
-  // Los récords se guardan por nombre para que añadir niveles no los descoloque.
-  const recordOf = (i) => save.levels[LEVELS[i].name];
-  const isUnlocked = (i) => unlockAll || i === 0 || !!recordOf(i - 1)?.done;
+  // ---------------------------------------------------------------------------
+  // Temporadas: la 1 son los niveles de levels.js; la 2, los de levels2.js (por mundos)
+  // ---------------------------------------------------------------------------
+  const SEASONS = [
+    {
+      id: "t1",
+      name: "Temporada 1",
+      subtitle: "El templo",
+      theme: "temple",
+      ending: { title: "¡Habéis superado el templo!", text: "Fireboy, Watergirl y AcidBaby han llegado juntos hasta el final." },
+      worlds: [{ name: "El templo", levels: LEVELS }],
+    },
+    ...(typeof SEASON_2 !== "undefined" ? [SEASON_2] : []),
+  ].map((s) => {
+    // Lista plana de niveles y, para cada uno, su mundo y su número dentro del mundo.
+    const levels = [];
+    const where = [];
+    s.worlds.forEach((w, wi) => w.levels.forEach((lv, k) => {
+      levels.push(lv);
+      where.push({ world: wi, num: k });
+    }));
+    return { ...s, levels, where };
+  });
+
+  let seasonIndex = 0;
+  const season = () => SEASONS[seasonIndex];
+  const seasonLevels = () => season().levels;
+
+  // Los récords se guardan por nombre para que añadir niveles no los descoloque. Los de la
+  // temporada 1 van tal cual (como antes de haber temporadas); los demás, con el id delante.
+  const recordKey = (s, lv) => (s.id === "t1" ? lv.name : `${s.id}:${lv.name}`);
+  const recordIn = (s, i) => save.levels[recordKey(s, s.levels[i])];
+  const recordOf = (i) => recordIn(season(), i);
+  // Una temporada se abre al terminar el último nivel de la anterior.
+  const isSeasonUnlocked = (si) => unlockAll || si === 0 || !!recordIn(SEASONS[si - 1], SEASONS[si - 1].levels.length - 1)?.done;
+  const isUnlocked = (i) => unlockAll || (i === 0 ? isSeasonUnlocked(seasonIndex) : !!recordOf(i - 1)?.done);
+  // "Nivel 7" en la temporada 1; "2-3" (mundo 2, nivel 3) en las que van por mundos.
+  const levelNumber = (i) => (seasonIndex === 0 ? String(i + 1) : `${season().where[i].world + 1}-${season().where[i].num + 1}`);
 
   // ---------------------------------------------------------------------------
   // Sonido (sintetizado con WebAudio, sin archivos)
@@ -333,6 +370,11 @@
         tone(990, 0.1, { vol: 0.08, delay: 0.05 });
       },
       locked: () => tone(150, 0.18, { type: "sawtooth", vol: 0.1, to: 110 }),
+      flag: () => [523, 659, 784, 1047].forEach((f, i) => tone(f, 0.14, { type: "triangle", vol: 0.14, delay: i * 0.07 })),
+      respawn: () => {
+        tone(400, 0.3, { type: "sine", vol: 0.14, to: 900 });
+        noise(0.15, { vol: 0.05, freq: 3000, filter: "highpass" });
+      },
     };
 
     return {
@@ -358,7 +400,8 @@
 
   let state = "title"; // title | levels | editor | playing | paused | dead | won | ending
   let testLevel = null; // nivel del editor que se está probando (null: niveles del juego)
-  let levelIndex = 0;
+  let levelIndex = 0; // dentro de la temporada elegida
+  let titleIndex = 0; // temporada marcada en la portada
   let menuIndex = 0; // opción marcada en el menú de pausa
   let lastResult = null; // qué récords se batieron en la última victoria
   let level = null;
@@ -381,6 +424,10 @@
   let springs = [];
   let crumbles = []; // tablones frágiles: { c, r, t (frames hasta caer), gone (frames hasta volver) }
   let spikes = [];
+  let flags = []; // banderas de control: { c, r, on }
+  let checkpoint = null; // copia del nivel al encender la última bandera (para volver ahí al caer)
+  let retries = 0; // veces que se ha vuelto a una bandera en este intento
+  let toast = null; // aviso breve en pantalla: { text, frames }
   let boss = null; // jefe final (si el nivel tiene)
   let rocks = []; // rocas que suelta el jefe
   let waves = []; // ondas de choque cuando se estrella contra el suelo
@@ -416,7 +463,7 @@
   }
 
   function loadLevel(index) {
-    loadLevelData(LEVELS[index]);
+    loadLevelData(seasonLevels()[index]);
   }
 
   // Carga un nivel. Con lenient (el editor) no lanza errores: devuelve la lista de problemas
@@ -431,6 +478,8 @@
     };
     const rows = level.map;
     rows.forEach((row, r) => {
+      // Las casillas nuevas usan símbolos de un solo carácter (⚑); un emoji ocupa dos y descuadra el mapa.
+      if (/[\uD800-\uDFFF]/.test(row)) fail(`la fila ${r} tiene un emoji: usa símbolos simples (como ⚑)`);
       if (row.length !== rows[0].length) fail(`la fila ${r} mide ${row.length} y debería medir ${rows[0].length}`);
     });
 
@@ -451,6 +500,10 @@
     springs = [];
     crumbles = [];
     spikes = [];
+    flags = [];
+    checkpoint = null;
+    retries = 0;
+    toast = null;
     boss = null;
     rocks = [];
     waves = [];
@@ -509,6 +562,10 @@
         }
         if (t === SPIKES_TILE) {
           spikes.push({ c, r });
+          continue;
+        }
+        if (t === FLAG_TILE) {
+          flags.push({ c, r, on: false });
           continue;
         }
         if (CHARACTERS.some((ch) => ch.spawn === t)) spawns[t] = { c, r };
@@ -598,8 +655,78 @@
   }
 
   function restartLevel() {
-    loadLevelData(testLevel || LEVELS[levelIndex]);
+    loadLevelData(testLevel || seasonLevels()[levelIndex]);
     state = "playing";
+  }
+
+  // ---------------------------------------------------------------------------
+  // Banderas de control: se encienden cuando los tres están junto a ella. Al caer alguien
+  // (o con R) se vuelve a como estaba todo en ese momento, con las vidas llenas.
+  // ---------------------------------------------------------------------------
+  const flagZone = (f) => ({ x: (f.c - 1) * T, y: (f.r - 1) * T, w: 3 * T, h: 2 * T });
+  const nearFlag = (f, p) => {
+    const z = flagZone(f);
+    return p.alive && intersects(z.x, z.y, z.w, z.h, p);
+  };
+
+  // Todo lo que cambia mientras se juega (los disparos y las partículas no hacen falta).
+  // Los personajes se guardan por número para no copiar CHARACTERS.
+  function liveState() {
+    return {
+      grid, liquids, breakables, dissolving, barriers, fans, doors, boxes, gems, mechs, portals,
+      enemies, items, springs, crumbles, spikes, flags, boss, bossDefeatedAt,
+      players: players.map((p) => ({
+        ...p,
+        ch: CHARACTERS.indexOf(p.ch),
+        controls: CHARACTERS.findIndex((ch) => ch.keys === p.controls),
+      })),
+    };
+  }
+
+  function updateFlags() {
+    for (const f of flags) {
+      if (f.on || !players.length || !players.every((p) => nearFlag(f, p))) continue;
+      f.on = true;
+      checkpoint = structuredClone(liveState());
+      burst(f.c * T + T / 2, f.r * T, ["#ffe08a", "#ffffff", "#ffb347"], 30);
+      sound.play("flag");
+      toast = { text: "¡Bandera de control! Si alguien cae, volvéis aquí.", frames: TOAST_FRAMES };
+    }
+  }
+
+  function backToCheckpoint() {
+    const s = structuredClone(checkpoint);
+    ({ grid, liquids, breakables, dissolving, barriers, fans, doors, boxes, gems, mechs, portals } = s);
+    ({ enemies, items, springs, crumbles, spikes, flags, boss, bossDefeatedAt } = s);
+    players = s.players.map((p) =>
+      Object.assign(p, {
+        ch: CHARACTERS[p.ch],
+        controls: CHARACTERS[p.controls].keys,
+        alive: true,
+        hearts: MAX_HEARTS,
+        hurt: HURT_FRAMES, // un rato de invencibilidad para no caer otra vez nada más volver
+        vx: 0,
+        vy: 0,
+        inDoor: false,
+      }),
+    );
+    shots = [];
+    darts = [];
+    rocks = [];
+    waves = [];
+    particles = [];
+    shake = 0;
+    toast = null;
+    retries++;
+    state = "playing";
+    for (const p of players) burst(p.x + p.w / 2, p.y + p.h / 2, ["#ffe08a", "#ffffff", p.ch.color], 16);
+    sound.play("respawn");
+  }
+
+  // R, o el tiempo tras una muerte: a la última bandera si hay; si no, desde el principio.
+  function retry() {
+    if (checkpoint) backToCheckpoint();
+    else restartLevel();
   }
 
   // ---------------------------------------------------------------------------
@@ -1513,16 +1640,19 @@
     }
     const prev = recordOf(levelIndex);
     const taken = gemCount().taken;
+    const nextSeasonWasOpen = isSeasonUnlocked(seasonIndex + 1);
     lastResult = {
       first: !prev?.done,
       time: !!prev?.done && levelFrames < prev.bestFrames,
       gems: !!prev?.done && taken > prev.bestGems,
     };
-    save.levels[level.name] = {
+    save.levels[recordKey(season(), level)] = {
       done: true,
       bestFrames: prev?.done ? Math.min(prev.bestFrames, levelFrames) : levelFrames,
       bestGems: Math.max(prev?.bestGems || 0, taken),
     };
+    // Terminar una temporada abre la siguiente.
+    lastResult.newSeason = SEASONS[seasonIndex + 1] && !nextSeasonWasOpen && isSeasonUnlocked(seasonIndex + 1) ? SEASONS[seasonIndex + 1] : null;
     writeSave();
   }
 
@@ -1532,23 +1662,40 @@
   const CARD_W = 168;
   const CARD_H = 172;
   const CARD_GAP = 20;
-  // Hasta 10 niveles, filas de 5; con más, dos filas de tarjetas más estrechas para que quepan.
-  // Con más de 16, tres filas de tarjetas más bajas.
-  const cardsPerRow = () => (LEVELS.length <= 10 ? 5 : Math.ceil(LEVELS.length / (LEVELS.length <= 16 ? 2 : 3)));
+  // El menú enseña los niveles del mundo del nivel marcado (la temporada 1 es un solo mundo).
+  function worldRange() {
+    const where = season().where;
+    const world = where[levelIndex].world;
+    const start = where.findIndex((w) => w.world === world);
+    let end = start;
+    while (end < where.length && where[end].world === world) end++;
+    return { world, start, n: end - start };
+  }
+  // Hasta 6 niveles, una fila; hasta 10, filas de 5; con más, dos filas de tarjetas más estrechas
+  // para que quepan. Con más de 16, tres filas de tarjetas más bajas.
+  const cardsPerRow = (n) => (n <= 6 ? n : n <= 10 ? 5 : Math.ceil(n / (n <= 16 ? 2 : 3)));
   // Probando un nivel del editor, la pausa lleva de vuelta al editor en vez de al menú.
-  const pauseItems = () => ["Continuar", "Reiniciar nivel", testLevel ? "Volver al editor" : "Elegir nivel", "Sonido"];
+  const pauseItems = () => [
+    "Continuar",
+    ...(checkpoint ? ["Volver a la bandera"] : []),
+    "Reiniciar nivel",
+    testLevel ? "Volver al editor" : "Elegir nivel",
+    "Sonido",
+  ];
 
   function editorButtonRect() {
     return { x: W - 214, y: 44, w: 190, h: 36 };
   }
 
+  // i: posición dentro del mundo que se enseña.
   function levelCardRect(i) {
-    const perRow = cardsPerRow();
+    const { n } = worldRange();
+    const perRow = cardsPerRow(n);
     // El ancho se calcula sobre 1024 px como mucho: así no cambia al pasar por un nivel más ancho.
     const w = Math.min(CARD_W, (Math.min(W, 1024) - 60 - (perRow - 1) * CARD_GAP) / perRow);
-    const rows = Math.ceil(LEVELS.length / perRow);
+    const rows = Math.ceil(n / perRow);
     const row = Math.floor(i / perRow);
-    const inRow = Math.min(perRow, LEVELS.length - row * perRow);
+    const inRow = Math.min(perRow, n - row * perRow);
     const rowW = inRow * w + (inRow - 1) * CARD_GAP;
     const h = Math.min(CARD_H, (576 - 200 - (rows - 1) * CARD_GAP) / rows);
     const top = H / 2 - (rows * h + (rows - 1) * CARD_GAP) / 2 + 16;
@@ -1558,6 +1705,14 @@
       w,
       h,
     };
+  }
+
+  // Botones de temporada en la portada.
+  function seasonButtonRect(i) {
+    const w = 340;
+    const gap = 30;
+    const total = SEASONS.length * w + (SEASONS.length - 1) * gap;
+    return { x: W / 2 - total / 2 + i * (w + gap), y: 458, w, h: 58 };
   }
 
   function pauseItemRect(i) {
@@ -1573,6 +1728,41 @@
     return null;
   }
 
+  // En la portada se elige temporada; el fondo enseña su primer nivel.
+  function updateTitle() {
+    const n = SEASONS.length;
+    const before = titleIndex;
+    if (menuKey("left")) titleIndex = (titleIndex + n - 1) % n;
+    if (menuKey("right")) titleIndex = (titleIndex + 1) % n;
+    const pointed = pointedItem(n, seasonButtonRect);
+    if (pointed !== null) titleIndex = pointed;
+    if (titleIndex !== before) {
+      sound.play("move");
+      if (isSeasonUnlocked(titleIndex)) loadLevelData(SEASONS[titleIndex].levels[0]);
+    }
+    if (menuKey("ok") || clicked) {
+      if (!isSeasonUnlocked(titleIndex)) {
+        sound.play("locked");
+        return;
+      }
+      sound.play("select");
+      openSeason(titleIndex);
+    }
+  }
+
+  function openSeason(si) {
+    if (si !== seasonIndex) levelIndex = 0;
+    seasonIndex = si;
+    save.season = si;
+    writeSave();
+    openLevelMenu();
+  }
+
+  function openTitle() {
+    state = "title";
+    titleIndex = seasonIndex;
+  }
+
   // El fondo del menú de niveles es el propio nivel marcado.
   function selectLevel(i) {
     if (i === levelIndex) return;
@@ -1585,22 +1775,35 @@
     state = "levels";
     testLevel = null;
     // Por defecto, el primer nivel sin completar.
-    let i = LEVELS.findIndex((_, j) => isUnlocked(j) && !recordOf(j)?.done);
-    if (i < 0) i = levelIndex;
+    let i = seasonLevels().findIndex((_, j) => isUnlocked(j) && !recordOf(j)?.done);
+    if (i < 0) i = Math.min(levelIndex, seasonLevels().length - 1);
     levelIndex = i;
     loadLevel(i);
   }
 
   function updateLevelMenu() {
-    const n = LEVELS.length;
+    const all = seasonLevels().length;
+    const { start, n } = worldRange();
+    const worlds = season().worlds.length;
+    const firstOfWorld = (w) => season().where.findIndex((x) => x.world === w);
     let i = levelIndex;
-    if (menuKey("left")) i = (i + n - 1) % n;
-    if (menuKey("right")) i = (i + 1) % n;
-    const perRow = cardsPerRow();
-    if (menuKey("up") && i - perRow >= 0) i -= perRow;
-    if (menuKey("down") && i + perRow < n) i += perRow;
+    // ← → recorren toda la temporada (pasando de un mundo al siguiente).
+    if (menuKey("left")) i = (i + all - 1) % all;
+    if (menuKey("right")) i = (i + 1) % all;
+    // ↑ ↓ cambian de fila y, desde la primera o la última, de mundo.
+    const perRow = cardsPerRow(n);
+    const k = i - start;
+    const world = season().where[levelIndex].world;
+    if (menuKey("up")) {
+      if (k - perRow >= 0) i -= perRow;
+      else if (world > 0) i = firstOfWorld(world - 1);
+    }
+    if (menuKey("down")) {
+      if (k + perRow < n) i += perRow;
+      else if (world + 1 < worlds) i = firstOfWorld(world + 1);
+    }
     const pointed = pointedItem(n, levelCardRect);
-    if (pointed !== null) i = pointed;
+    if (pointed !== null) i = start + pointed;
     selectLevel(i);
 
     if (menuKey("ok") || (clicked && pointed !== null)) {
@@ -1611,7 +1814,7 @@
         sound.play("locked");
       }
     } else if (menuKey("back")) {
-      state = "title";
+      openTitle();
     } else if (pressed.has("KeyE") || (clicked && pointerIn(editorButtonRect()))) {
       openEditor();
     }
@@ -1637,6 +1840,7 @@
     } else if (menuKey("ok") || (clicked && pointed !== null)) {
       const choice = items[menuIndex];
       if (choice === "Continuar") state = "playing";
+      else if (choice === "Volver a la bandera") backToCheckpoint();
       else if (choice === "Reiniciar nivel") restartLevel();
       else if (choice === "Elegir nivel") openLevelMenu();
       else if (choice === "Volver al editor") backToEditor();
@@ -1685,10 +1889,7 @@
     if (pressed.has("KeyM")) sound.toggleMute();
 
     if (state === "title") {
-      if (menuKey("ok") || clicked) {
-        sound.play("select");
-        openLevelMenu();
-      }
+      updateTitle();
     } else if (state === "levels") {
       updateLevelMenu();
     } else if (state === "editor") {
@@ -1697,7 +1898,7 @@
       updatePauseMenu();
     } else if (state === "playing") {
       if (pressed.has("KeyR")) {
-        restartLevel();
+        retry();
       } else if (menuKey("back") || pressed.has("KeyP")) {
         pauseGame();
       } else {
@@ -1706,6 +1907,7 @@
         updateMechs();
         updateFans();
         for (const p of players) updatePlayer(p);
+        updateFlags();
         updateBoxes();
         updateCrumbles();
         for (const s of springs) if (s.squash > 0) s.squash--;
@@ -1727,17 +1929,18 @@
         if (state === "playing") enemyContacts();
         if (state === "playing") spikeContacts();
         if (shake > 0) shake--;
+        if (toast && --toast.frames <= 0) toast = null;
         if (state === "playing" && players.every((p) => p.inDoor)) winLevel();
       }
     } else if (state === "dead") {
       deadTimer++;
-      if (pressed.has("KeyR") || deadTimer > RESTART_DELAY) restartLevel();
+      if (pressed.has("KeyR") || deadTimer > RESTART_DELAY) retry();
     } else if (state === "won") {
       if (testLevel) {
         if (menuKey("ok") || menuKey("back")) backToEditor();
       } else if (menuKey("ok")) {
         sound.play("select");
-        if (levelIndex + 1 < LEVELS.length) {
+        if (levelIndex + 1 < seasonLevels().length) {
           levelIndex++;
           restartLevel();
         } else {
@@ -1780,6 +1983,13 @@
   globalThis.Juego = {
     T,
     characters: CHARACTERS,
+    // Los niveles de todas las temporadas, para abrirlos en el editor.
+    levels: SEASONS.flatMap((s, si) =>
+      s.levels.map((lv, i) => ({
+        label: `${si === 0 ? i + 1 : `T${si + 1} ${s.where[i].world + 1}-${s.where[i].num + 1}`}. ${lv.name}`,
+        data: lv,
+      })),
+    ),
     // Muestra el nivel en el lienzo sin jugarlo y devuelve sus problemas.
     preview(data) {
       state = "editor";
@@ -1912,10 +2122,24 @@
   // ---------------------------------------------------------------------------
   // Dibujo: escenario
   // ---------------------------------------------------------------------------
-  function drawStone(g, x, y, row) {
-    g.fillStyle = "#5a4a33";
+  // Colores del escenario de cada temporada: el templo (1) y las cuevas de obsidiana (2).
+  const THEMES = {
+    temple: {
+      sky: ["#2b2419", "#15110c"], bricks: "rgba(255,255,255,0.035)",
+      stone: "#5a4a33", joints: "#47392650", edges: ["#8f7752", "#2e2519", "#6e5b3e", "#3a2f20"],
+    },
+    caves: {
+      sky: ["#1f1c2b", "#0b0a12"], bricks: "rgba(190,170,255,0.03)",
+      stone: "#3b3550", joints: "#26213a70", edges: ["#7a6fa0", "#1a1726", "#564c78", "#252036"],
+    },
+  };
+  // El tema sale de la temporada del nivel (los del editor, con el del templo).
+  const themeOf = (lv) => THEMES[SEASONS.find((s) => s.levels.includes(lv))?.theme] || THEMES.temple;
+
+  function drawStone(g, x, y, row, theme) {
+    g.fillStyle = theme.stone;
     g.fillRect(x, y, T, T);
-    g.fillStyle = "#47392650";
+    g.fillStyle = theme.joints;
     g.fillRect(x, y + T / 2 - 1, T, 2);
     const a = row % 2 ? 8 : 24;
     g.fillRect(x + a, y, 2, T / 2);
@@ -1928,14 +2152,15 @@
     bg.height = H;
     const g = bg.getContext("2d");
 
+    const theme = themeOf(level);
     const grad = g.createLinearGradient(0, 0, 0, H);
-    grad.addColorStop(0, "#2b2419");
-    grad.addColorStop(1, "#15110c");
+    grad.addColorStop(0, theme.sky[0]);
+    grad.addColorStop(1, theme.sky[1]);
     g.fillStyle = grad;
     g.fillRect(0, 0, W, H);
 
-    // Ladrillos tenues del fondo del templo
-    g.strokeStyle = "rgba(255,255,255,0.035)";
+    // Ladrillos tenues del fondo
+    g.strokeStyle = theme.bricks;
     g.lineWidth = 1;
     for (let y = 0; y < H; y += T / 2) {
       g.beginPath();
@@ -1958,21 +2183,22 @@
         if (!isWall(grid[r][c])) continue;
         const x = c * T;
         const y = r * T;
-        drawStone(g, x, y, r);
+        drawStone(g, x, y, r, theme);
+        const [top, bottom, left, right] = theme.edges;
         if (!isWall(tileAt(c, r - 1))) {
-          g.fillStyle = "#8f7752";
+          g.fillStyle = top;
           g.fillRect(x, y, T, 3);
         }
         if (!isWall(tileAt(c, r + 1))) {
-          g.fillStyle = "#2e2519";
+          g.fillStyle = bottom;
           g.fillRect(x, y + T - 3, T, 3);
         }
         if (!isWall(tileAt(c - 1, r))) {
-          g.fillStyle = "#6e5b3e";
+          g.fillStyle = left;
           g.fillRect(x, y, 2, T);
         }
         if (!isWall(tileAt(c + 1, r))) {
-          g.fillStyle = "#3a2f20";
+          g.fillStyle = right;
           g.fillRect(x + T - 2, y, 2, T);
         }
       }
@@ -2317,6 +2543,40 @@
       ctx.lineTo(x + 25 + shake, y + 20);
       ctx.stroke();
       ctx.restore();
+    }
+  }
+
+  // Bandera de control: gris hasta que se enciende; encima, quién está ya junto a ella.
+  function drawFlags(t) {
+    for (const f of flags) {
+      const x = f.c * T + 9;
+      const base = (f.r + 1) * T;
+      const top = f.r * T - 14;
+      ctx.fillStyle = "#cfc6b0";
+      ctx.fillRect(x, top, 3, base - top);
+      ctx.fillStyle = "#8a7a62";
+      ctx.fillRect(x - 3, base - 3, 9, 3);
+      const wave = Math.sin(t * 6 + f.c) * 2;
+      ctx.save();
+      if (f.on) {
+        ctx.shadowColor = "#ffb347";
+        ctx.shadowBlur = 14;
+      }
+      ctx.fillStyle = f.on ? "#ffe08a" : "#6e6555";
+      ctx.beginPath();
+      ctx.moveTo(x + 3, top);
+      ctx.quadraticCurveTo(x + 10, top + 2 + wave, x + 19, top + 6 + wave);
+      ctx.lineTo(x + 3, top + 13);
+      ctx.closePath();
+      ctx.fill();
+      ctx.restore();
+      if (f.on || state !== "playing") continue;
+      players.forEach((p, i) => {
+        ctx.fillStyle = nearFlag(f, p) ? p.ch.color : "rgba(255,255,255,0.18)";
+        ctx.beginPath();
+        ctx.arc(x + 1 + (i - 1) * 10, top - 10, 3.5, 0, Math.PI * 2);
+        ctx.fill();
+      });
     }
   }
 
@@ -2958,7 +3218,7 @@
   function drawHud() {
     ctx.fillStyle = "rgba(0,0,0,0.55)";
     ctx.fillRect(0, 0, W, T);
-    text(testLevel ? `Prueba · ${level.name}` : `Nivel ${levelIndex + 1} · ${level.name}`, 12, T / 2, 15, "#f3e6c8", "left");
+    text(testLevel ? `Prueba · ${level.name}` : `Nivel ${levelNumber(levelIndex)} · ${level.name}`, 12, T / 2, 15, "#f3e6c8", "left");
     text(formatTime(levelFrames), W / 2 - 40, T / 2, 16, "#f3e6c8");
     const best = testLevel ? null : recordOf(levelIndex);
     if (best?.done) text(`récord ${formatTime(best.bestFrames)}`, W / 2 - 66, T / 2, 13, "#9c8d70", "right", "normal");
@@ -3001,18 +3261,28 @@
     if (save.muted) text("🔇", x - 4, T / 2, 14, "#f3e6c8", "right");
   }
 
-  function drawHint() {
-    if (!level.hint || levelFrames > HINT_FRAMES || state !== "playing") return;
-    const alpha = Math.min(1, (HINT_FRAMES - levelFrames) / 60, levelFrames / 20);
+  // Cartel bajo el marcador (la pista del nivel o un aviso).
+  function banner(str, alpha, y, color) {
     ctx.save();
     ctx.globalAlpha = alpha;
     ctx.font = `bold 16px ${FONT}`;
-    const w = ctx.measureText(level.hint).width + 32;
+    const w = ctx.measureText(str).width + 32;
     ctx.fillStyle = "rgba(10,8,5,0.8)";
-    roundRectPath(ctx, W / 2 - w / 2, T + 10, w, 34, 10);
+    roundRectPath(ctx, W / 2 - w / 2, y, w, 34, 10);
     ctx.fill();
-    text(level.hint, W / 2, T + 27, 16, "#ffe9b8");
+    text(str, W / 2, y + 17, 16, color);
     ctx.restore();
+  }
+
+  function drawHint() {
+    if (!level.hint || levelFrames > HINT_FRAMES || state !== "playing") return false;
+    banner(level.hint, Math.min(1, (HINT_FRAMES - levelFrames) / 60, levelFrames / 20), T + 10, "#ffe9b8");
+    return true;
+  }
+
+  function drawToast(below) {
+    if (!toast || state !== "playing") return;
+    banner(toast.text, Math.min(1, toast.frames / 40, (TOAST_FRAMES - toast.frames) / 10), T + (below ? 52 : 10), "#ffe08a");
   }
 
   function dim(alpha) {
@@ -3056,16 +3326,42 @@
       text(`Poder: ${ch.power.toLowerCase()}`, x + cardW / 2, y + 266, 15, "#ffe08a", "center", "normal");
     });
 
+    // Temporadas: la marcada parpadea; las cerradas dicen cómo abrirlas.
     const pulse = 0.6 + Math.sin(t * 4) * 0.4;
-    ctx.globalAlpha = pulse;
-    text("Pulsa ENTER para empezar", W / 2, 482, 26, "#ffe9b8");
-    ctx.globalAlpha = 1;
-    text(`S ↓ H: disparar (con un orbe) · ESC: pausa · R: reiniciar · M: sonido ${save.muted ? "(apagado)" : ""}`, W / 2, 520, 15, "#9c8d70", "center", "normal");
+    SEASONS.forEach((s, i) => {
+      const r = seasonButtonRect(i);
+      const selected = i === titleIndex;
+      const open = isSeasonUnlocked(i);
+      ctx.fillStyle = selected ? "rgba(255,233,184,0.16)" : "rgba(255,255,255,0.05)";
+      roundRectPath(ctx, r.x, r.y, r.w, r.h, 12);
+      ctx.fill();
+      ctx.strokeStyle = selected ? `rgba(255,224,138,${pulse})` : "#3b3022";
+      ctx.lineWidth = selected ? 3 : 2;
+      ctx.stroke();
+      const color = open ? (selected ? "#ffe9b8" : "#d9c9a6") : "#7a6d55";
+      text(`${s.name} · ${s.subtitle}`, r.x + r.w / 2, r.y + 20, 17, color);
+      if (open) {
+        const done = s.levels.filter((lv, k) => recordIn(s, k)?.done).length;
+        const total = s.levels.length;
+        text(`${done} / ${total} ${total === 1 ? "nivel" : "niveles"}`, r.x + r.w / 2, r.y + 42, 13, "#9c8d70", "center", "normal");
+      } else {
+        const prev = SEASONS[i - 1];
+        const why = `Termina «${prev.levels[prev.levels.length - 1].name}» para abrirla`;
+        ctx.save();
+        ctx.translate(r.x + r.w / 2 - 118, r.y + 43);
+        ctx.scale(0.55, 0.55);
+        drawPadlock(0, 0, "#7a6d55");
+        ctx.restore();
+        text(why, r.x + r.w / 2 + 8, r.y + 42, 13, "#7a6d55", "center", "normal");
+      }
+    });
+    const hint = SEASONS.length > 1 ? "← →: temporada · ENTER: jugar" : "ENTER: jugar";
+    text(`${hint} · S ↓ H: disparar · ESC: pausa · R: reintentar · M: sonido ${save.muted ? "(apagado)" : ""}`, W / 2, 540, 14, "#9c8d70", "center", "normal");
   }
 
   // Total de gemas de un nivel sin tener que cargarlo.
-  function levelGemTotal(i) {
-    return LEVELS[i].map.join("").split("").filter((ch) => ch in GEM_BY_TILE).length;
+  function levelGemTotal(i, s = season()) {
+    return s.levels[i].map.join("").split("").filter((ch) => ch in GEM_BY_TILE).length;
   }
 
   function drawPadlock(cx, cy, color) {
@@ -3099,7 +3395,11 @@
 
   function drawLevelMenu(t) {
     dim(0.78);
-    text("Elige nivel", W / 2, 62, 36, "#ffe9b8");
+    const { world, start, n } = worldRange();
+    const worlds = season().worlds.length;
+    text(season().name, W / 2, 56, 34, "#ffe9b8");
+    const sub = worlds > 1 ? `Mundo ${world + 1} de ${worlds} · ${season().worlds[world].name}` : season().subtitle;
+    text(sub, W / 2, 90, 16, "#d9c9a6", "center", "normal");
     const eb = editorButtonRect();
     const hover = pointerIn(eb);
     ctx.fillStyle = hover ? "rgba(255,233,184,0.16)" : "rgba(255,255,255,0.06)";
@@ -3112,15 +3412,18 @@
 
     let gemsTaken = 0;
     let gemsTotal = 0;
-    LEVELS.forEach((lv, i) => {
+    seasonLevels().forEach((lv, i) => {
+      gemsTaken += recordOf(i)?.bestGems || 0;
+      gemsTotal += levelGemTotal(i);
+    });
+    seasonLevels().forEach((lv, i) => {
+      if (i < start || i >= start + n) return; // solo el mundo marcado
       const rec = recordOf(i);
       const open = isUnlocked(i);
       const total = levelGemTotal(i);
-      gemsTaken += rec?.bestGems || 0;
-      gemsTotal += total;
 
       const selected = i === levelIndex;
-      const r = levelCardRect(i);
+      const r = levelCardRect(i - start);
       const y = r.y - (selected ? 6 : 0);
       const cx = r.x + r.w / 2;
 
@@ -3142,7 +3445,7 @@
 
       const f = r.h / CARD_H; // las tarjetas bajas (muchos niveles) escalan su contenido
       const at = (dy) => y + Math.round(dy * f);
-      text(String(i + 1), cx, at(36), Math.round(38 * Math.max(f, 0.75)), open ? "#ffe9b8" : "#5a4f3e");
+      text(levelNumber(i), cx, at(36), Math.round(38 * Math.max(f, 0.75)), open ? "#ffe9b8" : "#5a4f3e");
       const nameSize = f < 1 ? 13 : 15;
       const lines = fitLines(lv.name, r.w - 16, nameSize);
       lines.forEach((line, k) => text(line, cx, at(74) + k * (nameSize + 3) - ((lines.length - 1) * (nameSize + 3)) / 2, nameSize, open ? "#f3e6c8" : "#5a4f3e"));
@@ -3166,13 +3469,14 @@
       }
     });
 
-    const last = levelCardRect(LEVELS.length - 1);
+    const last = levelCardRect(n - 1);
     const footer = Math.min(H - 30, last.y + last.h + 50);
     ctx.fillStyle = "#ffe08a";
     gemPath(W / 2 - 52, footer - 30, 7);
     ctx.fill();
     text(`${gemsTaken} / ${gemsTotal} gemas`, W / 2 - 40, footer - 30, 16, "#f3e6c8", "left");
-    text("← →: elegir · ENTER o clic: jugar · ESC: volver", W / 2, footer, 15, "#9c8d70", "center", "normal");
+    const keys = worlds > 1 ? "← →: elegir · ↑ ↓: mundo" : "← →: elegir";
+    text(`${keys} · ENTER o clic: jugar · ESC: volver`, W / 2, footer, 15, "#9c8d70", "center", "normal");
   }
 
   function drawPause() {
@@ -3205,7 +3509,8 @@
   function drawDead() {
     dim(0.45);
     text(`💀 ${deathMessage}`, W / 2, H / 2 - 20, 34, "#ffffff");
-    text("Reiniciando... (R para reintentar ya)", W / 2, H / 2 + 24, 17, "#d9c9a6", "center", "normal");
+    const where = checkpoint ? "Volviendo a la bandera" : "Reiniciando";
+    text(`${where}... (R para reintentar ya)`, W / 2, H / 2 + 24, 17, "#d9c9a6", "center", "normal");
   }
 
   function drawWon(t) {
@@ -3223,9 +3528,11 @@
       ctx.globalAlpha = 1;
       return;
     }
-    const isLast = levelIndex + 1 >= LEVELS.length;
+    const isLast = levelIndex + 1 >= seasonLevels().length;
     const news = [];
-    if (lastResult?.first && !isLast) news.push(`Desbloqueado: ${LEVELS[levelIndex + 1].name}`);
+    if (retries) news.push(`Vueltas a la bandera: ${retries}`);
+    if (lastResult?.first && !isLast) news.push(`Desbloqueado: ${seasonLevels()[levelIndex + 1].name}`);
+    if (lastResult?.newSeason) news.push(`¡Desbloqueada la ${lastResult.newSeason.name}!`);
     if (lastResult?.time) news.push("¡Nuevo récord de tiempo!");
     if (lastResult?.gems) news.push("¡Más gemas que nunca!");
     news.forEach((msg, i) => text(msg, W / 2, H / 2 + 46 + i * 26, 18, "#9dff8a"));
@@ -3240,13 +3547,15 @@
   function drawEnding(t) {
     dim(0.85);
     ctx.globalAlpha = 0.8 + Math.sin(t * 3) * 0.2;
-    text("¡Habéis superado el templo!", W / 2, 80, 40, "#ffe9b8");
+    const { ending } = season();
+    const LV = seasonLevels();
+    text(ending.title, W / 2, 80, 40, "#ffe9b8");
     ctx.globalAlpha = 1;
-    text("Fireboy, Watergirl y AcidBaby han llegado juntos hasta el final.", W / 2, 122, 17, "#d9c9a6", "center", "normal");
+    text(ending.text, W / 2, 122, 17, "#d9c9a6", "center", "normal");
 
     // Con muchos niveles, la tabla va en dos columnas.
-    const columns = LEVELS.length > 12 ? 2 : 1;
-    const perCol = Math.ceil(LEVELS.length / columns);
+    const columns = LV.length > 12 ? 2 : 1;
+    const perCol = Math.ceil(LV.length / columns);
     const colW = columns === 2 ? 460 : 540;
     const lefts = columns === 2 ? [W / 2 - 480, W / 2 + 20] : [W / 2 - 270];
     const top = 160;
@@ -3262,7 +3571,7 @@
     let frames = 0;
     let taken = 0;
     let total = 0;
-    LEVELS.forEach((lv, i) => {
+    LV.forEach((lv, i) => {
       const rec = recordOf(i);
       const left = lefts[Math.floor(i / perCol)];
       const y = top + ((i % perCol) + 1) * rowH;
@@ -3270,7 +3579,7 @@
       frames += rec?.bestFrames || 0;
       taken += rec?.bestGems || 0;
       total += all;
-      text(`${i + 1}. ${lv.name}`, left, y, size, "#f3e6c8", "left", "normal");
+      text(`${levelNumber(i)}. ${lv.name}`, left, y, size, "#f3e6c8", "left", "normal");
       text(rec?.done ? formatTime(rec.bestFrames) : "—", timeX(left), y, size, "#f3e6c8", "center", "normal");
       text(`${rec?.bestGems || 0}/${all}`, gemsX(left), y, size, rec?.bestGems === all ? "#ffe08a" : "#f3e6c8", "center", "normal");
     });
@@ -3282,6 +3591,10 @@
     text("Total", left, y, 18, "#ffe9b8", "left");
     text(`${formatTime(frames)}   ·   ${taken}/${total} gemas`, right, y, 18, taken === total ? "#ffe08a" : "#ffe9b8", "right");
     if (taken < total) text("Aún quedan gemas por encontrar…", W / 2, y + 32, 16, "#bfae88", "center", "normal");
+    const next = SEASONS[seasonIndex + 1];
+    if (next && isSeasonUnlocked(seasonIndex + 1)) {
+      text(`La ${next.name} (${next.subtitle}) os espera en la portada.`, W / 2, y + (taken < total ? 60 : 32), 17, "#9dff8a");
+    }
 
     ctx.globalAlpha = 0.6 + Math.sin(t * 4) * 0.4;
     text("ENTER: volver a los niveles", W / 2, H - 40, 20, "#ffffff");
@@ -3410,6 +3723,7 @@
     drawLiquids(t);
     drawSpikes();
     drawSprings();
+    drawFlags(t);
     for (const ch of CHARACTERS) {
       if (doors[ch.door]) drawDoor(doors[ch.door], players.find((p) => p.ch === ch) || { ch, inDoor: false });
     }
@@ -3446,7 +3760,7 @@
     else {
       drawHud();
       if (boss && levelFrames > HINT_FRAMES / 2) drawBossBar(t);
-      else drawHint();
+      else drawToast(drawHint());
       if (state === "paused") drawPause();
       else if (state === "dead") drawDead();
       else if (state === "won") drawWon(t);
@@ -3466,16 +3780,22 @@
 
   // index.html?nivel=3 empieza directamente en ese nivel y desbloquea todos (útil para diseñar niveles);
   // index.html?editor abre el editor de niveles.
+  // index.html?temporada=2&nivel=1, lo mismo en otra temporada.
   const params = new URLSearchParams(globalThis.location?.search);
   const requested = Number(params.get("nivel"));
+  const requestedSeason = Number(params.get("temporada") || 1) - 1;
   if (params.has("editor") && globalThis.Editor) {
     loadLevel(levelIndex);
     openEditor();
-  } else if (requested >= 1 && requested <= LEVELS.length) {
+  } else if (SEASONS[requestedSeason] && requested >= 1 && requested <= SEASONS[requestedSeason].levels.length) {
+    seasonIndex = requestedSeason;
     levelIndex = requested - 1;
     unlockAll = true;
     restartLevel();
   } else {
+    // En la portada queda marcada la última temporada jugada (si sigue abierta).
+    const last = Math.min(Number(save.season) || 0, SEASONS.length - 1);
+    seasonIndex = titleIndex = isSeasonUnlocked(last) ? last : 0;
     loadLevel(levelIndex);
   }
   requestAnimationFrame(frame);
