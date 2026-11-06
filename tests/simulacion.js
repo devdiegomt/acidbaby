@@ -1460,7 +1460,9 @@ function runRightTo(p, c) {
     const c = Math.floor((p.x + p.w + 8) / 32);
     const ahead = pool[G.grid[feetRow(p) + 1]?.[c]];
     const spike = G.spikes.some((s) => s.c === c && s.r === feetRow(p));
-    if (p.onGround && !jumping && ((ahead && ahead !== p.ch.immune) || spike)) { jumping = 16; down(k.j); }
+    // …y también cuando algo le corta el paso (un escalón, una plataforma).
+    const stuck = p.onGround && Math.abs(p.vx) < 0.3 && i > 5;
+    if (p.onGround && !jumping && ((ahead && ahead !== p.ch.immune) || spike || stuck)) { jumping = 16; down(k.j); }
     if (jumping && --jumping === 0) up(k.j);
     run(1);
   }
@@ -1601,9 +1603,91 @@ function highRoad(p) {
 }
 const rose = [water, acid, fire].map(highRoad);
 check("El ventilador sube al camino alto", rose.every(Boolean));
-check("Por el camino alto los tres bajan junto a las puertas", playing() && G.players.every((p) => feetRow(p) === 16 && center(p) > 27 * 32), G.players.map(tile).join(" / ") + " " + G.deathMessage);
+check("Por el camino alto los tres bajan junto a las puertas", playing() && G.players.every((p) => feetRow(p) === 16 && center(p) > 27 * 32), G.players.map(tile).join(" / ") + (playing() ? "" : " " + G.deathMessage));
 for (const p of [fire, water, acid]) walkTo(p, G.doors[p.ch.door].c);
 check("…y llegan a sus puertas", G.state === "won");
+// --- Nivel 1-4: el montacargas ---------------------------------------------------------------------
+console.log("\nNivel 1-4");
+G.setLevel(3, 1); run(1);
+fire = P("Fireboy"); water = P("Watergirl"); acid = P("AcidBaby");
+check("El barril de lava empieza arriba, en el montacargas", G.boxes.find((b) => b.fill === "fire").y < 11 * 32);
+runRightTo(water, 17);
+check("Watergirl cruza el agua y acciona la palanca", M("h").leverOn && playing());
+run(120);
+check("…el montacargas baja con el barril", feetRow(G.boxes.find((b) => b.fill === "fire")) === 15);
+walkTo(fire, 4);
+hopTo(fire, 5);
+hold(["KeyD"], 300, () => !G.boxes.some((b) => b.fill === "fire"));
+run(10);
+check("Fireboy empuja el barril de lava al agua: obsidiana", G.grid[17][11] === "■", tile(fire));
+for (const p of [fire, acid, water]) { if (center(p) < 17 * 32) runRightTo(p, 15); walkTo(p, p === fire ? 17 : p === acid ? 18 : 19); }
+check("Los tres encienden la bandera", G.flags[0].on, G.players.map(tile).join(" / "));
+runRightTo(fire, 26);
+hold(["KeyD", "KeyW"], 30);
+run(40);
+walkTo(fire, 30);
+hold(["KeyA"], 300, () => !G.boxes.some((b) => b.fill === "water"));
+run(10);
+check("Fireboy cruza la lava, salta el barril de agua y lo empuja a la lava", G.grid[17][23] === "■" && playing(), tile(fire) + (playing() ? "" : " " + G.deathMessage));
+for (const p of [water, acid, fire]) walkTo(p, 30);
+check("Los tres llegan al ácido", playing() && G.players.every((p) => center(p) > 29 * 32), G.players.map(tile).join(" / "));
+runRightTo(acid, 38);
+run(80);
+check("AcidBaby cruza el ácido y pisa el botón: baja el puente", M("q").active && M("q").oy === 4 * 32);
+for (const p of [water, fire]) {
+  const k = keysOf(p);
+  hold([k.r, k.j], 20);
+  hold([k.r], 200, () => center(p) > 37 * 32);
+  run(10);
+}
+check("Watergirl y Fireboy cruzan por el puente", playing() && [water, fire].every((p) => center(p) > 37 * 32), [water, fire].map(tile).join(" / "));
+for (const p of [fire, water, acid]) walkTo(p, G.doors[p.ch.door].c);
+check("…y los tres llegan a sus puertas", G.state === "won", G.players.map(tile).join(" / "));
+// --- Nivel 1-5: fuente termal ---------------------------------------------------------------------
+console.log("\nNivel 1-5");
+G.setLevel(4, 1); run(1);
+fire = P("Fireboy"); water = P("Watergirl"); acid = P("AcidBaby");
+hold(["KeyD"], 120, () => center(G.boxes.find((b) => b.fill === "fire")) > 11 * 32 + 10);
+run(150);
+check("El barril de lava, empujado a los tablones frágiles, cae al agua de abajo: obsidiana", G.grid[17][13] === "■" && G.boxes.length === 1, tile(fire));
+check("…y quien lo empujaba sigue arriba", playing() && feetRow(fire) === 10, tile(fire));
+for (const p of [fire, water, acid]) { walkTo(p, 2); run(30); }
+check("Los tres bajan por el hueco de la izquierda", G.players.every((p) => feetRow(p) === 16));
+for (const p of [fire, water, acid]) runRightTo(p, 16 + G.players.indexOf(p));
+check("Cruzan por la obsidiana y encienden la bandera", G.flags[0].on, G.players.map(tile).join(" / "));
+runRightTo(fire, 21);
+hold(["KeyD"], 200, () => !G.boxes.some((b) => b.fill === "water"));
+run(20);
+check("Desde la repisa, el barril de agua cae a la lava: obsidiana", G.grid[17][25] === "■", tile(fire));
+runRightTo(acid, 28);
+run(80);
+check("AcidBaby disuelve el muro de óxido", [12, 13, 14, 15, 16].every((r) => G.grid[r][29] === " "));
+const hog15 = G.enemies.find((e) => e.type === "hedgehog");
+// Va a la columna c saltando al erizo si se le acerca de frente.
+function dodgeTo(p, c) {
+  const k = keysOf(p);
+  const dir = c * 32 + 16 > center(p) ? 1 : -1;
+  const side = dir > 0 ? k.r : k.l;
+  let jumping = 0;
+  down(side);
+  for (let i = 0; i < 900 && (c * 32 + 16 - center(p)) * dir > 3 && playing(); i++) {
+    const dx = (center(hog15) - center(p)) * dir;
+    if (p.onGround && !jumping && dx > 0 && dx < 70) { jumping = 18; down(k.j); }
+    if (jumping && --jumping === 0) up(k.j);
+    run(1);
+  }
+  up(side); up(k.j);
+  run(10);
+}
+// AcidBaby va primero (ya está junto al óxido); Watergirl, que espera a salvo tras la repisa, la última.
+for (const p of [acid, fire, water]) {
+  if (center(p) < 23 * 32) runRightTo(p, 23);
+  dodgeTo(p, 35);
+  run(90);
+  hold([keysOf(p).r], 40, () => p.onGround && feetRow(p) === 10);
+  walkTo(p, G.doors[p.ch.door].c);
+}
+check("Saltando al erizo, el ventilador los sube a las puertas", G.state === "won", G.state + " · " + G.players.map((p) => `${tile(p)} ♥${p.hearts}`).join(" / ") + (G.state === "dead" ? " · " + G.deathMessage : ""));
 G.setLevel(0);
 
 process.exitCode = failures ? 1 : 0;
