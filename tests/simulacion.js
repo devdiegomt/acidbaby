@@ -1976,6 +1976,35 @@ for (const p of [fire, water]) walkTo(p, G.doors[p.ch.door].c);
 check("Con la compuerta abierta llegan a sus puertas", [fire, water].every((p) => p.inDoor), where());
 walkTo(acid, 37);
 check("…y AcidBaby a la suya, por debajo del ácido", G.state === "won", where());
+// --- Nivel 2-5: la esclusa -----------------------------------------------------------------------------
+console.log("\nNivel 2-5");
+G.setLevel(10, 1); run(1);
+fire = P("Fireboy"); water = P("Watergirl"); acid = P("AcidBaby");
+allWalk(new Map([[fire, 6], [acid, 7]]));
+allLeap(new Map([[fire, 8], [acid, 9]]));
+const onRaft = (p) => G.boxes.some((b) => p.y + p.h === b.y && p.x < b.x + b.w && p.x + p.w > b.x);
+check("Fireboy y AcidBaby se suben a las balsas del primer pozo", onRaft(fire) && onRaft(acid), where());
+walkTo(water, 30);
+check("Watergirl cruza el túnel de agua y pisa el botón de la tapa", center(water) > 29 * 32 && M("q").active, where());
+// Cuando la balsa queda por encima de la repisa, antes de que el techo la pare, se pasa andando.
+for (let i = 0; i < 1500 && playing() && fire.y + fire.h > 345; i++) run(1);
+allWalk(new Map([[fire, 13], [acid, 13]]));
+check("Antes del techo pasan a la repisa", playing() && feetRow(fire) === 10 && feetRow(acid) === 10, where());
+allLeap(new Map([[fire, 15], [acid, 16]]));
+check("…y de ahí a las balsas del segundo pozo", playing() && onRaft(fire) && onRaft(acid), where());
+for (let i = 0; i < 1500 && playing() && G.tide.y > 4 * 32; i++) run(1);
+check("Con la tapa apartada, las balsas los suben hasta arriba", playing() && feetRow(fire) <= 3 && feetRow(acid) <= 3, where());
+allLeap(new Map([[fire, 20], [acid, 20]]));
+for (const p of [fire, acid]) walkTo(p, G.doors[p.ch.door].c);
+check("Llegan a sus puertas", [fire, acid].every((p) => p.inDoor), where());
+walkTo(water, 36);
+check("…y Watergirl a la suya, bajo el agua", G.state === "won", where());
+// Sin Watergirl en el botón, la tapa no deja pasar a las balsas.
+G.setLevel(10, 1); run(1);
+fire = P("Fireboy"); water = P("Watergirl"); acid = P("AcidBaby");
+place(fire, 15, 10); place(acid, 16, 10);
+for (let i = 0; i < 1500 && playing(); i++) { place(water, 30, 14); run(1); }
+check("Sin nadie en el botón, la tapa para las balsas y el agua los alcanza", G.state === "dead", where());
 G.setLevel(0);
 
 process.exitCode = failures ? 1 : 0;
