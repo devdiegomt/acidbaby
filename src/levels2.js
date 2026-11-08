@@ -11,6 +11,13 @@
 //          (aguanta 4); al caer se rompen los sellos / del nivel
 //   ▼      dispensador: suelta un barril de agua, y otro al rato cada vez que el suyo se gasta
 //
+// Marea (Mundo 2): con "tide" en el nivel, un líquido sube desde el suelo; solo aguanta dentro
+// el personaje de su elemento (los demás se hunden si les cubre la cabeza).
+//   tide: { type: "water" | "fire" | "acid", delay: frames antes de empezar, speed: píxeles por
+//           frame, top: fila más alta a la que llega, start: filas por encima del suelo al empezar }
+//   Un mecanismo con kind: "drain" (desagüe) solo lleva botón o palanca: mientras está activo, la
+//   marea baja. Un barril del elemento contrario que se hunde en ella la hace bajar 3 casillas.
+//
 // Estrellas de cada nivel: completarlo, coger todas sus gemas y pasarlo sin perder un corazón
 // (ni volver a una bandera). Se pueden ganar en partidas distintas.
 //
@@ -177,6 +184,89 @@ const SEASON_2 = {
             "#                                  /   #",
             "#^fwb               Ω              /123#",
             "#############LL##########AA#############",
+          ],
+        },
+      ],
+    },
+    {
+      name: "Las galerías inundadas",
+      levels: [
+        {
+          name: "Sube el agua",
+          hint: "¡Arriba, rápido! Solo Watergirl puede quedarse abajo... y la llave está en una jaula de agua.",
+          tide: { type: "water", delay: 240, speed: 0.3, top: 6 },
+          map: [
+            "########################################",
+            "########################################",
+            "########################################",
+            "#                          |           #",
+            "#                          |    1 2 3  #",
+            "#                      r  ##############",
+            "#                                      #",
+            "#                     ###              #",
+            "#            &                         #",
+            "#              e  ---                  #",
+            "#                                      #",
+            "#             ---                      #",
+            "#                                      #",
+            "#5555     ###                          #",
+            "#   5                                  #",
+            "#z  5 ###                              #",
+            "# $ 5    fwb                     z  z  #",
+            "########################################",
+          ],
+        },
+        {
+          name: "El desagüe",
+          hint: "Mientras alguien pise el botón del desagüe, el agua baja. ¿Quién aguanta ahí abajo?",
+          tide: { type: "water", delay: 90, speed: 0.6, top: 11 },
+          mechanisms: {
+            d: { trigger: "button", kind: "drain" },
+          },
+          map: [
+            "########################################",
+            "########################################",
+            "########################################",
+            "########################################",
+            "#                                      #",
+            "#                                      #",
+            "#                                      #",
+            "#                                      #",
+            "#                                      #",
+            "#                                      #",
+            "# fwb                               1 3#",
+            "#########                      #   #####",
+            "#               %       +              #",
+            "#               %       +              #",
+            "#               %       +   z          #",
+            "#               %       +              #",
+            "#  D        e   %   r   +   z    ^   2 #",
+            "########################################",
+          ],
+        },
+        {
+          name: "Lava en ascenso",
+          hint: "Cada piso tiene un muro para uno de los tres. Un barril de agua en la lava la hace bajar.",
+          tide: { type: "fire", delay: 240, speed: 0.3, top: 5 },
+          map: [
+            "########################################",
+            "########################################",
+            "########################################",
+            "#                        =             #",
+            "#                1 2 3   =             #",
+            "#              #####################   #",
+            "#                                      #",
+            "#              e         +           ###",
+            "#                        +    ≈ ≈      #",
+            "#    ###############################   #",
+            "#                                      #",
+            "# ##    %           z                  #",
+            "#       %                              #",
+            "###################################    #",
+            "#                                      #",
+            "#                                   ## #",
+            "#         r       fwb                  #",
+            "########################################",
           ],
         },
       ],
