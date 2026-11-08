@@ -73,6 +73,12 @@
   const GOLEM_HURT = 70; // frames quieto (y sin recibir daño) tras un golpe
   const DISPENSER_DELAY = 150; // lo que tarda un dispensador en soltar otro barril
 
+  // Marea (Temporada 2, Mundo 2): un líquido que sube desde el suelo del nivel. Se configura con
+  // "tide" en el nivel; los mecanismos con kind: "drain" la hacen bajar mientras están activos.
+  const TIDE_DEFAULTS = { type: "water", delay: 180, speed: 0.25, top: 1 };
+  const DRAIN_FACTOR = 3; // un desagüe la baja este número de veces más rápido de lo que sube
+  const TIDE_BARREL_DROP = 3; // casillas que baja la marea cuando le cae un barril del elemento contrario
+
   const FONT = '"Segoe UI", system-ui, sans-serif';
   const MECH_COLORS = ["#f2c14e", "#c86bff", "#ff6fa8", "#4fd6c8", "#f0f0f0"];
 
@@ -397,6 +403,14 @@
         tone(990, 0.1, { vol: 0.08, delay: 0.05 });
       },
       locked: () => tone(150, 0.18, { type: "sawtooth", vol: 0.1, to: 110 }),
+      flood: () => {
+        noise(1.2, { vol: 0.16, freq: 220, filter: "lowpass" }); // rugido del líquido que sube
+        tone(70, 0.9, { type: "sine", vol: 0.15, to: 90 });
+      },
+      drain: () => {
+        noise(0.8, { vol: 0.14, freq: 600, filter: "bandpass" }); // gorgoteo
+        tone(300, 0.5, { type: "sine", vol: 0.1, to: 120 });
+      },
       hiss: () => {
         noise(0.6, { vol: 0.2, freq: 4500, filter: "highpass" }); // vapor
         tone(140, 0.4, { type: "triangle", vol: 0.12, to: 70 });
@@ -463,6 +477,7 @@
   let toast = null; // aviso breve en pantalla: { text, frames }
   let boss = null; // jefe final (si el nivel tiene)
   let golem = null; // Gólem de magma (jefe del Mundo 1 de la temporada 2)
+  let tide = null; // marea: { type, y (superficie, px), bottom, top, speed, delay, draining }
   let dispensers = []; // sueltan barriles de agua: { c, r, wait }
   let rocks = []; // rocas que suelta el jefe
   let waves = []; // ondas de choque cuando se estrella contra el suelo
@@ -651,9 +666,11 @@
     }
 
     for (const m of mechs) {
-      if (!m.cells.length && !fans.some((f) => f.mech === m)) fail(`el mecanismo "${m.id}" no tiene casillas en el mapa`);
+      const drain = m.def.kind === "drain"; // desagüe: solo botón o palanca, sin casillas
+      if (!drain && !m.cells.length && !fans.some((f) => f.mech === m)) fail(`el mecanismo "${m.id}" no tiene casillas en el mapa`);
       if (!m.triggers.length) fail(`el mecanismo "${m.id}" no tiene botón/palanca "${m.id.toUpperCase()}"`);
-      if (m.def.kind === "fan") continue;
+      if (drain && !level.tide) fail(`el desagüe "${m.id}" no sirve de nada sin marea ("tide")`);
+      if (m.def.kind === "fan" || drain) continue;
       if (!m.def.move) {
         fail(`el mecanismo "${m.id}" necesita "move" (o kind: "fan")`);
         m.def = { ...m.def, move: [0, 0] };
@@ -699,6 +716,22 @@
       });
     });
 
+    tide = null;
+    if (level.tide) {
+      const cfg = { ...TIDE_DEFAULTS, ...level.tide };
+      if (!ELEMENTS[cfg.type]) fail(`la marea tiene que ser de "water", "fire" o "acid" (no "${cfg.type}")`);
+      const bottom = (grid.length - 1) * T;
+      tide = {
+        type: ELEMENTS[cfg.type] ? cfg.type : "water",
+        bottom,
+        y: bottom - (cfg.start || 0) * T, // superficie: empieza en el suelo (o "start" filas por encima)
+        top: cfg.top * T, // no sube más arriba de esta fila
+        speed: cfg.speed,
+        delay: cfg.delay,
+        draining: false,
+      };
+    }
+
     canvas.width = W = grid[0].length * T;
     canvas.height = H = grid.length * T;
     fitCanvas();
@@ -728,7 +761,7 @@
   function liveState() {
     return {
       grid, liquids, breakables, dissolving, barriers, fans, doors, boxes, gems, mechs, portals,
-      enemies, items, springs, crumbles, spikes, flags, obsidian, boss, bossDefeatedAt, golem, dispensers,
+      enemies, items, springs, crumbles, spikes, flags, obsidian, boss, bossDefeatedAt, golem, dispensers, tide,
       players: players.map((p) => ({
         ...p,
         ch: CHARACTERS.indexOf(p.ch),
@@ -751,7 +784,7 @@
   function backToCheckpoint() {
     const s = structuredClone(checkpoint);
     ({ grid, liquids, breakables, dissolving, barriers, fans, doors, boxes, gems, mechs, portals } = s);
-    ({ enemies, items, springs, crumbles, spikes, flags, obsidian, boss, bossDefeatedAt, golem, dispensers } = s);
+    ({ enemies, items, springs, crumbles, spikes, flags, obsidian, boss, bossDefeatedAt, golem, dispensers, tide } = s);
     players = s.players.map((p) =>
       Object.assign(p, {
         ch: CHARACTERS[p.ch],
@@ -950,7 +983,7 @@
 
   function updateMechs() {
     for (const m of mechs) {
-      if (m.def.kind === "fan") continue;
+      if (m.def.kind === "fan" || m.def.kind === "drain") continue;
       const tx = m.active ? m.def.move[0] * T : 0;
       const ty = m.active ? m.def.move[1] * T : 0;
       const speed = m.def.speed || PLATFORM_SPEED;
@@ -1147,6 +1180,18 @@
         b.used = true;
         const el = ELEMENTS[b.fill];
         burst(b.x + b.w / 2, b.y + b.h / 2, [el.top, el.body, "#9a6a35", "#e8e8f0"], 24);
+      }
+    }
+    // Un barril del elemento contrario que se hunde en la marea la hace bajar.
+    if (tide) {
+      for (const b of boxes) {
+        if (b.used || b.fill !== MIXES_WITH[tide.type] || b.y + b.h < tide.y + 10) continue;
+        b.used = true;
+        tide.y = Math.min(tide.bottom, tide.y + TIDE_BARREL_DROP * T);
+        const el = ELEMENTS[b.fill];
+        burst(b.x + b.w / 2, tide.y - TIDE_BARREL_DROP * T, [el.top, "#e8e8f0", "#ffffff"], 30);
+        sound.play("hiss");
+        toast = { text: `¡${ELEMENTS[tide.type].name[0].toUpperCase()}${ELEMENTS[tide.type].name.slice(1)} baja!`, frames: TOAST_FRAMES / 2 };
       }
     }
     boxes = boxes.filter((b) => !b.used);
@@ -1852,6 +1897,32 @@
     breakSeals();
   }
 
+  // La marea espera un rato y luego sube; un desagüe activo la hace bajar. Quien no es de su
+  // elemento y se queda con la cabeza por debajo de la superficie se hunde.
+  function updateTide() {
+    const t = tide;
+    const draining = mechs.some((m) => m.def.kind === "drain" && m.active);
+    if (draining) {
+      t.y = Math.min(t.bottom, t.y + t.speed * DRAIN_FACTOR);
+    } else if (t.delay > 0) {
+      if (--t.delay === 0) {
+        toast = { text: `¡Sube ${ELEMENTS[t.type].name}! Solo ${CHARACTERS.find((ch) => ch.immune === t.type).name} aguanta dentro.`, frames: TOAST_FRAMES };
+        sound.play("flood");
+      }
+    } else {
+      t.y = Math.max(t.top, t.y - t.speed);
+    }
+    if (draining !== t.draining) sound.play(draining ? "drain" : "flood");
+    t.draining = draining;
+    for (const p of players) {
+      if (p.alive && p.ch.immune !== t.type && p.y + p.h * 0.4 > t.y) {
+        const el = ELEMENTS[t.type];
+        killPlayer(p, `${p.ch.name} se hundió en ${el.name}`, [el.top, el.body]);
+        return;
+      }
+    }
+  }
+
   // Los dispensadores sueltan un barril de agua cuando el suyo se ha gastado (al rato).
   function updateDispensers() {
     if (golem && (golem.state === "dying" || golem.state === "dead")) return;
@@ -2159,6 +2230,7 @@
         updateFans();
         for (const p of players) updatePlayer(p);
         updateFlags();
+        if (tide) updateTide();
         updateBoxes();
         updateCrumbles();
         for (const s of springs) if (s.squash > 0) s.squash--;
@@ -4137,6 +4209,46 @@
     }
   }
 
+  // Marea: una capa translúcida del líquido que lo cubre todo por debajo de la superficie.
+  function drawTide(t) {
+    if (!tide || tide.y >= tide.bottom) return;
+    const el = ELEMENTS[tide.type];
+    const surface = (x) => tide.y + Math.sin(x * 0.045 + t * 2.2) * 3 + Math.sin(x * 0.11 - t * 3.1) * 1.5;
+    ctx.save();
+    const glow = ctx.createLinearGradient(0, tide.y - 26, 0, tide.y + 4);
+    glow.addColorStop(0, `rgba(${el.glow},0)`);
+    glow.addColorStop(1, `rgba(${el.glow},0.3)`);
+    ctx.fillStyle = glow;
+    ctx.fillRect(0, tide.y - 26, W, 30);
+    ctx.beginPath();
+    ctx.moveTo(0, H);
+    for (let x = 0; x <= W; x += 8) ctx.lineTo(x, surface(x));
+    ctx.lineTo(W, H);
+    ctx.closePath();
+    ctx.globalAlpha = 0.5;
+    ctx.fillStyle = el.body;
+    ctx.fill();
+    ctx.globalAlpha = 1;
+    ctx.beginPath();
+    for (let x = 0; x <= W; x += 8) (x ? ctx.lineTo : ctx.moveTo).call(ctx, x, surface(x));
+    ctx.strokeStyle = el.top;
+    ctx.lineWidth = 3;
+    ctx.stroke();
+    // Burbujas que suben (o remolinos si un desagüe la está bajando)
+    for (let i = 0; i < 14; i++) {
+      const bx = ((i * 97.3) % 1) * W + ((i * 211) % W);
+      const phase = (t * (tide.draining ? -0.6 : 0.4) + i * 0.17) % 1;
+      const by = H - (H - tide.y) * ((phase + 1) % 1);
+      if (by < tide.y + 4) continue;
+      ctx.globalAlpha = 0.5;
+      ctx.fillStyle = el.top;
+      ctx.beginPath();
+      ctx.arc(bx % W, by, 2.5, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    ctx.restore();
+  }
+
   // Dispensador: un caño en el techo de la casilla que gotea agua.
   function drawDispensers(t) {
     for (const d of dispensers) {
@@ -4253,6 +4365,7 @@
     drawBoss(t);
     drawGolem(t);
     for (const p of players) if (p.alive) drawPlayer(p, t);
+    drawTide(t);
     drawShots();
     drawDarts();
     drawRocksAndWaves(t);

@@ -90,6 +90,7 @@
     };
     if (data.boss && typeof data.boss === "object") clean.boss = { ...data.boss }; // configuración del jefe final
     if (data.golem && typeof data.golem === "object") clean.golem = { ...data.golem }; // la del Gólem de magma
+    if (data.tide && typeof data.tide === "object") clean.tide = { ...data.tide }; // la marea
     return clean;
   }
 
@@ -107,7 +108,7 @@
       }
       lines.push("  },");
     }
-    for (const cfg of ["boss", "golem"]) {
+    for (const cfg of ["boss", "golem", "tide"]) {
       if (!data[cfg]) continue;
       const fields = Object.entries(data[cfg]).map(([k, v]) => `${k}: ${q(v)}`);
       lines.push(`  ${cfg}: { ${fields.join(", ")} },`);
@@ -301,6 +302,7 @@
     data = { name: clean.name, hint: clean.hint, mechanisms: clean.mechanisms };
     if (clean.boss) data.boss = clean.boss;
     if (clean.golem) data.golem = clean.golem;
+    if (clean.tide) data.tide = clean.tide;
   }
 
   // Tras cada cambio: guarda el borrador, vuelve a cargar la vista previa y refresca el panel.
@@ -418,10 +420,10 @@
 
     const mechTiles = Object.entries(data.mechanisms).flatMap(([id, def], i) => {
       const color = def.color || MECH_COLORS[i % MECH_COLORS.length];
-      return [
-        [id, `${id}: ${def.kind === "fan" ? "ventilador" : "plataforma"}`, color],
-        [id.toUpperCase(), `${id.toUpperCase()}: ${def.trigger === "lever" ? "palanca" : "botón"}`, color],
-      ];
+      const trigger = [id.toUpperCase(), `${id.toUpperCase()}: ${def.trigger === "lever" ? "palanca" : "botón"}`, color];
+      // Un desagüe no tiene casillas propias: solo su botón o palanca.
+      if (def.kind === "drain") return [trigger];
+      return [[id, `${id}: ${def.kind === "fan" ? "ventilador" : "plataforma"}`, color], trigger];
     });
     const groups = [...PALETTE, ...(mechTiles.length ? [["Tus mecanismos", mechTiles]] : [])];
     $("#ed-palette").innerHTML = groups
@@ -433,12 +435,15 @@
     $("#ed-mechs").innerHTML = Object.entries(data.mechanisms)
       .map(([id, def]) => {
         const fan = def.kind === "fan";
+        const drain = def.kind === "drain";
+        const kinds = [["platform", "Plataforma"], ["fan", "Ventilador"], ["drain", "Desagüe (marea)"]];
+        const kind = def.kind || "platform";
         const [dx, dy] = def.move || [0, 0];
         return `<div class="mech" data-id="${id}">
           <b>${id} / ${id.toUpperCase()}</b>
           <select data-f="trigger"><option value="button"${def.trigger !== "lever" ? " selected" : ""}>Botón</option><option value="lever"${def.trigger === "lever" ? " selected" : ""}>Palanca</option></select>
-          <select data-f="kind"><option value="platform"${fan ? "" : " selected"}>Plataforma</option><option value="fan"${fan ? " selected" : ""}>Ventilador</option></select>
-          ${fan ? "" : `<label>mueve x <input data-f="dx" type="number" value="${dx}"></label><label>y <input data-f="dy" type="number" value="${dy}"></label>`}
+          <select data-f="kind">${kinds.map(([v, label]) => `<option value="${v}"${v === kind ? " selected" : ""}>${label}</option>`).join("")}</select>
+          ${fan || drain ? "" : `<label>mueve x <input data-f="dx" type="number" value="${dx}"></label><label>y <input data-f="dy" type="number" value="${dy}"></label>`}
           ${def.trigger === "lever" ? "" : `<label>botones a la vez <input data-f="need" type="number" min="1" value="${def.need || 1}"></label>`}
           <button data-act="del-mech" title="Quitar el mecanismo y sus casillas">✕</button>
         </div>`;
@@ -542,7 +547,7 @@
     const get = (f) => row.querySelector(`[data-f="${f}"]`)?.value;
     history.push(snapshot());
     const def = { trigger: get("trigger") };
-    if (get("kind") === "fan") def.kind = "fan";
+    if (get("kind") === "fan" || get("kind") === "drain") def.kind = get("kind");
     else def.move = get("dx") === undefined ? old.move || [0, -3] : [Number(get("dx")) || 0, Number(get("dy")) || 0];
     const need = Number(get("need"));
     if (def.trigger === "button" && need > 1) def.need = need;
@@ -631,7 +636,7 @@
     const def = data.mechanisms[id];
     if (!def) return `"${ch}" (desconocido)`;
     if (ch === id) return `mecanismo ${id} (${def.kind === "fan" ? "ventilador" : "plataforma"})`;
-    return `${def.trigger === "lever" ? "palanca" : "botón"} de ${id}`;
+    return `${def.trigger === "lever" ? "palanca" : "botón"} de ${id}${def.kind === "drain" ? " (desagüe)" : ""}`;
   }
 
   function onKey(e) {

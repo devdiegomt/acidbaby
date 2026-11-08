@@ -28,7 +28,7 @@ game = game.replace(
      get grid(){return grid}, get fans(){return fans}, get doors(){return doors}, get enemies(){return enemies}, get items(){return items}, get shots(){return shots},
      get save(){return save}, isUnlocked, get levelIndex(){return levelIndex}, get lastResult(){return lastResult},
      get menuIndex(){return menuIndex}, get levelFrames(){return levelFrames}, setLevel(i, si = 0){ testLevel = null; seasonIndex = si; levelIndex = i; loadLevel(i); state = "playing"; }, get darts(){return darts}, get crumbles(){return crumbles}, get boss(){return boss}, solidAt,
-     SEASONS, get seasonIndex(){return seasonIndex}, get titleIndex(){return titleIndex}, isSeasonUnlocked, levelNumber, get flags(){return flags}, get checkpoint(){return checkpoint}, get retries(){return retries}, get toast(){return toast}, get level(){return level}, worldRange, get spikes(){return spikes}, get obsidian(){return obsidian}, get liquids(){return liquids}, starsOf, starCount, get golem(){return golem}, get rocks(){return rocks}, get waves(){return waves} };\n})();`,
+     SEASONS, get seasonIndex(){return seasonIndex}, get titleIndex(){return titleIndex}, isSeasonUnlocked, levelNumber, get flags(){return flags}, get checkpoint(){return checkpoint}, get retries(){return retries}, get toast(){return toast}, get level(){return level}, worldRange, get spikes(){return spikes}, get obsidian(){return obsidian}, get liquids(){return liquids}, starsOf, starCount, get golem(){return golem}, get rocks(){return rocks}, get waves(){return waves}, get tide(){return tide} };\n})();`,
 );
 // editor.js va antes que game.js (como en index.html); sin DOM solo define EditorCore.
 eval(fs.readFileSync(ROOT + "levels.js", "utf8") + "\nglobalThis.LEVELS = LEVELS;\n" + fs.readFileSync(ROOT + "levels2.js", "utf8") + "\nglobalThis.SEASON_2 = SEASON_2;\n" + fs.readFileSync(ROOT + "editor.js", "utf8") + "\n" + game);
@@ -1757,6 +1757,189 @@ run(200);
 check("Sus barriles se evaporan y los dispensadores dejan de soltar más", waterBarrels().length === 0);
 for (const p of [fire, water, acid]) { place(p, 30, 16); run(2); walkTo(p, G.doors[p.ch.door].c); }
 check("Con el Gólem vencido se llega a las puertas", G.state === "won", G.players.map(tile).join(" / "));
+// --- Marea (Mundo 2) -------------------------------------------------------------------------------
+console.log("\nMarea");
+// Como sandbox(), pero con marea (y lo que haga falta en el nivel).
+function tidebox(tideCfg, edit = () => {}, extra = {}) {
+  const lv = E.blankLevel();
+  const g = E.toGrid(lv.map);
+  edit(g);
+  const problems = J.test({ ...lv, ...extra, tide: tideCfg, map: E.fromGrid(g) });
+  if (problems.length) console.log("   problemas:", problems.join("; "));
+  run(1);
+  fire = P("Fireboy"); water = P("Watergirl"); acid = P("AcidBaby");
+}
+tidebox({ type: "water", delay: 30, speed: 2, top: 10 });
+const tide0 = G.tide.y;
+run(20);
+check("La marea espera antes de subir", G.tide.y === tide0 && G.tide.y === 17 * 32);
+run(15);
+check("…luego sube y avisa", G.tide.y < tide0 && G.toast?.text.includes("Sube el agua"), G.toast?.text);
+run(15);
+check("Fireboy se hunde cuando le cubre la cabeza", G.state === "dead" && G.deathMessage === "Fireboy se hundió en el agua", G.deathMessage);
+tidebox({ type: "water", delay: 1, speed: 2, top: 10 });
+place(water, 10, 16); place(fire, 10, 9); place(acid, 12, 9);
+// (Fireboy y AcidBaby, en el aire a salvo: los sostenemos arriba)
+for (let i = 0; i < 200; i++) { place(fire, 10, 8); place(acid, 12, 8); run(1); }
+check("Watergirl aguanta dentro del agua", playing() && water.alive);
+check("…y la marea se para en su tope", G.tide.y === 10 * 32);
+tidebox({ type: "fire", delay: 1, speed: 2, top: 10 });
+run(60);
+check("Una marea de lava mata a Watergirl y a AcidBaby, no a Fireboy", G.state === "dead" && !G.deathMessage.startsWith("Fireboy"), G.deathMessage);
+// Desagüe: mientras se pisa su botón, la marea baja.
+tidebox({ type: "water", delay: 1, speed: 1, top: 8 }, (g) => { g[16][20] = "D"; }, { mechanisms: { d: { trigger: "button", kind: "drain" } } });
+for (let i = 0; i < 160; i++) { place(fire, 3, 5); place(acid, 4, 5); run(1); }
+const high = G.tide.y;
+place(water, 20, 16);
+for (let i = 0; i < 40; i++) { place(fire, 3, 5); place(acid, 4, 5); run(1); }
+check("Pisar el desagüe hace bajar la marea (más deprisa de lo que sube)", G.tide.y >= high + 100, `${high} → ${G.tide.y}`);
+place(water, 25, 16);
+const low = G.tide.y;
+for (let i = 0; i < 20; i++) { place(fire, 3, 5); place(acid, 4, 5); run(1); }
+check("Al soltarlo vuelve a subir", G.tide.y < low);
+check("Un desagüe sin marea se avisa en el editor", J.preview({ ...E.blankLevel(), mechanisms: { d: { trigger: "button", kind: "drain" } }, map: E.blankLevel().map.map((r, i) => (i === 16 ? r.slice(0, 20) + "D" + r.slice(21) : r)) }).some((p) => p.includes("sin marea")));
+check("Una marea de un elemento que no existe, también", J.preview({ ...E.blankLevel(), tide: { type: "barro" } }).some((p) => p.includes("marea tiene que ser")));
+// Un barril de agua que cae en la marea de lava la hace bajar 3 casillas.
+tidebox({ type: "fire", delay: 1, speed: 1, top: 8 }, (g) => { for (let c = 14; c <= 20; c++) g[6][c] = "#"; g[5][16] = "≈"; });
+for (let i = 0; i < 300; i++) { place(water, 3, 3); place(acid, 5, 3); run(1); }
+const before23 = G.tide.y;
+place(fire, 14, 5);
+down("KeyD");
+for (let i = 0; i < 120 && G.boxes.length; i++) { place(water, 3, 3); place(acid, 5, 3); run(1); }
+up("KeyD");
+check("Un barril de agua que se hunde en la lava la hace bajar 3 casillas", G.boxes.length === 0 && G.tide.y >= before23 + 3 * 32 - 2, `${before23} → ${G.tide.y}`);
+// La bandera guarda la altura de la marea.
+tidebox({ type: "water", delay: 1, speed: 1, top: 4 }, (g) => { g[16][10] = "⚑"; });
+place(fire, 10, 16); place(water, 9, 16); place(acid, 11, 16);
+run(3);
+const atFlag = G.checkpoint.tide.y;
+run(60);
+tap("KeyR");
+check("Al volver a la bandera, la marea vuelve a donde estaba", Math.abs(G.tide.y - atFlag) <= 2 && G.tide.y > 500, `${atFlag} / ${G.tide.y}`);
+// --- Ayudas para mover a varios a la vez (con la marea no se puede ir de uno en uno) -------------------
+// Cada uno anda hacia su columna; si algo le corta el paso, salta.
+function allWalk(targets, max = 600) {
+  const st = new Map([...targets].map(([p]) => [p, { jump: 0, stuck: 0 }]));
+  for (let i = 0; i < max && playing(); i++) {
+    let moving = false;
+    for (const [p, c] of targets) {
+      const k = keysOf(p), s = st.get(p), dx = c * 32 + 16 - center(p);
+      const side = dx > 0 ? k.r : k.l, other = dx > 0 ? k.l : k.r;
+      up(other);
+      if (Math.abs(dx) <= 4) { up(k.r); up(k.l); continue; }
+      moving = true;
+      down(side);
+      s.stuck = p.onGround && Math.abs(p.vx) < 0.3 ? s.stuck + 1 : 0;
+      if (s.stuck > 4 && !s.jump) { s.jump = 16; down(k.j); }
+      if (s.jump && --s.jump === 0) up(k.j);
+    }
+    if (!moving) break;
+    run(1);
+  }
+  for (const [p] of targets) { const k = keysOf(p); up(k.r); up(k.l); up(k.j); }
+  run(10);
+}
+// Saltan todos a la vez hacia su columna (para subir a una repisa que flota).
+function allLeap(targets) {
+  for (const [p, c] of targets) { const k = keysOf(p); down(c * 32 + 16 > center(p) ? k.r : k.l); down(k.j); }
+  // Sin entretenerse: en cuanto todos aterrizan, se sigue (un tablón frágil no espera).
+  const settled = () => [...targets].every(([p, c]) => p.onGround && Math.abs(c * 32 + 16 - center(p)) <= 6);
+  for (let i = 0; i < 80 && playing() && !(i > 20 && settled()); i++) {
+    for (const [p, c] of targets) {
+      const k = keysOf(p);
+      if (i === 16) up(k.j);
+      if (Math.abs(c * 32 + 16 - center(p)) <= 6) { up(k.r); up(k.l); }
+    }
+    run(1);
+  }
+  for (const [p] of targets) { const k = keysOf(p); up(k.r); up(k.l); up(k.j); }
+  run(3);
+}
+const all3 = (c) => new Map(G.players.map((p) => [p, c]));
+const where = () => G.players.map((p) => `${p.ch.name[0]} ${tile(p)}`).join(" / ") + (G.state === "dead" ? ` · ${G.deathMessage}` : "");
+
+// --- Nivel 2-1: sube el agua -------------------------------------------------------------------------
+console.log("\nNivel 2-1");
+G.setLevel(6, 1); run(1);
+fire = P("Fireboy"); water = P("Watergirl"); acid = P("AcidBaby");
+hold(["KeyA"], 90);
+check("Fireboy no puede entrar en la jaula de agua", center(fire) > 4 * 32 + 16);
+// Los tres suben juntos por la escalera (los tablones frágiles aguantan si se pasa deprisa).
+allWalk(all3(9));
+for (const c of [7, 11, 15, 19, 23, 26]) allLeap(all3(c));
+check("Los tres suben juntos al piso de las puertas antes que el agua", playing() && G.players.every((p) => feetRow(p) === 4), where());
+check("…el candado no les deja pasar", G.players.every((p) => center(p) < 27 * 32));
+// Watergirl baja buceando a por la llave de la jaula y vuelve a subir.
+for (let i = 0; i < 2000 && G.tide.y > 6 * 32; i++) run(1);
+check("El agua llega hasta justo debajo de las puertas", G.tide.y === 6 * 32 && playing());
+walkTo(water, 24);
+hold(["ArrowLeft"], 300, () => feetRow(water) === 16);
+walkTo(water, 2);
+check("Watergirl bucea hasta la jaula y coge la llave", water.inv.keys === 1 && playing());
+walkTo(water, 9);
+for (const c of [7, 11, 15, 19, 23, 26]) allLeap(new Map([[water, c]]));
+walkTo(water, 30);
+run(60);
+check("…sube otra vez y abre el candado", G.grid[3][27] === " " && feetRow(water) === 4, where());
+for (const p of [fire, water, acid]) walkTo(p, G.doors[p.ch.door].c);
+check("…y llegan a sus puertas", G.state === "won", where());
+
+// --- Nivel 2-2: el desagüe ---------------------------------------------------------------------------
+console.log("\nNivel 2-2");
+G.setLevel(7, 1); run(1);
+fire = P("Fireboy"); water = P("Watergirl"); acid = P("AcidBaby");
+for (let i = 0; i < 600 && G.tide.y > 11 * 32; i++) run(1);
+check("El agua inunda la cuenca hasta la repisa de salida", G.tide.y === 11 * 32 && playing());
+walkTo(water, 9);
+run(40);
+walkTo(water, 3);
+check("Watergirl baja buceando y pisa el desagüe", feetRow(water) === 16 && M("d").active);
+run(150);
+check("…el agua baja hasta el suelo", G.tide.y === 17 * 32);
+walkTo(acid, 9); run(40);
+walkTo(acid, 20);
+check("AcidBaby cruza y disuelve el óxido", G.grid[14][16] === " " && playing(), where());
+walkTo(fire, 9); run(40);
+walkTo(fire, 26);
+check("Fireboy derrite el hielo", G.grid[14][24] === " " && playing(), where());
+for (const p of [acid, fire]) { ride(p, 33, 1); walkTo(p, G.doors[p.ch.door].c); }
+check("…y los dos suben por el ventilador a sus puertas", [acid, fire].every((p) => p.inDoor) && playing(), where());
+walkTo(water, 37);
+check("Watergirl suelta el botón y llega a la suya por debajo del agua", G.state === "won", where());
+
+// --- Nivel 2-3: lava en ascenso ------------------------------------------------------------------------
+console.log("\nNivel 2-3");
+G.setLevel(8, 1); run(1);
+fire = P("Fireboy"); water = P("Watergirl"); acid = P("AcidBaby");
+allWalk(all3(35));
+allLeap(all3(36));
+allLeap(all3(34));
+check("Suben al primer piso", G.players.every((p) => feetRow(p) === 12), where());
+allWalk(all3(4));
+check("AcidBaby abre el óxido para los tres", G.grid[12][8] === " " && G.players.every((p) => center(p) < 6 * 32), where());
+allLeap(all3(3));
+allLeap(all3(5));
+check("Suben al segundo piso", G.players.every((p) => feetRow(p) === 8), where());
+allWalk(all3(28));
+check("Fireboy derrite el hielo", G.grid[8][25] === " ", where());
+// Fireboy salta el primer barril, tira el segundo a la lava, vuelve y tira el primero.
+const lavaBefore = G.tide.y;
+// Empuja el barril hasta que cae por el borde (y se para sin caerse detrás).
+const pushOff = (p) => { const k = keysOf(p), n = G.boxes.length; down(k.r); for (let i = 0; i < 200 && G.boxes.every((b) => b.vy < 2) && G.boxes.length === n; i++) run(1); up(k.r); walkTo(p, 33); run(60); };
+allLeap(new Map([[fire, 31]]));
+pushOff(fire);
+check("Un barril de agua cae a la lava y la hace bajar", G.boxes.length === 1 && G.tide.y > lavaBefore, `${lavaBefore} → ${G.tide.y}`);
+// El otro lo tira Watergirl, que se había quedado detrás.
+pushOff(water);
+check("…y el otro también", G.boxes.length === 0, where());
+allWalk(all3(35));
+allLeap(all3(37));
+allLeap(all3(35));
+check("Suben al piso de las puertas", playing() && G.players.every((p) => feetRow(p) === 4), where());
+allWalk(new Map([[fire, 27], [water, 23], [acid, 27]]));
+check("Watergirl disuelve la sal", G.grid[4][25] === " ", where());
+for (const p of [fire, water, acid]) walkTo(p, G.doors[p.ch.door].c);
+check("…y llegan a sus puertas antes que la lava", G.state === "won", where());
 G.setLevel(0);
 
 process.exitCode = failures ? 1 : 0;
