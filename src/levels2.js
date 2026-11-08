@@ -17,6 +17,7 @@
 //           frame, top: fila más alta a la que llega, start: filas por encima del suelo al empezar }
 //   Un mecanismo con kind: "drain" (desagüe) solo lleva botón o palanca: mientras está activo, la
 //   marea baja. Un barril del elemento contrario que se hunde en ella la hace bajar 3 casillas.
+//   Las cajas flotan en la marea y suben con ella, llevando a quien va encima (los barriles no).
 //
 // Estrellas de cada nivel: completarlo, coger todas sus gemas y pasarlo sin perder un corazón
 // (ni volver a una bandera). Se pueden ganar en partidas distintas.
@@ -266,6 +267,34 @@ const SEASON_2 = {
             "#                                      #",
             "#                                   ## #",
             "#         r       fwb                  #",
+            "########################################",
+          ],
+        },
+        {
+          name: "Balsas",
+          hint: "Las cajas flotan: subid en ellas con el ácido. Arriba, la compuerta solo se abre desde abajo.",
+          tide: { type: "acid", delay: 240, speed: 0.35, top: 9 },
+          mechanisms: {
+            g: { trigger: "button", move: [0, -3] },
+          },
+          map: [
+            "########################################",
+            "########################################",
+            "########################################",
+            "#                                      #",
+            "#                                      #",
+            "#                                      #",
+            "#                g                     #",
+            "#                g                     #",
+            "#                g            1  2 r   #",
+            "#              #########################",
+            "#                                      #",
+            "#                                      #",
+            "#           z                          #",
+            "#            r                         #",
+            "#                     e                #",
+            "#                                      #",
+            "# fwb       xx           G           3 #",
             "########################################",
           ],
         },

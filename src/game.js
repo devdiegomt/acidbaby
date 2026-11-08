@@ -78,6 +78,8 @@
   const TIDE_DEFAULTS = { type: "water", delay: 180, speed: 0.25, top: 1 };
   const DRAIN_FACTOR = 3; // un desagüe la baja este número de veces más rápido de lo que sube
   const TIDE_BARREL_DROP = 3; // casillas que baja la marea cuando le cae un barril del elemento contrario
+  const FLOAT_LINE = 0.6; // parte de una caja que queda por encima de la marea cuando flota
+  const FLOAT_SPEED = 2; // píxeles por frame que sube como mucho una caja flotando
 
   const FONT = '"Segoe UI", system-ui, sans-serif';
   const MECH_COLORS = ["#f2c14e", "#c86bff", "#ff6fa8", "#4fd6c8", "#f0f0f0"];
@@ -1167,6 +1169,14 @@
 
   function updateBoxes() {
     for (const b of boxes) {
+      // Las cajas (no los barriles) flotan en la marea y suben con ella, llevando a quien va encima.
+      if (tide && !b.fill && b.y + b.h * FLOAT_LINE >= tide.y - 1) {
+        b.vy = 0;
+        b.remY = 0;
+        const rise = Math.min(FLOAT_SPEED, Math.round(b.y - (tide.y - b.h * FLOAT_LINE)));
+        for (let i = 0; i < rise && floatUp(b); i++);
+        continue;
+      }
       b.vy = Math.min(b.vy + GRAVITY, MAX_FALL);
       if (!moveY(b, b.vy)) b.vy = 0;
     }
@@ -1185,7 +1195,7 @@
     // Un barril del elemento contrario que se hunde en la marea la hace bajar.
     if (tide) {
       for (const b of boxes) {
-        if (b.used || b.fill !== MIXES_WITH[tide.type] || b.y + b.h < tide.y + 10) continue;
+        if (b.used || !b.fill || b.fill !== MIXES_WITH[tide.type] || b.y + b.h < tide.y + 10) continue;
         b.used = true;
         tide.y = Math.min(tide.bottom, tide.y + TIDE_BARREL_DROP * T);
         const el = ELEMENTS[b.fill];
@@ -1196,6 +1206,16 @@
     }
     boxes = boxes.filter((b) => !b.used);
     for (const o of obsidian) if (o.age < 90) o.age++;
+  }
+
+  // Sube una caja 1 píxel con lo que tenga encima (si no hay techo).
+  function floatUp(b) {
+    const riders = bodies().filter((o) => o !== b && o.y + o.h === b.y && o.x < b.x + b.w && o.x + o.w > b.x);
+    const moved = riders.filter((r) => stepBody(r, 0, -1));
+    // Si alguien de encima toca techo, la balsa no se le escapa por debajo: se para con él.
+    if (moved.length === riders.length && stepBody(b, 0, -1)) return true;
+    for (const r of moved) stepBody(r, 0, 1);
+    return false;
   }
 
   // Convierte en obsidiana el charco entero (todas las casillas del mismo líquido pegadas).
