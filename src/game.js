@@ -92,7 +92,7 @@
   const HYDRA_FLOOD_DELAY = 200; // aviso antes de cada inundación
   const HYDRA_HURT = 120;
 
-  const GAME_TITLE = "AcidBaby"; // nombre del juego (portada)
+  const GAME_TITLE = "Acidito"; // nombre del juego (portada)
 
   // Avisos de novedades: salen en la portada, en el menú de niveles y en la pausa.
   // Para cambiarlos (o quitarlos), basta con editar esta lista.
@@ -160,7 +160,7 @@
       keys: { left: "ArrowLeft", right: "ArrowRight", jump: "ArrowUp", fire: "ArrowDown" }, keyLabel: "↑  ←  ↓  →", shot: "chorro de agua",
     },
     {
-      name: "AcidBaby", spawn: "b", door: "3", immune: "acid", power: "Corroe el óxido",
+      name: "Acidito", spawn: "b", door: "3", immune: "acid", power: "Corroe el óxido",
       color: "#5fd12e", dark: "#226b0c",
       // I J K L, lejos de W A S D (así el teclado se atasca menos), y también el teclado numérico.
       keys: { left: ["KeyJ", "Numpad4"], right: ["KeyL", "Numpad6"], jump: ["KeyI", "Numpad8"], fire: ["KeyK", "Numpad5"] },
@@ -186,7 +186,7 @@
   const held = new Set();
   const pressed = new Set();
   const menuKey = (name) => MENU_KEYS[name].some((k) => pressed.has(k));
-  // Una acción puede tener una tecla o varias (AcidBaby: I J K L o el teclado numérico).
+  // Una acción puede tener una tecla o varias (Acidito: I J K L o el teclado numérico).
   const keyList = (k) => (Array.isArray(k) ? k : [k]);
   const isHeld = (k) => keyList(k).some((c) => held.has(c));
   const wasPressed = (k) => keyList(k).some((c) => pressed.has(c));
@@ -263,7 +263,7 @@
       name: "Temporada 1",
       subtitle: "El templo",
       theme: "temple",
-      ending: { title: "¡Superaron el templo!", text: "Chispa, Gota y AcidBaby llegaron juntos hasta el final." },
+      ending: { title: "¡Superaron el templo!", text: "Chispa, Gota y Acidito llegaron juntos hasta el final." },
       worlds: [{ name: "El templo", levels: LEVELS }],
     },
     ...(typeof SEASON_2 !== "undefined" ? [SEASON_2] : []),
@@ -1426,7 +1426,7 @@
     }
   }
 
-  // Amuleto del cambio: los tres cambian de personaje en ronda (Chispa → Gota → AcidBaby → Chispa).
+  // Amuleto del cambio: los tres cambian de personaje en ronda (Chispa → Gota → Acidito → Chispa).
   // Cada jugador conserva sus teclas, su sitio y su inventario; cambian su elemento y su puerta.
   function swapCharacters() {
     for (const p of players) {
@@ -3767,7 +3767,7 @@
       ctx.fill();
     }
 
-    // Boca (AcidBaby lleva chupete)
+    // Boca (Acidito lleva chupete)
     if (ch.immune === "acid") {
       ctx.fillStyle = "#ff8fc7";
       ctx.beginPath();
@@ -3906,7 +3906,7 @@
     dim(0.82);
     drawNews(t, 24);
     text(GAME_TITLE, W / 2, 70, 44, "#ffe9b8");
-    text("Lleven a Chispa, Gota y AcidBaby a su puerta. Cada uno solo sobrevive a su elemento.", W / 2, 112, 18, "#d9c9a6", "center", "normal");
+    text("Lleven a Chispa, Gota y Acidito a su puerta. Cada uno solo sobrevive a su elemento.", W / 2, 112, 18, "#d9c9a6", "center", "normal");
 
     const cardW = 260;
     const cardH = 292;

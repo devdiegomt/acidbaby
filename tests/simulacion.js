@@ -42,8 +42,8 @@ const tile = (b) => `col ${Math.floor((b.x + b.w / 2) / 32)}, fila ${Math.floor(
 const feetRow = (b) => Math.floor((b.y + b.h - 1) / 32);
 const place = (p, c, r) => { p.x = c * 32 + 5; p.y = (r + 1) * 32 - p.h; p.vx = p.vy = p.remX = p.remY = 0; };
 let fire, water, acid;
-const level = (i) => { G.setLevel(i); run(1); fire = P("Chispa"); water = P("Gota"); acid = P("AcidBaby"); };
-const KEYS = { Chispa: { l: "KeyA", r: "KeyD", j: "KeyW" }, Gota: { l: "ArrowLeft", r: "ArrowRight", j: "ArrowUp" }, AcidBaby: { l: "KeyJ", r: "KeyL", j: "KeyI" } };
+const level = (i) => { G.setLevel(i); run(1); fire = P("Chispa"); water = P("Gota"); acid = P("Acidito"); };
+const KEYS = { Chispa: { l: "KeyA", r: "KeyD", j: "KeyW" }, Gota: { l: "ArrowLeft", r: "ArrowRight", j: "ArrowUp" }, Acidito: { l: "KeyJ", r: "KeyL", j: "KeyI" } };
 // Teclas de un jugador (no de su personaje: con el amuleto del cambio pueden no coincidir).
 const first = (k) => (Array.isArray(k) ? k[0] : k);
 const keysOf = (p) => ({ l: first(p.controls.left), r: first(p.controls.right), j: first(p.controls.jump), fire: first(p.controls.fire) });
@@ -88,7 +88,7 @@ check("…y vuelve al menú de niveles", G.state === "levels");
 tap("Enter");
 check("Se puede volver a jugar desde el menú", G.state === "playing" && G.levelIndex === 0);
 run(120);
-place(P("Chispa"), 3, 8); place(P("Gota"), 3, 12); place(P("AcidBaby"), 29, 4);
+place(P("Chispa"), 3, 8); place(P("Gota"), 3, 12); place(P("Acidito"), 29, 4);
 run(3);
 check("Ganar guarda el nivel como completado", G.state === "won" && saved().levels["Primeros pasos"]?.done === true, JSON.stringify(saved()));
 check("…y desbloquea el siguiente", G.isUnlocked(1) && G.lastResult.first);
@@ -97,7 +97,7 @@ tap("Enter");
 check("ENTER pasa al nivel 2", G.state === "playing" && G.levelIndex === 1);
 G.setLevel(0);
 run(1);
-place(P("Chispa"), 3, 8); place(P("Gota"), 3, 12); place(P("AcidBaby"), 29, 4);
+place(P("Chispa"), 3, 8); place(P("Gota"), 3, 12); place(P("Acidito"), 29, 4);
 run(3);
 check("Repetir el nivel más rápido bate el récord", G.lastResult.time && G.save.levels["Primeros pasos"].bestFrames < firstTime, `${firstTime} → ${G.save.levels["Primeros pasos"].bestFrames}`);
 tap("Escape");
@@ -153,7 +153,7 @@ for (const [a, b, c, d, label] of [[28, 16, 14, 1, "Suelo → escalón"], [29, 1
   check(label, res.ok, res.where);
 }
 level(0);
-place(P("Chispa"), 3, 8); place(P("Gota"), 3, 12); place(P("AcidBaby"), 29, 4);
+place(P("Chispa"), 3, 8); place(P("Gota"), 3, 12); place(P("Acidito"), 29, 4);
 run(3);
 check("Nivel completado con los 3 en su puerta", G.state === "won");
 
@@ -161,7 +161,7 @@ check("Nivel completado con los 3 en su puerta", G.state === "won");
 console.log("\nNivel 2");
 level(1);
 hold(["KeyJ"], 400, () => acid.x < 2 * 32);
-check("AcidBaby cruza el foso de ácido", G.state === "playing" && acid.x < 2 * 32, tile(acid));
+check("Acidito cruza el foso de ácido", G.state === "playing" && acid.x < 2 * 32, tile(acid));
 check("Recoge la esmeralda del foso", G.gems.find((g) => g.type === "acid" && g.r === 16).taken);
 check("La palanca sigue apagada tras empujarla a la izquierda", !M("h").leverOn);
 hold(["KeyL"], 25);
@@ -185,7 +185,7 @@ check("Sin nadie en los botones, el ascensor vuelve abajo", M("p").oy === 0, `oy
 place(water, 25, 8);
 place(acid, 28, 15);
 run(130);
-check("El botón de arriba sube el ascensor con AcidBaby", feetRow(acid) === 8, tile(acid));
+check("El botón de arriba sube el ascensor con Acidito", feetRow(acid) === 8, tile(acid));
 
 // No aplasta: alguien debajo del ascensor cuando baja
 level(1);
@@ -218,7 +218,7 @@ hold(["ArrowRight"], 60);
 check("Gota no disuelve el óxido", G.grid[16][18] === "%");
 place(acid, 17, 16);
 hold(["KeyL"], 120);
-check("AcidBaby disuelve toda la columna de óxido", [12, 13, 14, 15, 16].every((r) => G.grid[r][18] === " "));
+check("Acidito disuelve toda la columna de óxido", [12, 13, 14, 15, 16].every((r) => G.grid[r][18] === " "));
 
 level(2);
 const box2 = G.boxes[1];
@@ -229,7 +229,7 @@ place(acid, 28, 15);
 run(5);
 check("Caja + Chispa pisan los 2 botones", M("q").active && M("q").pressedCount === 2, `${M("q").pressedCount}/2`);
 run(110);
-check("El ascensor sube con AcidBaby", feetRow(acid) === 10 && acid.onGround, tile(acid));
+check("El ascensor sube con Acidito", feetRow(acid) === 10 && acid.onGround, tile(acid));
 place(fire, 19, 16);
 run(5);
 check("Con un solo botón no basta", !M("q").active);
@@ -284,7 +284,7 @@ place(acid, 19, 10);
 run(60);
 check("El ventilador de palanca está apagado al empezar", acid.onGround && feetRow(acid) === 10);
 hold(["KeyJ"], 120);
-check("AcidBaby no atraviesa la barrera de fuego", acid.x >= 17 * 32, tile(acid));
+check("Acidito no atraviesa la barrera de fuego", acid.x >= 17 * 32, tile(acid));
 place(fire, 18, 10);
 hold(["KeyA"], 120);
 check("Chispa sí la atraviesa", fire.x + fire.w < 15 * 32, tile(fire));
@@ -293,7 +293,7 @@ hold(["ArrowLeft"], 60);
 check("Gota atraviesa su barrera de agua", water.x + water.w < 12 * 32, tile(water));
 place(acid, 15, 16);
 hold(["KeyJ"], 60);
-check("…que bloquea a AcidBaby", acid.x >= 14 * 32, tile(acid));
+check("…que bloquea a Acidito", acid.x >= 14 * 32, tile(acid));
 
 // Partida completa solo con teclas
 level(3);
@@ -311,9 +311,9 @@ check("Gota sube dos pisos", ride(water, 23, -1) === 10 && ride(water, 19, 1) ==
 jumpAt(water, 14);
 walkTo(water, 26);
 walkTo(acid, 18);
-check("AcidBaby sube dos pisos", ride(acid, 23, -1) === 10 && ride(acid, 19, -1) === 4, tile(acid));
+check("Acidito sube dos pisos", ride(acid, 23, -1) === 10 && ride(acid, 19, -1) === 4, tile(acid));
 walkTo(acid, 4);
-check("AcidBaby recoge la esmeralda tras su barrera", G.gems.find((g) => g.type === "acid" && g.r === 4).taken);
+check("Acidito recoge la esmeralda tras su barrera", G.gems.find((g) => g.type === "acid" && g.r === 4).taken);
 walkTo(acid, 28);
 run(3);
 check("Nivel 4 completado con todas las gemas", G.state === "won" && G.gems.every((g) => g.taken), `en puerta: ${G.players.map((p) => p.inDoor)}, gemas ${G.gems.filter((g) => g.taken).length}/${G.gems.length}`);
@@ -322,7 +322,7 @@ check("Nivel 4 completado con todas las gemas", G.state === "won" && G.gems.ever
 console.log("\nNivel 5");
 level(4);
 hold(["KeyL"], 120);
-check("AcidBaby no rompe la sal", G.grid[16][20] === "=");
+check("Acidito no rompe la sal", G.grid[16][20] === "=");
 hold(["ArrowRight"], 120);
 check("Gota disuelve toda la columna de sal", [12, 13, 14, 15, 16].every((r) => G.grid[r][20] === " "));
 check("…sin tocar el óxido del piso de arriba", G.grid[10][20] === "%");
@@ -340,17 +340,17 @@ check("…pero no puede entrar en el pozo de la barrera de agua", fire.x >= 3 * 
 walkTo(fire, 4);
 check("Gota sube con el ventilador del botón", ride(water, 27, -1) === 10, tile(water));
 jumpAt(acid, 12);
-check("AcidBaby también", ride(acid, 27, 1) === 10, tile(acid));
+check("Acidito también", ride(acid, 27, 1) === 10, tile(acid));
 walkTo(acid, 29);
 walkTo(water, 24);
-check("Gota coge el amuleto: los tres cambian de personaje", fire.ch.name === "Gota" && water.ch.name === "AcidBaby" && acid.ch.name === "Chispa", G.players.map((p) => p.ch.name).join(", "));
+check("Gota coge el amuleto: los tres cambian de personaje", fire.ch.name === "Gota" && water.ch.name === "Acidito" && acid.ch.name === "Chispa", G.players.map((p) => p.ch.name).join(", "));
 walkTo(acid, 21); // cruza el hueco del ventilador mientras sigue encendido
 check("…y Chispa, convertido en Gota, sube por el pozo de agua", ride(fire, 1, 1) === 10, tile(fire));
 walkTo(water, 18);
 check("Ahora corroe el óxido quien era Gota", G.grid[8][20] === " ", tile(water));
 walkTo(acid, 11);
 hold(["KeyJ"], 120, () => G.grid[8][10] === " ");
-check("…y derrite el hielo de arriba quien era AcidBaby", G.grid[8][10] === " ", tile(acid));
+check("…y derrite el hielo de arriba quien era Acidito", G.grid[8][10] === " ", tile(acid));
 walkTo(acid, 3);
 walkTo(fire, 18);
 check("Los tres suben al último piso", [fire, water, acid].every((p, i) => ride(p, 15, i === 0 ? -1 : 1) === 4), G.players.map(tile).join(" | "));
@@ -376,7 +376,7 @@ check("Gota disuelve el puente de sal y cae al ácido", G.state === "dead", `→
 // Partida completa solo con teclas
 level(5);
 walkTo(acid, 22);
-check("AcidBaby cruza los puentes de hielo y sal", feetRow(acid) === 15 && G.grid[16][8] === "+" && G.grid[16][18] === "=", tile(acid));
+check("Acidito cruza los puentes de hielo y sal", feetRow(acid) === 15 && G.grid[16][8] === "+" && G.grid[16][18] === "=", tile(acid));
 walkTo(water, 13);
 check("Gota cruza el hielo y pisa el botón", M("g").active, tile(water));
 check("Chispa sube por el ventilador por encima del hielo", ride(fire, 4, 1) === 9, tile(fire));
@@ -390,7 +390,7 @@ run(40);
 walkTo(water, 32);
 check("Gota cruza el óxido y pisa el último botón", M("i").active, tile(water));
 walkTo(fire, 33);
-check("AcidBaby sube por encima del óxido", ride(acid, 24, 1) === 9, tile(acid));
+check("Acidito sube por encima del óxido", ride(acid, 24, 1) === 9, tile(acid));
 walkTo(acid, 35);
 run(40);
 walkTo(water, 34);
@@ -406,7 +406,7 @@ check("Chispa empuja la caja hasta el botón tras su barrera", M("g").active && 
 walkTo(fire, 9);
 check("La caja se queda pisando el botón cuando Chispa se va", M("g").active);
 walkTo(acid, 29);
-check("AcidBaby coge la esmeralda tras su barrera", G.gems.find((g) => g.type === "acid" && g.r === 16).taken);
+check("Acidito coge la esmeralda tras su barrera", G.gems.find((g) => g.type === "acid" && g.r === 16).taken);
 check("Los tres suben por el ventilador de la caja", ride(fire, 20, -1) === 10 && ride(acid, 20, -1) === 10 && ride(water, 20, 1) === 10, G.players.map(tile).join(" | "));
 const onLift = () => water.onGround && feetRow(water) === 9;
 walkTo(water, 26);
@@ -424,10 +424,10 @@ jumpAt(water, 25);
 walkTo(water, 20);
 walkTo(water, 29);
 check("Gota enciende la palanca de camino a su puerta", M("v").leverOn && water.inDoor);
-check("Chispa y AcidBaby suben por él", ride(fire, 15, -1) === 4 && ride(acid, 15, -1) === 4, G.players.map(tile).join(" | "));
+check("Chispa y Acidito suben por él", ride(fire, 15, -1) === 4 && ride(acid, 15, -1) === 4, G.players.map(tile).join(" | "));
 jumpAt(acid, 14);
 walkTo(acid, 9);
-check("AcidBaby corroe el muro de óxido", G.grid[2][12] === " ", tile(acid));
+check("Acidito corroe el muro de óxido", G.grid[2][12] === " ", tile(acid));
 walkTo(fire, 3);
 walkTo(acid, 5);
 run(3);
@@ -449,16 +449,16 @@ check("Los tres suben a la balsa", [fire, water, acid].every(onFerry), G.players
 walkTo(fire, 7);
 check("Chispa cruza la lava y pisa el botón de la balsa", M("p").active && G.gems.find((g) => g.type === "fire" && g.r === 10).taken, tile(fire));
 run(160);
-check("La balsa lleva a Gota y AcidBaby sobre la lava", M("p").ox === -8 * 32 && onFerry(water) && onFerry(acid) && G.gems.find((g) => g.type === "water" && g.r === 9).taken, G.players.map(tile).join(" | "));
+check("La balsa lleva a Gota y Acidito sobre la lava", M("p").ox === -8 * 32 && onFerry(water) && onFerry(acid) && G.gems.find((g) => g.type === "water" && g.r === 9).taken, G.players.map(tile).join(" | "));
 walkTo(water, 9);
 walkTo(acid, 1);
-check("AcidBaby cruza su barrera sin encender la palanca", acid.x < 3 * 32 && !M("v").leverOn, tile(acid));
+check("Acidito cruza su barrera sin encender la palanca", acid.x < 3 * 32 && !M("v").leverOn, tile(acid));
 walkTo(acid, 7);
 check("…y la enciende al volver", M("v").leverOn);
 check("Los tres suben al último piso", ride(acid, 8, 1) === 4 && ride(fire, 8, 1) === 4 && ride(water, 8, 1) === 4, G.players.map(tile).join(" | "));
 jumpAt(acid, 5);
 walkTo(acid, 17);
-check("AcidBaby corroe el óxido", G.grid[2][12] === " ", tile(acid));
+check("Acidito corroe el óxido", G.grid[2][12] === " ", tile(acid));
 walkTo(water, 26);
 check("Gota disuelve la sal", G.grid[2][19] === " ", tile(water));
 jumpAt(water, 22);
@@ -513,7 +513,7 @@ walkTo(acid, 3);
 run(60);
 walkTo(acid, 23);
 walkTo(acid, 28);
-check("AcidBaby baja, coge el amuleto de camino a la llave y los tres cambian", acid.inv.keys === 1 && acid.ch.name === "Chispa" && fire.ch.name === "Gota" && water.ch.name === "AcidBaby", G.players.map((p) => p.ch.name).join(", "));
+check("Acidito baja, coge el amuleto de camino a la llave y los tres cambian", acid.inv.keys === 1 && acid.ch.name === "Chispa" && fire.ch.name === "Gota" && water.ch.name === "Acidito", G.players.map((p) => p.ch.name).join(", "));
 check("Ya como Chispa, derrite el tapón de hielo del ventilador y sube", ride(acid, 29, -1) === 10 && G.grid[11][29] === " ", tile(acid));
 jumpAt(acid, 23);
 check("Los tres suben al último piso", ride(acid, 10, 1) === 4 && ride(fire, 10, 1) === 4 && ride(water, 10, 1) === 4, G.players.map(tile).join(" | "));
@@ -533,7 +533,7 @@ check("Nivel 9 completado con todas las gemas", G.state === "won" && G.gems.ever
   run(10);
   walkTo(water, 28);
   hold(["ArrowRight"], 120);
-  check("Si baja Gota, el amuleto la convierte en AcidBaby y el tapón de hielo no se derrite", water.ch.name === "AcidBaby" && G.grid[11][29] === "+", tile(water));
+  check("Si baja Gota, el amuleto la convierte en Acidito y el tapón de hielo no se derrite", water.ch.name === "Acidito" && G.grid[11][29] === "+", tile(water));
 }
 
 // --- Nivel 10: bichos, armas, vidas e inventario ---------------------------------
@@ -558,7 +558,7 @@ run(2);
 check("…durante la cual no se pierden más", acid.hearts === 2);
 acid.hurt = 0; beetle.x = acid.x; run(2);
 acid.hurt = 0; beetle.x = acid.x; run(2);
-check("Sin vidas, el personaje muere", G.state === "dead" && G.deathMessage === "AcidBaby fue derrotado por un escarabajo", `→ "${G.deathMessage}"`);
+check("Sin vidas, el personaje muere", G.state === "dead" && G.deathMessage === "Acidito fue derrotado por un escarabajo", `→ "${G.deathMessage}"`);
 
 level(9);
 const b2 = G.enemies.find((e) => e.type === "beetle" && e.y > 11 * 32);
@@ -608,7 +608,7 @@ function shootUntilClear(p, inZone) {
     run(20);
   }
 }
-KEYS.Chispa.fire = "KeyS"; KEYS.Gota.fire = "ArrowDown"; KEYS.AcidBaby.fire = "KeyK";
+KEYS.Chispa.fire = "KeyS"; KEYS.Gota.fire = "ArrowDown"; KEYS.Acidito.fire = "KeyK";
 shootUntilClear(fire, (e) => e.x < 22 * 32);
 check("Chispa limpia la sala a disparos", !alive().some((e) => e.x < 22 * 32), `vivos: ${alive().map((e) => e.type)}`);
 jumpAt(fire, 6);
@@ -629,11 +629,11 @@ console.log("\nNivel 11");
 level(10);
 jumpAt(fire, 9);
 jumpAt(water, 14);
-check("AcidBaby sube y corroe el tapón de óxido del ventilador", ride(acid, 7, 1) === 10 && G.grid[11][7] === " ", tile(acid));
+check("Acidito sube y corroe el tapón de óxido del ventilador", ride(acid, 7, 1) === 10 && G.grid[11][7] === " ", tile(acid));
 jumpAt(acid, 12);
 walkTo(acid, 22);
 run(40);
-check("AcidBaby cruza su barrera y cae al otro lado de la compuerta", feetRow(acid) === 16 && acid.x > 20 * 32, tile(acid));
+check("Acidito cruza su barrera y cae al otro lado de la compuerta", feetRow(acid) === 16 && acid.x > 20 * 32, tile(acid));
 walkTo(acid, 19);
 check("…y pisa el botón de allí: con uno solo no basta", M("d").pressedCount === 1 && !M("d").active);
 check("Chispa sube", ride(fire, 7, -1) === 10, tile(fire));
@@ -659,7 +659,7 @@ level(11);
 jumpAt(acid, 5);
 hold(["KeyL"], 80, () => G.grid[14][6] === " ");
 run(20);
-check("AcidBaby corroe el muro y se queda sin tocar los orbes", G.grid[14][6] === " " && !acid.inv.weapon, tile(acid));
+check("Acidito corroe el muro y se queda sin tocar los orbes", G.grid[14][6] === " " && !acid.inv.weapon, tile(acid));
 walkTo(fire, 9);
 walkTo(water, 9);
 check("Chispa y Gota se llevan los dos orbes", fire.inv.weapon && water.inv.weapon && !acid.inv.weapon);
@@ -672,8 +672,8 @@ tapKey("KeyS");
 run(90);
 check("Su bola de fuego derrite el hielo y la caja cae en el botón encerrado", G.grid[13][20] === " " && M("g").active, `caja ${G.boxes[0].x},${G.boxes[0].y}`);
 jumpAt(water, 16);
-walkTo(water, 10); // fuera del charco: al cambiar será AcidBaby y el agua la mataría
-check("Chispa sube el primero y coge el amuleto al llegar: los tres cambian", ride(fire, 1, 1) === 10 && fire.ch.name === "Gota" && water.ch.name === "AcidBaby" && acid.ch.name === "Chispa", G.players.map((p) => p.ch.name).join(", "));
+walkTo(water, 10); // fuera del charco: al cambiar será Acidito y el agua la mataría
+check("Chispa sube el primero y coge el amuleto al llegar: los tres cambian", ride(fire, 1, 1) === 10 && fire.ch.name === "Gota" && water.ch.name === "Acidito" && acid.ch.name === "Chispa", G.players.map((p) => p.ch.name).join(", "));
 check("Los otros dos suben detrás", ride(water, 1, 1) === 10 && ride(acid, 1, 1) === 10, G.players.map(tile).join(" | "));
 jumpAt(fire, 3);
 jumpAt(water, 2);
@@ -681,7 +681,7 @@ walkTo(fire, 5);
 tapKey("KeyS");
 run(80);
 check("Quien era Chispa, ahora Gota, dispara agua con su orbe y disuelve la sal", G.grid[8][13] === " ");
-check("Quien era AcidBaby, ahora Chispa, cruza la lava sin orbe, enciende la palanca y sube", ride(acid, 22, -1) === 4 && M("v").leverOn, tile(acid));
+check("Quien era Acidito, ahora Chispa, cruza la lava sin orbe, enciende la palanca y sube", ride(acid, 22, -1) === 4 && M("v").leverOn, tile(acid));
 check("Los otros dos suben con el ventilador de la palanca", ride(fire, 4, 1) === 4 && ride(water, 4, 1) === 4, G.players.map(tile).join(" | "));
 jumpAt(fire, 8);
 jumpAt(water, 10);
@@ -708,9 +708,9 @@ hold(["ArrowRight"], 120, () => G.grid[14][6] === " ");
 run(20);
 check("Gota disuelve la sal sin llegar a la llave", G.grid[14][6] === " " && water.inv.keys === 0, tile(water));
 walkTo(acid, 9);
-check("AcidBaby se queda la primera llave", acid.inv.keys === 1 && fire.inv.keys === 0 && water.inv.keys === 0);
+check("Acidito se queda la primera llave", acid.inv.keys === 1 && fire.inv.keys === 0 && water.inv.keys === 0);
 jumpAt(fire, 13);
-check("AcidBaby sube", ride(acid, 10, 1) === 10, tile(acid));
+check("Acidito sube", ride(acid, 10, 1) === 10, tile(acid));
 jumpAt(acid, 14);
 hold(["KeyL"], 200, () => G.boxes[0].y > 11 * 32);
 run(60);
@@ -725,7 +725,7 @@ check("…abre la cerradura de su zona sin encender la palanca al pasar", G.grid
 walkTo(water, 5);
 check("…y la enciende al volver", M("v").leverOn);
 check("Chispa sube y derrite el tapón de hielo", ride(fire, 10, -1) === 10 && ride(fire, 8, 1) === 4 && G.grid[5][8] === " ", tile(fire));
-check("Gota y AcidBaby suben detrás", ride(water, 8, 1) === 4 && ride(acid, 8, 1) === 4, G.players.map(tile).join(" | "));
+check("Gota y Acidito suben detrás", ride(water, 8, 1) === 4 && ride(acid, 8, 1) === 4, G.players.map(tile).join(" | "));
 jumpAt(water, 12);
 jumpAt(fire, 15);
 jumpAt(acid, 17);
@@ -737,7 +737,7 @@ check("Nivel 13 completado con todas las gemas", G.state === "won" && G.gems.eve
 level(12);
 hold(["ArrowRight"], 120, () => G.grid[14][6] === " ");
 walkTo(water, 9);
-check("Si Gota coge la primera llave, AcidBaby ya no puede abrir su cerradura", water.inv.keys === 1 && G.items.filter((i) => i.type === "key" && !i.taken).length === 1);
+check("Si Gota coge la primera llave, Acidito ya no puede abrir su cerradura", water.inv.keys === 1 && G.items.filter((i) => i.type === "key" && !i.taken).length === 1);
 
 // --- Nivel 14: tres a la vez ---------------------------------------------------------
 console.log("\nNivel 14");
@@ -758,14 +758,14 @@ hold(["KeyA"], 60, () => G.boxes[0].x <= 10 * 32 + 3);
 run(20);
 walkTo(water, 13);
 walkTo(acid, 15);
-check("Caja, Gota y AcidBaby pisan los tres botones de este lado", gateOpen() && M("g").pressedCount === 3, `${M("g").pressedCount}/3 ${G.players.map(tile).join(" | ")} caja ${G.boxes[0].x}`);
+check("Caja, Gota y Acidito pisan los tres botones de este lado", gateOpen() && M("g").pressedCount === 3, `${M("g").pressedCount}/3 ${G.players.map(tile).join(" | ")} caja ${G.boxes[0].x}`);
 run(100);
 walkTo(fire, 21);
 check("Chispa pasa y pisa un botón del otro lado", gateOpen() && M("g").pressedCount === 4, tile(fire));
 jumpAt(fire, 27);
 walkTo(fire, 21);
 walkTo(acid, 24);
-check("AcidBaby se baja sin que se cierre y pasa al otro botón", gateOpen() && acid.x > 23 * 32, tile(acid));
+check("Acidito se baja sin que se cierre y pasa al otro botón", gateOpen() && acid.x > 23 * 32, tile(acid));
 walkTo(water, 28);
 check("Gota pasa la última", water.x > 19 * 32 && G.state === "playing", tile(water));
 walkTo(fire, 26);
@@ -814,14 +814,14 @@ check("Gota disuelve la sal al otro lado de la lava", G.grid[8][25] === " ");
 jumpAt(fire, 27);
 walkTo(fire, 28);
 check("Chispa cruza y pisa el botón del ventilador", M("g").active, tile(fire));
-check("Gota y AcidBaby suben", ride(water, 14, 1) === 4 && ride(acid, 14, 1) === 4, G.players.map(tile).join(" | "));
+check("Gota y Acidito suben", ride(water, 14, 1) === 4 && ride(acid, 14, 1) === 4, G.players.map(tile).join(" | "));
 shootUntilClear(acid, (e) => e.y < 5 * 32);
-check("AcidBaby acaba con el último guardián", alive().length === 0, `vivos: ${alive().length}`);
+check("Acidito acaba con el último guardián", alive().length === 0, `vivos: ${alive().length}`);
 check("Chispa sube por su ventilador", ride(fire, 29, -1) === 4, tile(fire));
 walkTo(acid, 24);
 tapKey("KeyK");
 run(80);
-check("El ácido de AcidBaby corroe el óxido al otro lado de la lava", G.grid[2][27] === " ");
+check("El ácido de Acidito corroe el óxido al otro lado de la lava", G.grid[2][27] === " ");
 jumpAt(water, 15);
 jumpAt(acid, 16);
 walkTo(fire, 17);
@@ -996,7 +996,7 @@ hold(["KeyD"], 30, () => fire.vy < -5);
 hold(["KeyA"], 120, () => fire.onGround && feetRow(fire) === 10);
 run(10);
 check("…y sale por el muelle sin volver a pisarla", feetRow(fire) === 10 && M("v").leverOn, tile(fire));
-check("AcidBaby sube y corroe el tapón del ventilador", ride(acid, 11, 1) === 10 && G.grid[11][11] === " ", tile(acid));
+check("Acidito sube y corroe el tapón del ventilador", ride(acid, 11, 1) === 10 && G.grid[11][11] === " ", tile(acid));
 jumpAt(acid, 9);
 check("Gota sube", ride(water, 11, -1) === 10, tile(water));
 walkTo(water, 1);
@@ -1008,7 +1008,7 @@ walkTo(water, 25);
 check("Cruza el puente frágil y abre la cerradura", G.grid[8][22] === " " && water.x > 22 * 32, tile(water));
 run(300);
 walkTo(acid, 25);
-check("AcidBaby cruza cuando el puente vuelve", acid.x > 22 * 32 && feetRow(acid) === 10, tile(acid));
+check("Acidito cruza cuando el puente vuelve", acid.x > 22 * 32 && feetRow(acid) === 10, tile(acid));
 jumpAt(fire, 28);
 check("Los tres suben al último piso", ride(fire, 26, -1) === 4 && ride(water, 26, -1) === 4 && ride(acid, 26, -1) === 4, G.players.map(tile).join(" | "));
 jumpAt(fire, 8);
@@ -1021,7 +1021,7 @@ run(3);
 check("Nivel 19 completado con todas las gemas", G.state === "won" && G.gems.every((g) => g.taken), `en puerta: ${G.players.map((p) => p.inDoor)}, gemas ${G.gems.filter((g) => g.taken).length}/${G.gems.length}, vidas ${G.players.map((p) => p.hearts)} ${G.players.map(tile).join(" | ")}`);
 level(18);
 walkTo(acid, 7);
-check("Si AcidBaby coge una bomba, falta una para Chispa o Gota", acid.inv.bombs === 1 && G.items.filter((i) => i.type === "bomb" && !i.taken).length === 1);
+check("Si Acidito coge una bomba, falta una para Chispa o Gota", acid.inv.bombs === 1 && G.items.filter((i) => i.type === "bomb" && !i.taken).length === 1);
 
 // --- Nivel 20: la fortaleza -------------------------------------------------------------------
 console.log("\nNivel 20");
@@ -1154,13 +1154,13 @@ hold(["ArrowRight"], 200, () => water.onGround && feetRow(water) === 11);
 check("Gota sube a la repisa derecha", feetRow(water) === 11 && water.x > 25 * 32, tile(water));
 walkTo(acid, 24);
 hold(["KeyL"], 200, () => acid.onGround && feetRow(acid) === 11);
-check("AcidBaby sube también (en el suelo caen rocas y ondas)", feetRow(acid) === 11 && acid.x > 25 * 32, tile(acid));
+check("Acidito sube también (en el suelo caen rocas y ondas)", feetRow(acid) === 11 && acid.x > 25 * 32, tile(acid));
 fightBoss(water, 1);
 check("Fase 2: Gota, el azul (aunque se estrelle contra el suelo)", BOSS().phase === 2 && G.state === "playing", `vidas ${G.players.map((p) => p.hearts)}`);
 fightBoss(acid, 2);
 for (const p of [acid, water, fire]) shootUntilClear(p, () => true);
 run(130);
-check("Fase 3: AcidBaby acaba con él y sus murciélagos", BOSS().state === "dead" && G.state === "playing", `estado ${BOSS().state}, vidas ${G.players.map((p) => p.hearts)}`);
+check("Fase 3: Acidito acaba con él y sus murciélagos", BOSS().state === "dead" && G.state === "playing", `estado ${BOSS().state}, vidas ${G.players.map((p) => p.hearts)}`);
 check("El sello de las puertas se ha roto", G.grid[14][4] === " ");
 for (const p of [fire, water, acid]) {
   walkTo(p, p === fire ? 9 : p === water ? 19 : 22);
@@ -1240,7 +1240,7 @@ function sandbox(edit) {
   const problems = J.test({ ...lv, map: E.fromGrid(g) });
   if (problems.length) console.log("   problemas:", problems.join("; "));
   run(1);
-  fire = P("Chispa"); water = P("Gota"); acid = P("AcidBaby");
+  fire = P("Chispa"); water = P("Gota"); acid = P("Acidito");
 }
 const lowest = (p, frames) => { let m = Infinity; for (let i = 0; i < frames; i++) { run(1); m = Math.min(m, p.y + p.h); } return m; };
 
@@ -1315,13 +1315,13 @@ console.log("\nAmuleto del cambio");
 sandbox((g) => { g[16][8] = "}"; g[17][20] = "L"; });
 place(acid, 20, 16);
 run(5);
-check("AcidBaby no puede estar sobre la lava…", G.state === "dead");
+check("Acidito no puede estar sobre la lava…", G.state === "dead");
 sandbox((g) => { g[16][8] = "}"; g[17][20] = "L"; g[17][22] = "~"; });
 place(fire, 20, 16);
 place(water, 22, 16);
 run(5);
 walkTo(acid, 8);
-check("Al coger el amuleto los tres cambian en ronda", fire.ch.name === "Gota" && water.ch.name === "AcidBaby" && acid.ch.name === "Chispa", G.players.map((p) => p.ch.name).join(", "));
+check("Al coger el amuleto los tres cambian en ronda", fire.ch.name === "Gota" && water.ch.name === "Acidito" && acid.ch.name === "Chispa", G.players.map((p) => p.ch.name).join(", "));
 check("…y cada jugador conserva sus teclas", fire.controls.left === "KeyA" && water.controls.left === "ArrowLeft" && first(acid.controls.left) === "KeyJ");
 check("Quien estaba en su charco al cambiar ya no sobrevive en él", G.state === "dead" && G.deathMessage === "Gota cayó en la lava", `→ "${G.deathMessage}"`);
 sandbox((g) => { g[16][8] = "}"; });
@@ -1390,7 +1390,7 @@ for (const st of ["title", "levels", "playing", "paused", "dead", "won", "ending
 check("Todas las pantallas de la temporada 2 se dibujan sin errores", !drawError2, drawError2 || "");
 
 // Banderas de control (en el nivel 1-1).
-const flagLevel = () => { G.setLevel(0, 1); run(1); fire = P("Chispa"); water = P("Gota"); acid = P("AcidBaby"); };
+const flagLevel = () => { G.setLevel(0, 1); run(1); fire = P("Chispa"); water = P("Gota"); acid = P("Acidito"); };
 flagLevel();
 const flag = G.flags[0];
 check("La bandera está en el mapa y apagada", flag && !flag.on && G.grid[flag.r][flag.c] === " ");
@@ -1432,7 +1432,7 @@ tap("Escape");
 tap("Escape");
 G.setLevel(0, 1);
 run(1);
-fire = P("Chispa"); water = P("Gota"); acid = P("AcidBaby");
+fire = P("Chispa"); water = P("Gota"); acid = P("Acidito");
 place(fire, flag.c, flag.r); place(water, flag.c - 1, flag.r); place(acid, flag.c + 1, flag.r);
 run(3);
 const cp = G.checkpoint;
@@ -1445,7 +1445,7 @@ walkTo(acid, 6);
 check("(Tras un cambio de personaje…)", acid.ch.name === "Chispa");
 tap("KeyR");
 const [pa, pb, pc] = G.players;
-check("…volver a la bandera devuelve a cada uno su personaje y sus teclas", pa.ch.name === "Chispa" && pa.controls.left === "KeyA" && pc.ch.name === "AcidBaby" && first(pc.controls.left) === "KeyJ" && pb.controls.left === "ArrowLeft");
+check("…volver a la bandera devuelve a cada uno su personaje y sus teclas", pa.ch.name === "Chispa" && pa.controls.left === "KeyA" && pc.ch.name === "Acidito" && first(pc.controls.left) === "KeyJ" && pb.controls.left === "ArrowLeft");
 
 // El nivel 1-1 se puede pasar entero con las teclas.
 console.log("\nNivel 1-1");
@@ -1549,7 +1549,7 @@ check("La pantalla de victoria con estrellas se dibuja", !wonDrawError, wonDrawE
 // --- Nivel 1-2: barriles ---------------------------------------------------------------------
 console.log("\nNivel 1-2");
 level12();
-function level12() { G.setLevel(1, 1); run(1); fire = P("Chispa"); water = P("Gota"); acid = P("AcidBaby"); }
+function level12() { G.setLevel(1, 1); run(1); fire = P("Chispa"); water = P("Gota"); acid = P("Acidito"); }
 const barrel = (fill) => G.boxes.find((b) => b.fill === fill);
 walkTo(fire, 5);
 hold(["KeyD"], 120, () => G.boxes.length < 2);
@@ -1575,7 +1575,7 @@ check("…y llegan a sus puertas", G.state === "won");
 
 // --- Nivel 1-3: una sola gota (las dos rutas) ---------------------------------------------------
 console.log("\nNivel 1-3");
-function level13() { G.setLevel(2, 1); run(1); fire = P("Chispa"); water = P("Gota"); acid = P("AcidBaby"); }
+function level13() { G.setLevel(2, 1); run(1); fire = P("Chispa"); water = P("Gota"); acid = P("Acidito"); }
 level13();
 walkTo(fire, 16);
 hold(["KeyD"], 200, () => G.boxes.length === 0);
@@ -1591,7 +1591,7 @@ check("(Chispa salta por encima del barril)", center(fire) > center(G.boxes[0]) 
 hold(["KeyA"], 400, () => G.boxes.length === 0);
 check("Gemas: empujado a la izquierda convierte el charco del escondite", G.grid[17][8] === "■" && G.grid[17][23] === "L");
 for (const p of [water, acid]) walkTo(p, p === water ? 1 : 5);
-check("Gota y AcidBaby cogen sus gemas", G.gems.filter((g) => g.r === 16 && g.c < 7).every((g) => g.taken));
+check("Gota y Acidito cogen sus gemas", G.gems.filter((g) => g.r === 16 && g.c < 7).every((g) => g.taken));
 // El ventilador sube al camino alto; de ahí, a la derecha (pinchos, tablones frágiles sobre la lava).
 function highRoad(p) {
   const k = keysOf(p);
@@ -1610,7 +1610,7 @@ check("…y llegan a sus puertas", G.state === "won");
 // --- Nivel 1-4: el montacargas ---------------------------------------------------------------------
 console.log("\nNivel 1-4");
 G.setLevel(3, 1); run(1);
-fire = P("Chispa"); water = P("Gota"); acid = P("AcidBaby");
+fire = P("Chispa"); water = P("Gota"); acid = P("Acidito");
 check("El barril de lava empieza arriba, en el montacargas", G.boxes.find((b) => b.fill === "fire").y < 11 * 32);
 runRightTo(water, 17);
 check("Gota cruza el agua y acciona la palanca", M("h").leverOn && playing());
@@ -1634,7 +1634,7 @@ for (const p of [water, acid, fire]) walkTo(p, 30);
 check("Los tres llegan al ácido", playing() && G.players.every((p) => center(p) > 29 * 32), G.players.map(tile).join(" / "));
 runRightTo(acid, 38);
 run(80);
-check("AcidBaby cruza el ácido y pisa el botón: baja el puente", M("q").active && M("q").oy === 4 * 32);
+check("Acidito cruza el ácido y pisa el botón: baja el puente", M("q").active && M("q").oy === 4 * 32);
 for (const p of [water, fire]) {
   const k = keysOf(p);
   hold([k.r, k.j], 20);
@@ -1647,7 +1647,7 @@ check("…y los tres llegan a sus puertas", G.state === "won", G.players.map(til
 // --- Nivel 1-5: fuente termal ---------------------------------------------------------------------
 console.log("\nNivel 1-5");
 G.setLevel(4, 1); run(1);
-fire = P("Chispa"); water = P("Gota"); acid = P("AcidBaby");
+fire = P("Chispa"); water = P("Gota"); acid = P("Acidito");
 hold(["KeyD"], 120, () => center(G.boxes.find((b) => b.fill === "fire")) > 11 * 32 + 10);
 run(150);
 check("El barril de lava, empujado a los tablones frágiles, cae al agua de abajo: obsidiana", G.grid[17][13] === "■" && G.boxes.length === 1, tile(fire));
@@ -1662,7 +1662,7 @@ run(20);
 check("Desde la repisa, el barril de agua cae a la lava: obsidiana", G.grid[17][25] === "■", tile(fire));
 runRightTo(acid, 28);
 run(80);
-check("AcidBaby disuelve el muro de óxido", [12, 13, 14, 15, 16].every((r) => G.grid[r][29] === " "));
+check("Acidito disuelve el muro de óxido", [12, 13, 14, 15, 16].every((r) => G.grid[r][29] === " "));
 const hog15 = G.enemies.find((e) => e.type === "hedgehog");
 // Va a la columna c saltando al erizo si se le acerca de frente.
 function dodgeTo(p, c) {
@@ -1680,7 +1680,7 @@ function dodgeTo(p, c) {
   up(side); up(k.j);
   run(10);
 }
-// AcidBaby va primero (ya está junto al óxido); Gota, que espera a salvo tras la repisa, la última.
+// Acidito va primero (ya está junto al óxido); Gota, que espera a salvo tras la repisa, la última.
 for (const p of [acid, fire, water]) {
   if (center(p) < 23 * 32) runRightTo(p, 23);
   dodgeTo(p, 35);
@@ -1691,7 +1691,7 @@ for (const p of [acid, fire, water]) {
 check("Saltando al erizo, el ventilador los sube a las puertas", G.state === "won", G.state + " · " + G.players.map((p) => `${tile(p)} ♥${p.hearts}`).join(" / ") + (G.state === "dead" ? " · " + G.deathMessage : ""));
 // --- Nivel 1-6: el Gólem de magma ------------------------------------------------------------------
 console.log("\nNivel 1-6 (jefe)");
-const golemLevel = () => { G.setLevel(5, 1); run(1); fire = P("Chispa"); water = P("Gota"); acid = P("AcidBaby"); };
+const golemLevel = () => { G.setLevel(5, 1); run(1); fire = P("Chispa"); water = P("Gota"); acid = P("Acidito"); };
 golemLevel();
 const gol = () => G.golem;
 // Mientras uno juega, los demás esperan quietos: aquí no se les hace daño (se prueba la mecánica).
@@ -1768,7 +1768,7 @@ function tidebox(tideCfg, edit = () => {}, extra = {}) {
   const problems = J.test({ ...lv, ...extra, tide: tideCfg, map: E.fromGrid(g) });
   if (problems.length) console.log("   problemas:", problems.join("; "));
   run(1);
-  fire = P("Chispa"); water = P("Gota"); acid = P("AcidBaby");
+  fire = P("Chispa"); water = P("Gota"); acid = P("Acidito");
 }
 tidebox({ type: "water", delay: 30, speed: 2, top: 10 });
 const tide0 = G.tide.y;
@@ -1780,13 +1780,13 @@ run(15);
 check("Chispa se hunde cuando le cubre la cabeza", G.state === "dead" && G.deathMessage === "Chispa se hundió en el agua", G.deathMessage);
 tidebox({ type: "water", delay: 1, speed: 2, top: 10 });
 place(water, 10, 16); place(fire, 10, 9); place(acid, 12, 9);
-// (Chispa y AcidBaby, en el aire a salvo: los sostenemos arriba)
+// (Chispa y Acidito, en el aire a salvo: los sostenemos arriba)
 for (let i = 0; i < 200; i++) { place(fire, 10, 8); place(acid, 12, 8); run(1); }
 check("Gota aguanta dentro del agua", playing() && water.alive);
 check("…y la marea se para en su tope", G.tide.y === 10 * 32);
 tidebox({ type: "fire", delay: 1, speed: 2, top: 10 });
 run(60);
-check("Una marea de lava mata a Gota y a AcidBaby, no a Chispa", G.state === "dead" && !G.deathMessage.startsWith("Chispa"), G.deathMessage);
+check("Una marea de lava mata a Gota y a Acidito, no a Chispa", G.state === "dead" && !G.deathMessage.startsWith("Chispa"), G.deathMessage);
 // Desagüe: mientras se pisa su botón, la marea baja.
 tidebox({ type: "water", delay: 1, speed: 1, top: 8 }, (g) => { g[16][20] = "D"; }, { mechanisms: { d: { trigger: "button", kind: "drain" } } });
 for (let i = 0; i < 160; i++) { place(fire, 3, 5); place(acid, 4, 5); run(1); }
@@ -1862,7 +1862,7 @@ const where = () => G.players.map((p) => `${p.ch.name[0]} ${tile(p)}`).join(" / 
 // --- Nivel 2-1: sube el agua -------------------------------------------------------------------------
 console.log("\nNivel 2-1");
 G.setLevel(6, 1); run(1);
-fire = P("Chispa"); water = P("Gota"); acid = P("AcidBaby");
+fire = P("Chispa"); water = P("Gota"); acid = P("Acidito");
 hold(["KeyA"], 90);
 check("Chispa no puede entrar en la jaula de agua", center(fire) > 4 * 32 + 16);
 // Los tres suben juntos por la escalera (los tablones frágiles aguantan si se pasa deprisa).
@@ -1888,7 +1888,7 @@ check("…y llegan a sus puertas", G.state === "won", where());
 // --- Nivel 2-2: el desagüe ---------------------------------------------------------------------------
 console.log("\nNivel 2-2");
 G.setLevel(7, 1); run(1);
-fire = P("Chispa"); water = P("Gota"); acid = P("AcidBaby");
+fire = P("Chispa"); water = P("Gota"); acid = P("Acidito");
 for (let i = 0; i < 600 && G.tide.y > 11 * 32; i++) run(1);
 check("El agua inunda la cuenca hasta la repisa de salida", G.tide.y === 11 * 32 && playing());
 walkTo(water, 9);
@@ -1899,7 +1899,7 @@ run(150);
 check("…el agua baja hasta el suelo", G.tide.y === 17 * 32);
 walkTo(acid, 9); run(40);
 walkTo(acid, 20);
-check("AcidBaby cruza y disuelve el óxido", G.grid[14][16] === " " && playing(), where());
+check("Acidito cruza y disuelve el óxido", G.grid[14][16] === " " && playing(), where());
 walkTo(fire, 9); run(40);
 walkTo(fire, 26);
 check("Chispa derrite el hielo", G.grid[14][24] === " " && playing(), where());
@@ -1911,13 +1911,13 @@ check("Gota suelta el botón y llega a la suya por debajo del agua", G.state ===
 // --- Nivel 2-3: lava en ascenso ------------------------------------------------------------------------
 console.log("\nNivel 2-3");
 G.setLevel(8, 1); run(1);
-fire = P("Chispa"); water = P("Gota"); acid = P("AcidBaby");
+fire = P("Chispa"); water = P("Gota"); acid = P("Acidito");
 allWalk(all3(35));
 allLeap(all3(36));
 allLeap(all3(34));
 check("Suben al primer piso", G.players.every((p) => feetRow(p) === 12), where());
 allWalk(all3(4));
-check("AcidBaby abre el óxido para los tres", G.grid[12][8] === " " && G.players.every((p) => center(p) < 6 * 32), where());
+check("Acidito abre el óxido para los tres", G.grid[12][8] === " " && G.players.every((p) => center(p) < 6 * 32), where());
 allLeap(all3(3));
 allLeap(all3(5));
 check("Suben al segundo piso", G.players.every((p) => feetRow(p) === 8), where());
@@ -1964,11 +1964,11 @@ check("Un barril no flota", feetRow(G.boxes[0]) === 16);
 // --- Nivel 2-4: balsas ---------------------------------------------------------------------------------
 console.log("\nNivel 2-4");
 G.setLevel(9, 1); run(1);
-fire = P("Chispa"); water = P("Gota"); acid = P("AcidBaby");
+fire = P("Chispa"); water = P("Gota"); acid = P("Acidito");
 allWalk(new Map([[fire, 10], [water, 11], [acid, 25]]));
 allLeap(new Map([[fire, 12], [water, 13]]));
 check("Chispa y Gota se suben a las balsas", feetRow(fire) === 15 && feetRow(water) === 15, where());
-check("AcidBaby pisa el botón de la compuerta", M("g").active);
+check("Acidito pisa el botón de la compuerta", M("g").active);
 for (let i = 0; i < 1500 && G.tide.y > 9 * 32 && playing(); i++) run(1);
 check("El ácido sube hasta el saliente y las balsas los llevan arriba", playing() && G.tide.y === 9 * 32 && [fire, water].every((p) => feetRow(p) <= 8), where());
 // Del borde de la balsa al saliente hay una casilla: un saltito.
@@ -1976,15 +1976,15 @@ allLeap(new Map([[fire, 16], [water, 16]]));
 for (const p of [fire, water]) walkTo(p, G.doors[p.ch.door].c);
 check("Con la compuerta abierta llegan a sus puertas", [fire, water].every((p) => p.inDoor), where());
 walkTo(acid, 37);
-check("…y AcidBaby a la suya, por debajo del ácido", G.state === "won", where());
+check("…y Acidito a la suya, por debajo del ácido", G.state === "won", where());
 // --- Nivel 2-5: la esclusa -----------------------------------------------------------------------------
 console.log("\nNivel 2-5");
 G.setLevel(10, 1); run(1);
-fire = P("Chispa"); water = P("Gota"); acid = P("AcidBaby");
+fire = P("Chispa"); water = P("Gota"); acid = P("Acidito");
 allWalk(new Map([[fire, 6], [acid, 7]]));
 allLeap(new Map([[fire, 8], [acid, 9]]));
 const onRaft = (p) => G.boxes.some((b) => p.y + p.h === b.y && p.x < b.x + b.w && p.x + p.w > b.x);
-check("Chispa y AcidBaby se suben a las balsas del primer pozo", onRaft(fire) && onRaft(acid), where());
+check("Chispa y Acidito se suben a las balsas del primer pozo", onRaft(fire) && onRaft(acid), where());
 walkTo(water, 30);
 check("Gota cruza el túnel de agua y pisa el botón de la tapa", center(water) > 29 * 32 && M("q").active, where());
 // Cuando la balsa queda por encima de la repisa, antes de que el techo la pare, se pasa andando.
@@ -2002,24 +2002,24 @@ walkTo(water, 36);
 check("…y Gota a la suya, bajo el agua", G.state === "won", where());
 // Sin Gota en el botón, la tapa no deja pasar a las balsas.
 G.setLevel(10, 1); run(1);
-fire = P("Chispa"); water = P("Gota"); acid = P("AcidBaby");
+fire = P("Chispa"); water = P("Gota"); acid = P("Acidito");
 place(fire, 15, 10); place(acid, 16, 10);
 for (let i = 0; i < 1500 && playing(); i++) { place(water, 30, 14); run(1); }
 check("Sin nadie en el botón, la tapa para las balsas y el agua los alcanza", G.state === "dead", where());
 // --- Nivel 2-6: la Hidra del aljibe -------------------------------------------------------------------
 console.log("\nNivel 2-6 (jefe)");
 G.setLevel(11, 1); run(1);
-fire = P("Chispa"); water = P("Gota"); acid = P("AcidBaby");
+fire = P("Chispa"); water = P("Gota"); acid = P("Acidito");
 const hyd = () => G.hydra;
 // En este combate se prueba la mecánica: a nadie le hacen daño los escupitajos (se prueban aparte).
 const shielded = (n, until) => { for (let i = 0; i < n && !(until && until()) && playing(); i++) { for (const p of G.players) p.hurt = 5; run(1); } };
 const shieldedWalk = (p, c) => { const k = keysOf(p), dir = c * 32 + 16 > center(p) ? k.r : k.l; down(dir); shielded(600, () => Math.abs(c * 32 + 16 - center(p)) <= 3); up(dir); shielded(20); };
 const shieldedRide = (p, c) => { shieldedWalk(p, c); shielded(90); const k = keysOf(p); down(k.r); shielded(40, () => p.onGround && feetRow(p) === 10); up(k.r); shielded(20); };
 check("La Hidra empieza inundando con agua", hyd() && G.tide.type === "water" && hyd().hits === 0);
-// Fase 1: agua. Chispa y AcidBaby suben por el ventilador; Gota espera abajo.
+// Fase 1: agua. Chispa y Acidito suben por el ventilador; Gota espera abajo.
 shieldedRide(fire, 1);
 shieldedRide(acid, 1);
-check("Chispa y AcidBaby suben a la repisa", feetRow(fire) === 10 && feetRow(acid) === 10, where());
+check("Chispa y Acidito suben a la repisa", feetRow(fire) === 10 && feetRow(acid) === 10, where());
 shieldedWalk(water, 13);
 shielded(1200, () => hyd().armed);
 check("El agua llega arriba (y cubre a la Hidra)", hyd().armed && G.tide.y === 12 * 32 && playing(), where());
@@ -2035,13 +2035,13 @@ check("Sube la lava", hyd().armed && G.tide.type === "fire" && playing(), where(
 shieldedWalk(fire, 15);
 shielded(300, () => hyd().hits === 2);
 check("Chispa la vacía: segunda cabeza", hyd().hits === 2 && G.tide.type === "acid");
-// Fase 3: ácido. Chispa sube; AcidBaby baja.
+// Fase 3: ácido. Chispa sube; Acidito baja.
 shieldedRide(fire, 1);
 shieldedWalk(acid, 11);
 shielded(1200, () => hyd().armed);
 shieldedWalk(acid, 24);
 shielded(300, () => hyd().hits === 3);
-check("AcidBaby vacía el ácido: tercera cabeza", hyd().hits === 3 && hyd().state === "dying");
+check("Acidito vacía el ácido: tercera cabeza", hyd().hits === 3 && hyd().state === "dying");
 shielded(200);
 check("La Hidra cae y se rompe el sello", hyd().state === "dead" && [8, 9, 10].every((r) => G.grid[r][35] === " "));
 shielded(400);
@@ -2063,16 +2063,16 @@ const heartsBefore = G.players.reduce((n, p) => n + p.hearts, 0);
 run(120);
 check("…que quitan corazones", G.players.reduce((n, p) => n + p.hearts, 0) < heartsBefore || !playing());
 G.setLevel(11, 1); run(1);
-acid = P("AcidBaby");
+acid = P("Acidito");
 place(acid, 19, 16);
 run(3);
 check("Tocar a la Hidra duele", acid.hearts < 3, `vidas ${acid.hearts}`);
-// --- Teclas de AcidBaby: I J K L y también el teclado numérico ----------------------------------
-console.log("\nTeclas de AcidBaby");
+// --- Teclas de Acidito: I J K L y también el teclado numérico ----------------------------------
+console.log("\nTeclas de Acidito");
 sandbox(() => {});
 let ax0 = acid.x;
 hold(["KeyL"], 30);
-check("L mueve a AcidBaby a la derecha", acid.x > ax0);
+check("L mueve a Acidito a la derecha", acid.x > ax0);
 ax0 = acid.x;
 hold(["Numpad4"], 30);
 check("…y el 4 del teclado numérico, a la izquierda", acid.x < ax0);

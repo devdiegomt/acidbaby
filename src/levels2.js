@@ -35,7 +35,7 @@ const SEASON_2 = {
   theme: "caves",
   ending: {
     title: "¡Salieron de las profundidades!",
-    text: "Chispa, Gota y AcidBaby vuelven a la superficie, juntos otra vez.",
+    text: "Chispa, Gota y Acidito vuelven a la superficie, juntos otra vez.",
   },
   worlds: [
     {
