@@ -81,6 +81,17 @@
   const FLOAT_LINE = 0.6; // parte de una caja que queda por encima de la marea cuando flota
   const FLOAT_SPEED = 2; // píxeles por frame que sube como mucho una caja flotando
 
+  // Jefe del Mundo 2 (Temporada 2): la Hidra del aljibe. Vive en el fondo y en cada fase inunda la
+  // arena con un líquido (agua, lava, ácido). Solo le hace daño quedarse en seco: el personaje de ese
+  // elemento baja buceando y pisa un desagüe hasta vaciarla.
+  const HYDRA_TILE = "Ψ";
+  const HYDRA_W = 96;
+  const HYDRA_H = 96;
+  const HYDRA_PHASES = ["water", "fire", "acid"];
+  const HYDRA_SPIT_RATE = [150, 125, 100]; // frames entre escupitajos, según la fase
+  const HYDRA_FLOOD_DELAY = 200; // aviso antes de cada inundación
+  const HYDRA_HURT = 120;
+
   const FONT = '"Segoe UI", system-ui, sans-serif';
   const MECH_COLORS = ["#f2c14e", "#c86bff", "#ff6fa8", "#4fd6c8", "#f0f0f0"];
 
@@ -479,6 +490,7 @@
   let toast = null; // aviso breve en pantalla: { text, frames }
   let boss = null; // jefe final (si el nivel tiene)
   let golem = null; // Gólem de magma (jefe del Mundo 1 de la temporada 2)
+  let hydra = null; // la Hidra del aljibe (jefe del Mundo 2 de la temporada 2)
   let tide = null; // marea: { type, y (superficie, px), bottom, top, speed, delay, draining }
   let dispensers = []; // sueltan barriles de agua: { c, r, wait }
   let rocks = []; // rocas que suelta el jefe
@@ -560,6 +572,7 @@
     toast = null;
     boss = null;
     golem = null;
+    hydra = null;
     dispensers = [];
     rocks = [];
     waves = [];
@@ -630,6 +643,10 @@
         }
         if (t === GOLEM_TILE) {
           golem = makeGolem(c, r);
+          continue;
+        }
+        if (t === HYDRA_TILE) {
+          hydra = { c, r }; // se completa al final, cuando ya hay marea
           continue;
         }
         if (t === DISPENSER_TILE) {
@@ -734,6 +751,15 @@
       };
     }
 
+    if (hydra) {
+      if (!tide || !mechs.some((m) => m.def.kind === "drain")) fail("la Hidra necesita marea (\"tide\") y al menos un desagüe");
+      hydra = makeHydra(hydra.c, hydra.r);
+      if (tide) {
+        tide.type = HYDRA_PHASES[0];
+        tide.delay = HYDRA_FLOOD_DELAY;
+      }
+    }
+
     canvas.width = W = grid[0].length * T;
     canvas.height = H = grid.length * T;
     fitCanvas();
@@ -763,7 +789,7 @@
   function liveState() {
     return {
       grid, liquids, breakables, dissolving, barriers, fans, doors, boxes, gems, mechs, portals,
-      enemies, items, springs, crumbles, spikes, flags, obsidian, boss, bossDefeatedAt, golem, dispensers, tide,
+      enemies, items, springs, crumbles, spikes, flags, obsidian, boss, bossDefeatedAt, golem, dispensers, tide, hydra,
       players: players.map((p) => ({
         ...p,
         ch: CHARACTERS.indexOf(p.ch),
@@ -786,7 +812,7 @@
   function backToCheckpoint() {
     const s = structuredClone(checkpoint);
     ({ grid, liquids, breakables, dissolving, barriers, fans, doors, boxes, gems, mechs, portals } = s);
-    ({ enemies, items, springs, crumbles, spikes, flags, obsidian, boss, bossDefeatedAt, golem, dispensers, tide } = s);
+    ({ enemies, items, springs, crumbles, spikes, flags, obsidian, boss, bossDefeatedAt, golem, dispensers, tide, hydra } = s);
     players = s.players.map((p) =>
       Object.assign(p, {
         ch: CHARACTERS[p.ch],
@@ -1943,6 +1969,109 @@
     }
   }
 
+  function makeHydra(c, r) {
+    const cfg = level.hydra || {};
+    return {
+      name: cfg.name || "La Hidra del aljibe",
+      x: c * T + T / 2 - HYDRA_W / 2,
+      y: (r + 1) * T - HYDRA_H,
+      hits: 0,
+      state: "fight", // fight | hurt | dying | dead
+      timer: 0,
+      armed: false, // la marea ha llegado arriba en esta fase: vaciarla ya cuenta como golpe
+      spitTimer: 120,
+      flash: 0,
+      anim: 0,
+    };
+  }
+
+  const hydraBody = (h) => ({ x: h.x + 10, y: h.y + 30, w: HYDRA_W - 20, h: HYDRA_H - 30 });
+
+  function updateHydra() {
+    const h = hydra;
+    h.anim++;
+    if (h.flash > 0) h.flash--;
+    updateRocksAndWaves();
+    if (h.state === "dead" || state !== "playing") return;
+    if (h.state === "dying") {
+      if (h.timer % 6 === 0) {
+        burst(h.x + Math.random() * HYDRA_W, h.y + Math.random() * HYDRA_H, ["#a8e6ff", "#ffd166", "#d9ff7a", "#ffffff"], 10);
+        sound.play("crumble");
+      }
+      if (--h.timer <= 0) defeatHydra(h);
+      return;
+    }
+    const phase = Math.min(h.hits, HYDRA_PHASES.length - 1);
+    // La marea tiene que llegar arriba para que vaciarla después cuente.
+    if (tide.y <= tide.top + T) h.armed = true;
+    if (h.armed && tide.draining && tide.y >= tide.bottom - 1) {
+      hitHydra(h);
+      return;
+    }
+    if (h.state === "hurt" && --h.timer <= 0) h.state = "fight";
+    // Escupe una bola de su elemento, en arco, a quien vea (alterna entre los tres).
+    if (h.state === "fight" && --h.spitTimer <= 0) {
+      h.spitTimer = HYDRA_SPIT_RATE[phase];
+      const alive = players.filter((p) => p.alive);
+      const target = alive[Math.floor(h.anim / 7) % alive.length];
+      if (target) {
+        const sx = h.x + HYDRA_W / 2 - 7;
+        const sy = h.y - 4;
+        const t = 55;
+        const g = 0.3; // gravedad de las rocas
+        const vx = (target.x + target.w / 2 - sx - 7) / t;
+        const vy = (target.y + target.h / 2 - sy - 7 - (g * t * t) / 2) / t;
+        rocks.push({ x: sx, y: sy, w: 14, h: 14, vx, vy, element: HYDRA_PHASES[phase], cause: "fue alcanzado por la Hidra" });
+        sound.play("shot");
+      }
+    }
+    // Tocarla duele.
+    const body = hydraBody(h);
+    for (const p of players) {
+      if (p.alive && p.hurt === 0 && intersects(body.x, body.y, body.w, body.h, p)) {
+        hurtPlayer(p, { x: h.x, w: HYDRA_W }, "fue mordido por la Hidra");
+        if (state !== "playing") return;
+      }
+    }
+  }
+
+  // Al quedarse en seco recibe un golpe; la siguiente inundación es del elemento siguiente.
+  function hitHydra(h) {
+    h.hits++;
+    h.armed = false;
+    h.flash = 30;
+    shake = Math.max(shake, 10);
+    burst(h.x + HYDRA_W / 2, h.y + HYDRA_H / 3, ["#ffffff", "#e8e8f0", ELEMENTS[tide.type].top], 40);
+    sound.play("bossHit");
+    sound.play("roar");
+    rocks = [];
+    if (h.hits >= HYDRA_PHASES.length) {
+      h.state = "dying";
+      h.timer = 100;
+      tide.top = tide.bottom / T; // ya no vuelve a subir
+      tide.delay = Infinity;
+      return;
+    }
+    h.state = "hurt";
+    h.timer = HYDRA_HURT;
+    tide.type = HYDRA_PHASES[h.hits];
+    tide.delay = HYDRA_FLOOD_DELAY;
+    const who = CHARACTERS.find((ch) => ch.immune === tide.type).name;
+    toast = { text: `¡La Hidra se enfada! Ahora va a subir ${ELEMENTS[tide.type].name}: le toca a ${who}.`, frames: TOAST_FRAMES };
+  }
+
+  function defeatHydra(h) {
+    h.state = "dead";
+    bossDefeatedAt = levelFrames;
+    shake = 30;
+    burst(h.x + HYDRA_W / 2, h.y + HYDRA_H / 2, ["#a8e6ff", "#ffd166", "#d9ff7a", "#ffffff"], 90);
+    sound.play("boom");
+    sound.play("win");
+    for (const e of enemies) if (e.alive) defeatEnemy(e);
+    rocks = [];
+    breakSeals();
+  }
+
   // Los dispensadores sueltan un barril de agua cuando el suyo se ha gastado (al rato).
   function updateDispensers() {
     if (golem && (golem.state === "dying" || golem.state === "dead")) return;
@@ -2260,6 +2389,7 @@
         updateDarts();
         if (boss && state === "playing") updateBoss();
         if (golem && state === "playing") updateGolem();
+        if (hydra && state === "playing") updateHydra();
         updateDispensers();
         updateBreakables();
         collectGems();
@@ -4098,16 +4228,17 @@
 
   function drawRocksAndWaves(t) {
     for (const r of rocks) {
-      if (r.ember) {
-        // Brasa del Gólem: bola de lava con estela
+      if (r.ember || r.element) {
+        // Brasa del Gólem (o escupitajo de la Hidra): bola de su elemento con estela
+        const el = r.element ? ELEMENTS[r.element] : null;
         ctx.save();
-        ctx.shadowColor = "#ff6a1f";
+        ctx.shadowColor = el ? el.body : "#ff6a1f";
         ctx.shadowBlur = 12;
-        ctx.fillStyle = "#ff8a3d";
+        ctx.fillStyle = el ? el.body : "#ff8a3d";
         ctx.beginPath();
         ctx.arc(r.x + r.w / 2, r.y + r.h / 2, r.w / 2, 0, Math.PI * 2);
         ctx.fill();
-        ctx.fillStyle = "#ffd166";
+        ctx.fillStyle = el ? el.top : "#ffd166";
         ctx.beginPath();
         ctx.arc(r.x + r.w / 2 - 2, r.y + r.h / 2 - 2, r.w / 4, 0, Math.PI * 2);
         ctx.fill();
@@ -4269,6 +4400,114 @@
     ctx.restore();
   }
 
+  // Hidra del aljibe: cuerpo en el fondo y tres cuellos, uno por elemento. La cabeza de la fase en
+  // curso se yergue y brilla; las vencidas cuelgan, apagadas.
+  function drawHydra(t) {
+    const h = hydra;
+    if (!h) return;
+    const ground = h.y + HYDRA_H;
+    if (h.state === "dead") {
+      ctx.fillStyle = "#2c2640";
+      ctx.beginPath();
+      ctx.ellipse(h.x + HYDRA_W / 2, ground - 8, HYDRA_W / 2, 12, 0, Math.PI, 0);
+      ctx.fill();
+      return;
+    }
+    const shakeX = h.state === "dying" ? Math.sin(t * 60) * 3 : 0;
+    const cx = h.x + HYDRA_W / 2 + shakeX;
+    const phase = Math.min(h.hits, HYDRA_PHASES.length - 1);
+    // Cuellos y cabezas
+    HYDRA_PHASES.forEach((elName, i) => {
+      const el = ELEMENTS[elName];
+      const beaten = i < h.hits;
+      const active = i === phase && h.state !== "dying";
+      const baseX = cx + (i - 1) * 26;
+      const sway = Math.sin(t * 2 + i * 2) * (active ? 10 : 5);
+      const headX = baseX + (i - 1) * 14 + sway;
+      const headY = beaten ? ground - 34 : h.y - (active ? 26 : 6) + Math.cos(t * 2.4 + i) * 4;
+      const color = beaten ? "#4a4458" : el.body;
+      ctx.strokeStyle = color;
+      ctx.lineWidth = 12;
+      ctx.lineCap = "round";
+      ctx.beginPath();
+      ctx.moveTo(baseX, h.y + 44);
+      ctx.quadraticCurveTo(baseX + sway * 0.5, (h.y + 44 + headY) / 2, headX, headY);
+      ctx.stroke();
+      ctx.lineCap = "butt";
+      ctx.save();
+      if (active) {
+        ctx.shadowColor = el.body;
+        ctx.shadowBlur = 16;
+      }
+      ctx.fillStyle = color;
+      ctx.beginPath();
+      ctx.ellipse(headX, headY, 13, 10, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.restore();
+      ctx.fillStyle = beaten ? "#2c2640" : active ? "#ffffff" : el.top;
+      ctx.fillRect(headX - 7, headY - 4, 4, beaten ? 1 : 4);
+      ctx.fillRect(headX + 3, headY - 4, 4, beaten ? 1 : 4);
+      if (active) {
+        // Boca abierta
+        ctx.fillStyle = "#1a0f14";
+        ctx.fillRect(headX - 5, headY + 3, 10, 3);
+      }
+    });
+    // Cuerpo (escamas)
+    ctx.fillStyle = "#3b5a52";
+    ctx.beginPath();
+    ctx.ellipse(cx, ground - 26, HYDRA_W / 2, 34, 0, Math.PI, 0);
+    ctx.fill();
+    ctx.fillStyle = "#4f7a6e";
+    for (let i = 0; i < 6; i++) {
+      ctx.beginPath();
+      ctx.arc(cx - 36 + i * 14, ground - 30 - (i % 2) * 8, 6, Math.PI, 0);
+      ctx.fill();
+    }
+    if (h.flash > 0) {
+      ctx.fillStyle = `rgba(255,255,255,${h.flash / 45})`;
+      ctx.beginPath();
+      ctx.ellipse(cx, ground - 26, HYDRA_W / 2 + 4, 38, 0, Math.PI, 0);
+      ctx.fill();
+    }
+  }
+
+  function drawHydraBar() {
+    const h = hydra;
+    if (h.state === "dead") {
+      const since = levelFrames - bossDefeatedAt;
+      if (since < 240) {
+        ctx.save();
+        ctx.globalAlpha = Math.min(1, since / 20, (240 - since) / 40);
+        ctx.fillStyle = "rgba(10,8,5,0.75)";
+        ctx.fillRect(0, H / 2 - 50, W, 100);
+        text(`¡${h.name} se ha quedado en seco!`, W / 2, H / 2 - 12, 32, "#ffe08a");
+        text("El sello de las puertas se rompe…", W / 2, H / 2 + 26, 18, "#d9c9a6", "center", "normal");
+        ctx.restore();
+      }
+      return;
+    }
+    const w = Math.min(420, W - 120);
+    const x = W / 2 - w / 2;
+    const y = T + 12;
+    text(h.name, W / 2, y, 15, "#ffe9b8");
+    const seg = w / HYDRA_PHASES.length;
+    HYDRA_PHASES.forEach((elName, i) => {
+      const sx = x + i * seg;
+      ctx.fillStyle = "rgba(0,0,0,0.6)";
+      ctx.fillRect(sx + 2, y + 12, seg - 4, 10);
+      if (i >= h.hits) {
+        ctx.fillStyle = ELEMENTS[elName].body;
+        ctx.fillRect(sx + 2, y + 12, seg - 4, 10);
+      }
+      if (i === h.hits && h.state !== "dying") {
+        ctx.strokeStyle = ELEMENTS[elName].top;
+        ctx.lineWidth = 2;
+        ctx.strokeRect(sx + 1, y + 11, seg - 2, 12);
+      }
+    });
+  }
+
   // Dispensador: un caño en el techo de la casilla que gotea agua.
   function drawDispensers(t) {
     for (const d of dispensers) {
@@ -4384,6 +4623,7 @@
     drawEnemies(t);
     drawBoss(t);
     drawGolem(t);
+    drawHydra(t);
     for (const p of players) if (p.alive) drawPlayer(p, t);
     drawTide(t);
     drawShots();
@@ -4411,7 +4651,10 @@
       drawHud();
       if (boss && levelFrames > HINT_FRAMES / 2) drawBossBar(t);
       else if (golem && levelFrames > HINT_FRAMES / 2) drawGolemBar();
-      else drawToast(drawHint());
+      else if (hydra && levelFrames > HINT_FRAMES / 2) {
+        drawHydraBar();
+        drawToast(true);
+      } else drawToast(drawHint());
       if (state === "paused") drawPause();
       else if (state === "dead") drawDead();
       else if (state === "won") drawWon(t);
