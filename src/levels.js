@@ -6,16 +6,16 @@
 //   #      pared / suelo
 //   L      lava   (solo Chispa sobrevive)
 //   ~      agua   (solo Gota sobrevive)
-//   A      ácido  (solo AcidBaby sobrevive)
-//   %      bloque oxidado: AcidBaby lo disuelve al tocarlo
+//   A      ácido  (solo Acidito sobrevive)
+//   %      bloque oxidado: Acidito lo disuelve al tocarlo
 //   +      bloque de hielo: Chispa lo derrite al tocarlo
 //   =      bloque de sal: Gota lo disuelve al tocarlo
 //          (al romper un bloque se rompen también todos los del mismo tipo pegados)
-//   4 5 6  barrera de fuego, agua y ácido: sólida para todos menos para Chispa, Gota y AcidBaby
+//   4 5 6  barrera de fuego, agua y ácido: sólida para todos menos para Chispa, Gota y Acidito
 //   ^      ventilador siempre encendido: la corriente sube hasta 6 casillas o hasta el primer obstáculo
-//   f w b  dónde aparecen Chispa, Gota y AcidBaby
-//   1 2 3  puerta de Chispa, Gota y AcidBaby (ocupa la casilla y la de arriba)
-//   r z e  gema roja (rubí, Chispa), azul (zafiro, Gota) y verde (esmeralda, AcidBaby)
+//   f w b  dónde aparecen Chispa, Gota y Acidito
+//   1 2 3  puerta de Chispa, Gota y Acidito (ocupa la casilla y la de arriba)
+//   r z e  gema roja (rubí, Chispa), azul (zafiro, Gota) y verde (esmeralda, Acidito)
 //   x      caja que se puede empujar (pisa botones y sirve de escalón; el viento no la levanta)
 //   7 8    pareja de portales morados; 9 0, pareja de portales turquesa (llevan personajes y cajas
 //          de uno al otro; un portal en el aire deja caer lo que sale por él)
@@ -34,7 +34,7 @@
 //   )      escudo: absorbe el siguiente golpe (una carga por personaje)
 //   ]      bomba: va al inventario; al tocar un muro agrietado explota, lo abre y mata a los bichos cercanos
 //   }      amuleto del cambio: al cogerlo los tres cambian de personaje en ronda (Chispa pasa a ser
-//          Gota, Gota pasa a AcidBaby y AcidBaby pasa a Chispa). Cada jugador conserva sus
+//          Gota, Gota pasa a Acidito y Acidito pasa a Chispa). Cada jugador conserva sus
 //          teclas, su sitio y su inventario; cambian su elemento, lo que rompe, las barreras que cruza y su puerta
 //   [      muro agrietado: sólido; solo lo abre una bomba (se abre entero, todas las casillas [ pegadas)
 //   ;      muelle: quien cae encima sale lanzado hacia arriba un piso entero (6 casillas)
@@ -118,7 +118,7 @@ const LEVELS = [
   },
   {
     name: "Cajas y óxido",
-    hint: "Empujen las cajas. AcidBaby disuelve el óxido. Este ascensor necesita dos botones pisados.",
+    hint: "Empujen las cajas. Acidito disuelve el óxido. Este ascensor necesita dos botones pisados.",
     mechanisms: {
       q: { trigger: "button", need: 2, move: [0, -5] },
     },
@@ -172,7 +172,7 @@ const LEVELS = [
   },
   {
     name: "Hielo, sal y óxido",
-    hint: "Chispa derrite el hielo, Gota la sal y AcidBaby el óxido... hasta que alguien agarre el amuleto.",
+    hint: "Chispa derrite el hielo, Gota la sal y Acidito el óxido... hasta que alguien agarre el amuleto.",
     mechanisms: {
       g: { trigger: "button", kind: "fan" },
     },
