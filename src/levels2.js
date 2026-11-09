@@ -35,7 +35,7 @@ const SEASON_2 = {
   theme: "caves",
   ending: {
     title: "¡Salieron de las profundidades!",
-    text: "Fireboy, Watergirl y AcidBaby vuelven a la superficie, juntos otra vez.",
+    text: "Chispa, Gota y AcidBaby vuelven a la superficie, juntos otra vez.",
   },
   worlds: [
     {
@@ -197,7 +197,7 @@ const SEASON_2 = {
       levels: [
         {
           name: "Sube el agua",
-          hint: "¡Arriba, rápido! Solo Watergirl puede quedarse abajo... y la llave está en una jaula de agua.",
+          hint: "¡Arriba, rápido! Solo Gota puede quedarse abajo... y la llave está en una jaula de agua.",
           tide: { type: "water", delay: 240, speed: 0.3, top: 6 },
           map: [
             "########################################",
@@ -303,7 +303,7 @@ const SEASON_2 = {
         },
         {
           name: "La esclusa",
-          hint: "Salten de balsa en balsa antes del techo. Arriba hay una tapa: solo Watergirl, desde abajo, puede apartarla.",
+          hint: "Salten de balsa en balsa antes del techo. Arriba hay una tapa: solo Gota, desde abajo, puede apartarla.",
           tide: { type: "water", delay: 200, speed: 0.4, top: 4 },
           mechanisms: {
             q: { trigger: "button", move: [3, 0] },

@@ -4,24 +4,24 @@
 //
 // Leyenda:
 //   #      pared / suelo
-//   L      lava   (solo Fireboy sobrevive)
-//   ~      agua   (solo Watergirl sobrevive)
+//   L      lava   (solo Chispa sobrevive)
+//   ~      agua   (solo Gota sobrevive)
 //   A      ácido  (solo AcidBaby sobrevive)
 //   %      bloque oxidado: AcidBaby lo disuelve al tocarlo
-//   +      bloque de hielo: Fireboy lo derrite al tocarlo
-//   =      bloque de sal: Watergirl lo disuelve al tocarlo
+//   +      bloque de hielo: Chispa lo derrite al tocarlo
+//   =      bloque de sal: Gota lo disuelve al tocarlo
 //          (al romper un bloque se rompen también todos los del mismo tipo pegados)
-//   4 5 6  barrera de fuego, agua y ácido: sólida para todos menos para Fireboy, Watergirl y AcidBaby
+//   4 5 6  barrera de fuego, agua y ácido: sólida para todos menos para Chispa, Gota y AcidBaby
 //   ^      ventilador siempre encendido: la corriente sube hasta 6 casillas o hasta el primer obstáculo
-//   f w b  dónde aparecen Fireboy, Watergirl y AcidBaby
-//   1 2 3  puerta de Fireboy, Watergirl y AcidBaby (ocupa la casilla y la de arriba)
-//   r z e  gema roja (rubí, Fireboy), azul (zafiro, Watergirl) y verde (esmeralda, AcidBaby)
+//   f w b  dónde aparecen Chispa, Gota y AcidBaby
+//   1 2 3  puerta de Chispa, Gota y AcidBaby (ocupa la casilla y la de arriba)
+//   r z e  gema roja (rubí, Chispa), azul (zafiro, Gota) y verde (esmeralda, AcidBaby)
 //   x      caja que se puede empujar (pisa botones y sirve de escalón; el viento no la levanta)
 //   7 8    pareja de portales morados; 9 0, pareja de portales turquesa (llevan personajes y cajas
 //          de uno al otro; un portal en el aire deja caer lo que sale por él)
 //   $      llave: va al inventario de quien la agarra
 //   |      cerradura: sólida; la abre (entera) quien la toque llevando una llave, que se gasta
-//   *      orbe: quien lo agarra puede disparar su elemento (S, ↓, H), que mata bichos y rompe
+//   *      orbe: quien lo agarra puede disparar su elemento (S, ↓, K), que mata bichos y rompe
 //          a distancia el bloque que ese personaje rompe (hielo, sal u óxido)
 //   ?      corazón: devuelve una vida (cada personaje tiene 3 por nivel)
 //   @      escarabajo: patrulla por el suelo y se da la vuelta en paredes y bordes
@@ -33,8 +33,8 @@
 //   (      botas: doble salto en el aire durante el resto del nivel
 //   )      escudo: absorbe el siguiente golpe (una carga por personaje)
 //   ]      bomba: va al inventario; al tocar un muro agrietado explota, lo abre y mata a los bichos cercanos
-//   }      amuleto del cambio: al cogerlo los tres cambian de personaje en ronda (Fireboy pasa a ser
-//          Watergirl, Watergirl pasa a AcidBaby y AcidBaby pasa a Fireboy). Cada jugador conserva sus
+//   }      amuleto del cambio: al cogerlo los tres cambian de personaje en ronda (Chispa pasa a ser
+//          Gota, Gota pasa a AcidBaby y AcidBaby pasa a Chispa). Cada jugador conserva sus
 //          teclas, su sitio y su inventario; cambian su elemento, lo que rompe, las barreras que cruza y su puerta
 //   [      muro agrietado: sólido; solo lo abre una bomba (se abre entero, todas las casillas [ pegadas)
 //   ;      muelle: quien cae encima sale lanzado hacia arriba un piso entero (6 casillas)
@@ -172,7 +172,7 @@ const LEVELS = [
   },
   {
     name: "Hielo, sal y óxido",
-    hint: "Fireboy derrite el hielo, Watergirl la sal y AcidBaby el óxido... hasta que alguien agarre el amuleto.",
+    hint: "Chispa derrite el hielo, Gota la sal y AcidBaby el óxido... hasta que alguien agarre el amuleto.",
     mechanisms: {
       g: { trigger: "button", kind: "fan" },
     },
@@ -312,7 +312,7 @@ const LEVELS = [
   },
   {
     name: "Bichos del templo",
-    hint: "Agarren un orbe y disparen con S, ↓ o H. Salten encima de los bichos o dispárenles.",
+    hint: "Agarren un orbe y disparen con S, ↓ o K. Salten encima de los bichos o dispárenles.",
     map: [
       "################################",
       "#                     |        #",

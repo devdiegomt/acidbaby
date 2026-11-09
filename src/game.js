@@ -92,6 +92,8 @@
   const HYDRA_FLOOD_DELAY = 200; // aviso antes de cada inundación
   const HYDRA_HURT = 120;
 
+  const GAME_TITLE = "AcidBaby"; // nombre del juego (portada)
+
   // Avisos de novedades: salen en la portada, en el menú de niveles y en la pausa.
   // Para cambiarlos (o quitarlos), basta con editar esta lista.
   const NEWS = ["Próximos niveles: 15 de noviembre", "Próximamente: jueguen online, cada uno desde su PC"];
@@ -148,19 +150,21 @@
 
   const CHARACTERS = [
     {
-      name: "Fireboy", spawn: "f", door: "1", immune: "fire", power: "Derrite el hielo",
+      name: "Chispa", spawn: "f", door: "1", immune: "fire", power: "Derrite el hielo",
       color: "#ff5a1f", dark: "#8f2208",
       keys: { left: "KeyA", right: "KeyD", jump: "KeyW", fire: "KeyS" }, keyLabel: "W  A  S  D", shot: "bola de fuego",
     },
     {
-      name: "Watergirl", spawn: "w", door: "2", immune: "water", power: "Disuelve la sal",
+      name: "Gota", spawn: "w", door: "2", immune: "water", power: "Disuelve la sal",
       color: "#2a8cff", dark: "#0c3f8f",
       keys: { left: "ArrowLeft", right: "ArrowRight", jump: "ArrowUp", fire: "ArrowDown" }, keyLabel: "↑  ←  ↓  →", shot: "chorro de agua",
     },
     {
       name: "AcidBaby", spawn: "b", door: "3", immune: "acid", power: "Corroe el óxido",
       color: "#5fd12e", dark: "#226b0c",
-      keys: { left: "KeyG", right: "KeyJ", jump: "KeyY", fire: "KeyH" }, keyLabel: "Y  G  H  J", shot: "escupitajo de ácido",
+      // I J K L, lejos de W A S D (así el teclado se atasca menos), y también el teclado numérico.
+      keys: { left: ["KeyJ", "Numpad4"], right: ["KeyL", "Numpad6"], jump: ["KeyI", "Numpad8"], fire: ["KeyK", "Numpad5"] },
+      keyLabel: "I  J  K  L", shot: "escupitajo de ácido",
     },
   ];
 
@@ -169,19 +173,23 @@
   // ---------------------------------------------------------------------------
   // En los menús vale cualquiera de las teclas de los tres personajes.
   const MENU_KEYS = {
-    left: ["ArrowLeft", "KeyA", "KeyG"],
-    right: ["ArrowRight", "KeyD", "KeyJ"],
-    up: ["ArrowUp", "KeyW", "KeyY"],
-    down: ["ArrowDown", "KeyS", "KeyH"],
+    left: ["ArrowLeft", "KeyA", "KeyJ", "Numpad4"],
+    right: ["ArrowRight", "KeyD", "KeyL", "Numpad6"],
+    up: ["ArrowUp", "KeyW", "KeyI", "Numpad8"],
+    down: ["ArrowDown", "KeyS", "KeyK", "Numpad5"],
     ok: ["Enter", "Space"],
     back: ["Escape"],
   };
   const GAME_KEYS = new Set(["KeyR", "KeyM", "KeyP", "KeyE", ...Object.values(MENU_KEYS).flat()]);
-  for (const ch of CHARACTERS) Object.values(ch.keys).forEach((k) => GAME_KEYS.add(k));
+  for (const ch of CHARACTERS) Object.values(ch.keys).flat().forEach((k) => GAME_KEYS.add(k));
 
   const held = new Set();
   const pressed = new Set();
   const menuKey = (name) => MENU_KEYS[name].some((k) => pressed.has(k));
+  // Una acción puede tener una tecla o varias (AcidBaby: I J K L o el teclado numérico).
+  const keyList = (k) => (Array.isArray(k) ? k : [k]);
+  const isHeld = (k) => keyList(k).some((c) => held.has(c));
+  const wasPressed = (k) => keyList(k).some((c) => pressed.has(c));
 
   // Ratón, en coordenadas del canvas (solo se usa en los menús).
   let pointer = null;
@@ -222,6 +230,8 @@
   // ---------------------------------------------------------------------------
   // Progreso guardado (mejor tiempo y gemas de cada nivel, y el sonido)
   // ---------------------------------------------------------------------------
+  // (El nombre de la clave viene de cuando el juego se llamaba de otra forma: no se cambia para
+  // que nadie pierda su progreso guardado.)
   const SAVE_KEY = "fireboy-watergirl-acidbaby-v1";
 
   // localStorage puede no existir o fallar (modo privado, datos bloqueados): el juego sigue sin guardar.
@@ -253,7 +263,7 @@
       name: "Temporada 1",
       subtitle: "El templo",
       theme: "temple",
-      ending: { title: "¡Superaron el templo!", text: "Fireboy, Watergirl y AcidBaby han llegado juntos hasta el final." },
+      ending: { title: "¡Superaron el templo!", text: "Chispa, Gota y AcidBaby llegaron juntos hasta el final." },
       worlds: [{ name: "El templo", levels: LEVELS }],
     },
     ...(typeof SEASON_2 !== "undefined" ? [SEASON_2] : []),
@@ -1118,14 +1128,14 @@
   // ---------------------------------------------------------------------------
   function updatePlayer(p) {
     const k = p.controls; // las teclas son del jugador; el personaje (p.ch) puede cambiar con un amuleto
-    const dir = (held.has(k.right) ? 1 : 0) - (held.has(k.left) ? 1 : 0);
+    const dir = (isHeld(k.right) ? 1 : 0) - (isHeld(k.left) ? 1 : 0);
     if (dir) p.facing = dir;
 
     const speed = p.pushing ? MOVE_SPEED * PUSH_SPEED_FACTOR : MOVE_SPEED;
     p.vx += (dir * speed - p.vx) * (p.onGround ? 0.35 : 0.2);
     if (Math.abs(p.vx) < 0.05) p.vx = 0;
 
-    if (pressed.has(k.jump)) p.jumpBuffer = JUMP_BUFFER_FRAMES;
+    if (wasPressed(k.jump)) p.jumpBuffer = JUMP_BUFFER_FRAMES;
     else if (p.jumpBuffer > 0) p.jumpBuffer--;
 
     if (p.onGround) {
@@ -1139,7 +1149,7 @@
       p.jumpBuffer = 0;
       p.coyote = 0;
       sound.play("jump");
-    } else if (pressed.has(k.jump) && p.airJumps > 0 && !p.inWind) {
+    } else if (wasPressed(k.jump) && p.airJumps > 0 && !p.inWind) {
       // Segundo salto en el aire gracias a las botas.
       p.airJumps--;
       p.vy = -DOUBLE_JUMP_SPEED;
@@ -1158,7 +1168,7 @@
       p.vy = Math.max(p.vy - FAN_LIFT, -FAN_MAX_RISE);
       // Sin teclas, la corriente centra al personaje para que no se enganche en los bordes del hueco.
       if (!dir) p.vx += ((wind.c + 0.5) * T - (p.x + p.w / 2)) * FAN_CENTERING;
-    } else if (!held.has(k.jump) && p.vy < 0 && !p.springing) {
+    } else if (!isHeld(k.jump) && p.vy < 0 && !p.springing) {
       // Soltar el salto antes de tiempo hace un salto más corto.
       p.vy += GRAVITY;
     }
@@ -1186,7 +1196,7 @@
     if (p.hurt > 0) p.hurt--;
     if (p.swapFlash > 0) p.swapFlash--;
     if (p.shotCooldown > 0) p.shotCooldown--;
-    if (pressed.has(k.fire) && p.inv.weapon && p.shotCooldown === 0) shoot(p);
+    if (wasPressed(k.fire) && p.inv.weapon && p.shotCooldown === 0) shoot(p);
 
     const door = doors[p.ch.door];
     const cx = p.x + p.w / 2;
@@ -1416,7 +1426,7 @@
     }
   }
 
-  // Amuleto del cambio: los tres cambian de personaje en ronda (Fireboy → Watergirl → AcidBaby → Fireboy).
+  // Amuleto del cambio: los tres cambian de personaje en ronda (Chispa → Gota → AcidBaby → Chispa).
   // Cada jugador conserva sus teclas, su sitio y su inventario; cambian su elemento y su puerta.
   function swapCharacters() {
     for (const p of players) {
@@ -3647,26 +3657,34 @@
 
     ctx.translate(0, -bob);
 
-    // Pelo / cabeza (detrás del cuerpo)
+    // Encima de la cabeza (detrás del cuerpo): la llamita de Chispa o la ola de Gota.
     if (ch.immune === "fire") {
-      for (let i = 0; i < 3; i++) {
-        const fx = x + 4 + i * 7;
-        const fh = 10 + Math.sin(t * 18 + i * 2.1) * 3;
-        ctx.fillStyle = i === 1 ? "#ffb000" : "#ff7a1a";
+      // Dos lenguas de fuego que bailan sobre la brasa
+      for (const [dx, k] of [[-3, 0], [4, 1.7]]) {
+        const fh = 8 + Math.sin(t * 16 + k) * 2.5 - k;
+        ctx.fillStyle = "#ff8a1a";
         ctx.beginPath();
-        ctx.moveTo(fx - 5, y + 11);
-        ctx.quadraticCurveTo(fx - 3, y + 6 - fh * 0.4, fx - look * 0.5, y + 6 - fh);
-        ctx.quadraticCurveTo(fx + 3, y + 6 - fh * 0.4, fx + 5, y + 11);
+        ctx.moveTo(cx + dx - 5, y + 8);
+        ctx.quadraticCurveTo(cx + dx - 4, y + 3 - fh * 0.3, cx + dx - look * 0.8 + Math.sin(t * 9 + k) * 1.5, y + 4 - fh);
+        ctx.quadraticCurveTo(cx + dx + 4, y + 3 - fh * 0.3, cx + dx + 5, y + 8);
         ctx.fill();
       }
       ctx.fillStyle = "#ffe066";
       ctx.beginPath();
-      ctx.moveTo(cx - 4, y + 9);
-      ctx.quadraticCurveTo(cx, y - 2 + Math.sin(t * 22) * 2, cx + 4, y + 9);
+      ctx.moveTo(cx - 3, y + 8);
+      ctx.quadraticCurveTo(cx - look * 0.5, y - 2 + Math.sin(t * 22), cx + 3, y + 8);
       ctx.fill();
     } else if (ch.immune === "water") {
+      // Una ola que se riza hacia donde mira
       ctx.fillStyle = "#7cc8ff";
-      dropletPath(cx - p.facing * 5, y - 9, cx, y + 9, 11);
+      ctx.beginPath();
+      ctx.moveTo(cx - 9, y + 9);
+      ctx.quadraticCurveTo(cx - 6 * p.facing, y - 6, cx + 7 * p.facing, y - 3 + Math.sin(t * 4) * 1.5);
+      ctx.quadraticCurveTo(cx + 2 * p.facing, y + 1, cx + 9, y + 9);
+      ctx.fill();
+      ctx.fillStyle = "#e8f8ff";
+      ctx.beginPath();
+      ctx.arc(cx + 6 * p.facing, y - 2 + Math.sin(t * 4) * 1.5, 2, 0, Math.PI * 2);
       ctx.fill();
     } else {
       ctx.strokeStyle = "#b8ff6a";
@@ -3689,10 +3707,48 @@
     // Cuerpo
     ctx.shadowColor = ch.color;
     ctx.shadowBlur = 14;
-    ctx.fillStyle = ch.color;
-    roundRectPath(ctx, x, y + 6, w, h - 10, ch.immune === "acid" ? 10 : 7);
-    ctx.fill();
-    ctx.shadowBlur = 0;
+    if (ch.immune === "fire") {
+      // Chispa: una brasa redonda de carbón con grietas incandescentes
+      ctx.fillStyle = "#4a2618";
+      roundRectPath(ctx, x, y + 5, w, h - 9, 11);
+      ctx.fill();
+      ctx.shadowBlur = 0;
+      ctx.strokeStyle = `rgba(255,${120 + Math.sin(t * 5) * 40},30,0.95)`;
+      ctx.lineWidth = 2;
+      ctx.lineCap = "round";
+      ctx.beginPath(); // grietas en los bordes, lejos de los ojos
+      ctx.moveTo(x + 1.5, y + 19);
+      ctx.lineTo(x + 4, y + 21);
+      ctx.lineTo(x + 3, y + 24);
+      ctx.moveTo(x + w - 1.5, y + 9);
+      ctx.lineTo(x + w - 4, y + 11);
+      ctx.moveTo(x + w / 2 + 4, y + h - 5);
+      ctx.lineTo(x + w / 2 + 7, y + h - 8);
+      ctx.stroke();
+      ctx.lineCap = "butt";
+    } else if (ch.immune === "water") {
+      // Gota: cuerpo de agua, más ancho abajo, con burbujas dentro
+      ctx.fillStyle = ch.color;
+      ctx.beginPath();
+      ctx.moveTo(x + 4, y + 7);
+      ctx.quadraticCurveTo(x + w / 2, y + 2, x + w - 4, y + 7);
+      ctx.quadraticCurveTo(x + w + 1, y + h - 8, x + w - 3, y + h - 4);
+      ctx.lineTo(x + 3, y + h - 4);
+      ctx.quadraticCurveTo(x - 1, y + h - 8, x + 4, y + 7);
+      ctx.fill();
+      ctx.shadowBlur = 0;
+      const phase = (t * 0.7) % 1;
+      ctx.fillStyle = "rgba(232,248,255,0.55)";
+      ctx.beginPath();
+      ctx.arc(x + 6, y + h - 7 - phase * 12, 1.6, 0, Math.PI * 2);
+      ctx.arc(x + w - 6, y + h - 5 - ((phase + 0.5) % 1) * 12, 1.2, 0, Math.PI * 2);
+      ctx.fill();
+    } else {
+      ctx.fillStyle = ch.color;
+      roundRectPath(ctx, x, y + 6, w, h - 10, 10);
+      ctx.fill();
+      ctx.shadowBlur = 0;
+    }
     ctx.fillStyle = "rgba(255,255,255,0.18)";
     roundRectPath(ctx, x + 4, y + 8, w - 8, 5, 2.5);
     ctx.fill();
@@ -3723,7 +3779,7 @@
       ctx.arc(cx + look, y + 23.5, 2.2, 0, Math.PI);
       ctx.stroke();
     } else {
-      ctx.strokeStyle = ch.dark;
+      ctx.strokeStyle = ch.immune === "fire" ? "#ffb347" : ch.dark;
       ctx.lineWidth = 1.5;
       ctx.beginPath();
       ctx.arc(cx + look, y + 19.5, 3, 0.15 * Math.PI, 0.85 * Math.PI);
@@ -3849,8 +3905,8 @@
   function drawTitle(t) {
     dim(0.82);
     drawNews(t, 24);
-    text("Fireboy, Watergirl & AcidBaby", W / 2, 70, 40, "#ffe9b8");
-    text("Lleven a los tres a su puerta. Cada uno solo sobrevive a su elemento.", W / 2, 112, 18, "#d9c9a6", "center", "normal");
+    text(GAME_TITLE, W / 2, 70, 44, "#ffe9b8");
+    text("Lleven a Chispa, Gota y AcidBaby a su puerta. Cada uno solo sobrevive a su elemento.", W / 2, 112, 18, "#d9c9a6", "center", "normal");
 
     const cardW = 260;
     const cardH = 292;
@@ -3921,7 +3977,7 @@
       }
     });
     const hint = SEASONS.length > 1 ? "← →: temporada · ENTER: jugar" : "ENTER: jugar";
-    text(`${hint} · S ↓ H: disparar · ESC: pausa · R: reintentar · M: sonido ${save.muted ? "(apagado)" : ""}`, W / 2, 540, 14, "#9c8d70", "center", "normal");
+    text(`${hint} · S ↓ K: disparar · ESC: pausa · R: reintentar · M: sonido ${save.muted ? "(apagado)" : ""}`, W / 2, 540, 14, "#9c8d70", "center", "normal");
   }
 
   // Total de gemas de un nivel sin tener que cargarlo.
