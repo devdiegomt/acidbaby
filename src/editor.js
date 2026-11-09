@@ -234,14 +234,14 @@
   const PALETTE = [
     ["Terreno", [
       [" ", "Vacío", "#15110c"], ["#", "Pared", "#5a4a33"], ["L", "Lava", "#ff5a1f"], ["~", "Agua", "#1f7bff"],
-      ["A", "Ácido", "#46c22a"], ["%", "Óxido (AcidBaby)", "#6b5a2e"], ["+", "Hielo (Fireboy)", "#7cc6e8"],
-      ["=", "Sal (Watergirl)", "#e6dfcc"], ["|", "Cerradura", "#7a5524"], ["[", "Muro agrietado (bomba)", "#8a7a62"],
-      ["-", "Tablón frágil", "#8a5a2b"], [".", "Pinchos", "#c9c2b0"],
+      ["A", "Ácido", "#46c22a"], ["%", "Óxido (AcidBaby)", "#6b5a2e"], ["+", "Hielo (Chispa)", "#7cc6e8"],
+      ["=", "Sal (Gota)", "#e6dfcc"], ["|", "Cerradura", "#7a5524"], ["[", "Muro agrietado (bomba)", "#8a7a62"],
+      ["-", "Tablón frágil", "#8a5a2b"], [".", "Púas", "#c9c2b0"],
     ]],
     ["Barreras", [["4", "Barrera de fuego", "#a8401a"], ["5", "Barrera de agua", "#1d5fb8"], ["6", "Barrera de ácido", "#2f8a1c"]]],
     ["Personajes", [
-      ["f", "Inicio Fireboy", "#ff5a1f"], ["w", "Inicio Watergirl", "#2a8cff"], ["b", "Inicio AcidBaby", "#5fd12e"],
-      ["1", "Puerta Fireboy", "#8f2208"], ["2", "Puerta Watergirl", "#0c3f8f"], ["3", "Puerta AcidBaby", "#226b0c"],
+      ["f", "Inicio Chispa", "#ff5a1f"], ["w", "Inicio Gota", "#2a8cff"], ["b", "Inicio AcidBaby", "#5fd12e"],
+      ["1", "Puerta Chispa", "#8f2208"], ["2", "Puerta Gota", "#0c3f8f"], ["3", "Puerta AcidBaby", "#226b0c"],
     ]],
     ["Objetos", [
       ["r", "Rubí", "#ff4d5e"], ["z", "Zafiro", "#4da6ff"], ["e", "Esmeralda", "#7dff4d"], ["x", "Caja", "#9a6a35"],
@@ -273,7 +273,7 @@
   let problems = [];
   let hover = null;
   let stroke = null; // { ch, changed } mientras se arrastra pintando
-  let rectStart = null; // casilla donde empezó un rectángulo (Mayús + arrastrar)
+  let rectStart = null; // casilla donde empezó un rectángulo (Shift + arrastrar)
   let panel = null;
   let saveTimer = 0;
   const history = makeHistory();
@@ -352,7 +352,7 @@
       </section>
       <section>
         <h2>Piezas</h2>
-        <p class="help">Clic izquierdo: pintar · clic derecho: borrar · Mayús + arrastrar: rectángulo · también vale teclear el carácter de la pieza</p>
+        <p class="help">Clic izquierdo: pintar · clic derecho: borrar · Shift + arrastrar: rectángulo · también puedes escribir el carácter de la pieza</p>
         <div id="ed-palette"></div>
       </section>
       <section>

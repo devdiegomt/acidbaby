@@ -4,24 +4,24 @@
 //
 // Leyenda:
 //   #      pared / suelo
-//   L      lava   (solo Fireboy sobrevive)
-//   ~      agua   (solo Watergirl sobrevive)
+//   L      lava   (solo Chispa sobrevive)
+//   ~      agua   (solo Gota sobrevive)
 //   A      ácido  (solo AcidBaby sobrevive)
 //   %      bloque oxidado: AcidBaby lo disuelve al tocarlo
-//   +      bloque de hielo: Fireboy lo derrite al tocarlo
-//   =      bloque de sal: Watergirl lo disuelve al tocarlo
+//   +      bloque de hielo: Chispa lo derrite al tocarlo
+//   =      bloque de sal: Gota lo disuelve al tocarlo
 //          (al romper un bloque se rompen también todos los del mismo tipo pegados)
-//   4 5 6  barrera de fuego, agua y ácido: sólida para todos menos para Fireboy, Watergirl y AcidBaby
+//   4 5 6  barrera de fuego, agua y ácido: sólida para todos menos para Chispa, Gota y AcidBaby
 //   ^      ventilador siempre encendido: la corriente sube hasta 6 casillas o hasta el primer obstáculo
-//   f w b  dónde aparecen Fireboy, Watergirl y AcidBaby
-//   1 2 3  puerta de Fireboy, Watergirl y AcidBaby (ocupa la casilla y la de arriba)
-//   r z e  gema roja (rubí, Fireboy), azul (zafiro, Watergirl) y verde (esmeralda, AcidBaby)
+//   f w b  dónde aparecen Chispa, Gota y AcidBaby
+//   1 2 3  puerta de Chispa, Gota y AcidBaby (ocupa la casilla y la de arriba)
+//   r z e  gema roja (rubí, Chispa), azul (zafiro, Gota) y verde (esmeralda, AcidBaby)
 //   x      caja que se puede empujar (pisa botones y sirve de escalón; el viento no la levanta)
 //   7 8    pareja de portales morados; 9 0, pareja de portales turquesa (llevan personajes y cajas
 //          de uno al otro; un portal en el aire deja caer lo que sale por él)
-//   $      llave: va al inventario de quien la coge
+//   $      llave: va al inventario de quien la agarra
 //   |      cerradura: sólida; la abre (entera) quien la toque llevando una llave, que se gasta
-//   *      orbe: quien lo coge puede disparar su elemento (S, ↓, H), que mata bichos y rompe
+//   *      orbe: quien lo agarra puede disparar su elemento (S, ↓, K), que mata bichos y rompe
 //          a distancia el bloque que ese personaje rompe (hielo, sal u óxido)
 //   ?      corazón: devuelve una vida (cada personaje tiene 3 por nivel)
 //   @      escarabajo: patrulla por el suelo y se da la vuelta en paredes y bordes
@@ -33,13 +33,13 @@
 //   (      botas: doble salto en el aire durante el resto del nivel
 //   )      escudo: absorbe el siguiente golpe (una carga por personaje)
 //   ]      bomba: va al inventario; al tocar un muro agrietado explota, lo abre y mata a los bichos cercanos
-//   }      amuleto del cambio: al cogerlo los tres cambian de personaje en ronda (Fireboy pasa a ser
-//          Watergirl, Watergirl pasa a AcidBaby y AcidBaby pasa a Fireboy). Cada jugador conserva sus
+//   }      amuleto del cambio: al cogerlo los tres cambian de personaje en ronda (Chispa pasa a ser
+//          Gota, Gota pasa a AcidBaby y AcidBaby pasa a Chispa). Cada jugador conserva sus
 //          teclas, su sitio y su inventario; cambian su elemento, lo que rompe, las barreras que cruza y su puerta
 //   [      muro agrietado: sólido; solo lo abre una bomba (se abre entero, todas las casillas [ pegadas)
 //   ;      muelle: quien cae encima sale lanzado hacia arriba un piso entero (6 casillas)
 //   -      tablón frágil: se cae al poco de pisarlo y vuelve a aparecer al rato
-//   .      pinchos: quitan una vida al tocarlos
+//   .      púas: quitan una vida al tocarlas
 //   {      jefe final (el Guardián): flota entre las columnas boss.left y boss.right; su ojo
 //          queda a la altura de quien esté de pie en la fila boss.aimRow (ver el nivel "El Guardián")
 //   /      sello: sólido; se rompe solo (entero) cuando cae el jefe
@@ -53,7 +53,7 @@
 //   letra MAYÚSCULA  → su botón o palanca (puede haber varios)
 //   trigger: "button" → se activa mientras haya alguien (o una caja) encima
 //                       need: cuántos botones de esa letra hay que pisar a la vez (por defecto 1)
-//   trigger: "lever"  → palanca: se empuja andando hacia la derecha (activa) o la izquierda (desactiva)
+//   trigger: "lever"  → palanca: se empuja caminando hacia la derecha (activa) o la izquierda (desactiva)
 //   move: [dx, dy]    → cuántas casillas se desplaza al activarse (solo horizontal o vertical)
 //   kind: "fan"       → en vez de plataforma, las minúsculas son ventiladores que soplan solo
 //                       mientras el mecanismo está activo (no lleva "move")
@@ -66,7 +66,7 @@
 const LEVELS = [
   {
     name: "Primeros pasos",
-    hint: "Cada uno solo sobrevive a su elemento. ¡Recoged las gemas de vuestro color!",
+    hint: "Cada uno solo sobrevive a su elemento. ¡Recojan las gemas de su color!",
     map: [
       "################################",
       "#                              #",
@@ -90,7 +90,7 @@ const LEVELS = [
   },
   {
     name: "El ascensor",
-    hint: "Los botones mueven las plataformas mientras alguien los pisa. La palanca se empuja andando.",
+    hint: "Los botones mueven las plataformas mientras alguien los pisa. La palanca se empuja caminando.",
     mechanisms: {
       p: { trigger: "button", move: [0, -7] },
       h: { trigger: "lever", move: [0, -3] },
@@ -118,7 +118,7 @@ const LEVELS = [
   },
   {
     name: "Cajas y óxido",
-    hint: "Empujad las cajas. AcidBaby disuelve el óxido. Este ascensor necesita dos botones pisados.",
+    hint: "Empujen las cajas. AcidBaby disuelve el óxido. Este ascensor necesita dos botones pisados.",
     mechanisms: {
       q: { trigger: "button", need: 2, move: [0, -5] },
     },
@@ -145,7 +145,7 @@ const LEVELS = [
   },
   {
     name: "Corrientes de aire",
-    hint: "Los ventiladores os elevan. Cada barrera de color solo deja pasar a su dueño.",
+    hint: "Los ventiladores los elevan. Cada barrera de color solo deja pasar a su dueño.",
     mechanisms: {
       v: { trigger: "lever", kind: "fan" },
     },
@@ -172,7 +172,7 @@ const LEVELS = [
   },
   {
     name: "Hielo, sal y óxido",
-    hint: "Fireboy derrite el hielo, Watergirl la sal y AcidBaby el óxido... hasta que alguien coja el amuleto.",
+    hint: "Chispa derrite el hielo, Gota la sal y AcidBaby el óxido... hasta que alguien agarre el amuleto.",
     mechanisms: {
       g: { trigger: "button", kind: "fan" },
     },
@@ -199,7 +199,7 @@ const LEVELS = [
   },
   {
     name: "Puentes frágiles",
-    hint: "Quien rompe un puente cae al charco de abajo. Pisad los botones para encender los ventiladores.",
+    hint: "Quien rompe un puente cae al charco de abajo. Pisen los botones para encender los ventiladores.",
     mechanisms: {
       g: { trigger: "button", kind: "fan" },
       h: { trigger: "button", kind: "fan" },
@@ -228,7 +228,7 @@ const LEVELS = [
   },
   {
     name: "La sala de máquinas",
-    hint: "Una caja puede quedarse pisando un botón por vosotros.",
+    hint: "Una caja puede quedarse pisando un botón por ustedes.",
     mechanisms: {
       g: { trigger: "button", kind: "fan" },
       q: { trigger: "button", need: 2, move: [0, -5] },
@@ -257,7 +257,7 @@ const LEVELS = [
   },
   {
     name: "El corazón del templo",
-    hint: "Usad todo lo aprendido. La balsa solo cruza la lava mientras alguien pisa su botón.",
+    hint: "Usen todo lo aprendido. La balsa solo cruza la lava mientras alguien pisa su botón.",
     mechanisms: {
       p: { trigger: "button", move: [-8, 0] },
       v: { trigger: "lever", kind: "fan" },
@@ -312,7 +312,7 @@ const LEVELS = [
   },
   {
     name: "Bichos del templo",
-    hint: "Coged un orbe y disparad con S, ↓ o H. Saltad encima de los bichos o disparadles.",
+    hint: "Agarren un orbe y disparen con S, ↓ o K. Salten encima de los bichos o dispárenles.",
     map: [
       "################################",
       "#                     |        #",
@@ -363,7 +363,7 @@ const LEVELS = [
   },
   {
     name: "Línea de tiro",
-    hint: "Solo hay dos orbes, y arriba espera un amuleto que os cambiará. ¿Quién necesita de verdad un orbe?",
+    hint: "Solo hay dos orbes, y arriba espera un amuleto que los cambiará. ¿Quién necesita de verdad un orbe?",
     mechanisms: {
       g: { trigger: "button", kind: "fan" },
       v: { trigger: "lever", kind: "fan" },
@@ -419,7 +419,7 @@ const LEVELS = [
   },
   {
     name: "Tres a la vez",
-    hint: "La compuerta se abre con tres botones pisados. Pensad en qué orden se baja cada uno.",
+    hint: "La compuerta se abre con tres botones pisados. Piensen en qué orden se baja cada uno.",
     mechanisms: {
       g: { trigger: "button", need: 3, move: [0, 5] },
     },
@@ -446,7 +446,7 @@ const LEVELS = [
   },
   {
     name: "El último guardián",
-    hint: "Todo lo aprendido. Cada disparo tiene su sitio: buscad desde dónde se llega.",
+    hint: "Todo lo aprendido. Cada disparo tiene su lugar: busquen desde dónde se llega.",
     mechanisms: {
       g: { trigger: "button", kind: "fan" },
     },
@@ -524,7 +524,7 @@ const LEVELS = [
   },
   {
     name: "Casa encantada",
-    hint: "Los fantasmas atraviesan las paredes. Solo hay una bomba: no la malgastéis.",
+    hint: "Los fantasmas atraviesan las paredes. Solo hay una bomba: no la desperdicien.",
     map: [
       "################################",
       "#                              #",
@@ -599,7 +599,7 @@ const LEVELS = [
   },
   {
     name: "El Guardián",
-    hint: "El ojo del Guardián cambia de color: solo le hace daño ese elemento. ¡Subid a las repisas!",
+    hint: "El ojo del Guardián cambia de color: solo le hace daño ese elemento. ¡Suban a las repisas!",
     boss: { name: "El Guardián del Templo", left: 7, right: 24, aimRow: 11 },
     map: [
       "################################",
