@@ -94,7 +94,7 @@
 
   // Avisos de novedades: salen en la portada, en el menú de niveles y en la pausa.
   // Para cambiarlos (o quitarlos), basta con editar esta lista.
-  const NEWS = ["Próximos niveles: 15 de noviembre", "Próximamente: jugad online, cada uno desde su PC"];
+  const NEWS = ["Próximos niveles: 15 de noviembre", "Próximamente: jueguen online, cada uno desde su PC"];
 
   const FONT = '"Segoe UI", system-ui, sans-serif';
   const MECH_COLORS = ["#f2c14e", "#c86bff", "#ff6fa8", "#4fd6c8", "#f0f0f0"];
@@ -253,7 +253,7 @@
       name: "Temporada 1",
       subtitle: "El templo",
       theme: "temple",
-      ending: { title: "¡Habéis superado el templo!", text: "Fireboy, Watergirl y AcidBaby han llegado juntos hasta el final." },
+      ending: { title: "¡Superaron el templo!", text: "Fireboy, Watergirl y AcidBaby han llegado juntos hasta el final." },
       worlds: [{ name: "El templo", levels: LEVELS }],
     },
     ...(typeof SEASON_2 !== "undefined" ? [SEASON_2] : []),
@@ -809,7 +809,7 @@
       checkpoint = structuredClone(liveState());
       burst(f.c * T + T / 2, f.r * T, ["#ffe08a", "#ffffff", "#ffb347"], 30);
       sound.play("flag");
-      toast = { text: "¡Bandera de control! Si alguien cae, volvéis aquí.", frames: TOAST_FRAMES };
+      toast = { text: "¡Bandera de control! Si alguien cae, vuelven aquí.", frames: TOAST_FRAMES };
     }
   }
 
@@ -1340,7 +1340,7 @@
     for (const s of spikes) {
       for (const p of players) {
         if (!p.alive || p.hurt > 0 || !intersects(s.c * T + 4, (s.r + 1) * T - 12, T - 8, 12, p)) continue;
-        hurtPlayer(p, { x: s.c * T, w: T }, "se clavó unos pinchos");
+        hurtPlayer(p, { x: s.c * T, w: T }, "se chuzó con unas púas");
         if (state !== "playing") return;
       }
     }
@@ -3850,7 +3850,7 @@
     dim(0.82);
     drawNews(t, 24);
     text("Fireboy, Watergirl & AcidBaby", W / 2, 70, 40, "#ffe9b8");
-    text("Llevad a los tres a su puerta. Cada uno solo sobrevive a su elemento.", W / 2, 112, 18, "#d9c9a6", "center", "normal");
+    text("Lleven a los tres a su puerta. Cada uno solo sobrevive a su elemento.", W / 2, 112, 18, "#d9c9a6", "center", "normal");
 
     const cardW = 260;
     const cardH = 292;
@@ -4194,7 +4194,7 @@
     if (taken < total) text("Aún quedan gemas por encontrar…", W / 2, y + 32, 16, "#bfae88", "center", "normal");
     const next = SEASONS[seasonIndex + 1];
     if (next && isSeasonUnlocked(seasonIndex + 1)) {
-      text(`La ${next.name} (${next.subtitle}) os espera en la portada.`, W / 2, y + (taken < total ? 60 : 32), 17, "#9dff8a");
+      text(`La ${next.name} (${next.subtitle}) los espera en la portada.`, W / 2, y + (taken < total ? 60 : 32), 17, "#9dff8a");
     }
 
     ctx.globalAlpha = 0.6 + Math.sin(t * 4) * 0.4;

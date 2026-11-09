@@ -22,7 +22,7 @@
 //          es de un elemento (agua, lava, ácido); vaciarla con un desagüe después de que haya llegado
 //          arriba le quita una cabeza. Al perder las tres se rompen los sellos /
 //
-// Estrellas de cada nivel: completarlo, coger todas sus gemas y pasarlo sin perder un corazón
+// Estrellas de cada nivel: completarlo, recoger todas sus gemas y pasarlo sin perder un corazón
 // (ni volver a una bandera). Se pueden ganar en partidas distintas.
 //
 // Las casillas nuevas son símbolos de un solo carácter (como ⚑), nunca emojis: un emoji ocupa
@@ -34,7 +34,7 @@ const SEASON_2 = {
   subtitle: "Las profundidades",
   theme: "caves",
   ending: {
-    title: "¡Habéis salido de las profundidades!",
+    title: "¡Salieron de las profundidades!",
     text: "Fireboy, Watergirl y AcidBaby vuelven a la superficie, juntos otra vez.",
   },
   worlds: [
@@ -43,7 +43,7 @@ const SEASON_2 = {
       levels: [
         {
           name: "Bajada a las cuevas",
-          hint: "Reuníos los tres junto a la bandera: si alguien cae, volveréis allí y no al principio.",
+          hint: "Reúnanse los tres junto a la bandera: si alguien cae, volverán allí y no al principio.",
           map: [
             "############################################",
             "#########################                  #",
@@ -167,7 +167,7 @@ const SEASON_2 = {
         },
         {
           name: "Corazón de magma",
-          hint: "El Gólem de magma solo teme al agua: echadle los barriles encima o ponédselos delante.",
+          hint: "El Gólem de magma solo teme al agua: échenle los barriles encima o pónganselos delante.",
           golem: { name: "El Gólem de magma", left: 6, right: 31 },
           map: [
             "########################################",
@@ -275,7 +275,7 @@ const SEASON_2 = {
         },
         {
           name: "Balsas",
-          hint: "Las cajas flotan: subid en ellas con el ácido. Arriba, la compuerta solo se abre desde abajo.",
+          hint: "Las cajas flotan: súbanse en ellas con el ácido. Arriba, la compuerta solo se abre desde abajo.",
           tide: { type: "acid", delay: 240, speed: 0.35, top: 9 },
           mechanisms: {
             g: { trigger: "button", move: [0, -3] },
@@ -303,7 +303,7 @@ const SEASON_2 = {
         },
         {
           name: "La esclusa",
-          hint: "Saltad de balsa en balsa antes del techo. Arriba hay una tapa: solo Watergirl, desde abajo, puede apartarla.",
+          hint: "Salten de balsa en balsa antes del techo. Arriba hay una tapa: solo Watergirl, desde abajo, puede apartarla.",
           tide: { type: "water", delay: 200, speed: 0.4, top: 4 },
           mechanisms: {
             q: { trigger: "button", move: [3, 0] },

@@ -236,7 +236,7 @@
       [" ", "Vacío", "#15110c"], ["#", "Pared", "#5a4a33"], ["L", "Lava", "#ff5a1f"], ["~", "Agua", "#1f7bff"],
       ["A", "Ácido", "#46c22a"], ["%", "Óxido (AcidBaby)", "#6b5a2e"], ["+", "Hielo (Fireboy)", "#7cc6e8"],
       ["=", "Sal (Watergirl)", "#e6dfcc"], ["|", "Cerradura", "#7a5524"], ["[", "Muro agrietado (bomba)", "#8a7a62"],
-      ["-", "Tablón frágil", "#8a5a2b"], [".", "Pinchos", "#c9c2b0"],
+      ["-", "Tablón frágil", "#8a5a2b"], [".", "Púas", "#c9c2b0"],
     ]],
     ["Barreras", [["4", "Barrera de fuego", "#a8401a"], ["5", "Barrera de agua", "#1d5fb8"], ["6", "Barrera de ácido", "#2f8a1c"]]],
     ["Personajes", [
@@ -273,7 +273,7 @@
   let problems = [];
   let hover = null;
   let stroke = null; // { ch, changed } mientras se arrastra pintando
-  let rectStart = null; // casilla donde empezó un rectángulo (Mayús + arrastrar)
+  let rectStart = null; // casilla donde empezó un rectángulo (Shift + arrastrar)
   let panel = null;
   let saveTimer = 0;
   const history = makeHistory();
@@ -352,7 +352,7 @@
       </section>
       <section>
         <h2>Piezas</h2>
-        <p class="help">Clic izquierdo: pintar · clic derecho: borrar · Mayús + arrastrar: rectángulo · también vale teclear el carácter de la pieza</p>
+        <p class="help">Clic izquierdo: pintar · clic derecho: borrar · Shift + arrastrar: rectángulo · también puedes escribir el carácter de la pieza</p>
         <div id="ed-palette"></div>
       </section>
       <section>
