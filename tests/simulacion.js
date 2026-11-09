@@ -28,7 +28,7 @@ game = game.replace(
      get grid(){return grid}, get fans(){return fans}, get doors(){return doors}, get enemies(){return enemies}, get items(){return items}, get shots(){return shots},
      get save(){return save}, isUnlocked, get levelIndex(){return levelIndex}, get lastResult(){return lastResult},
      get menuIndex(){return menuIndex}, get levelFrames(){return levelFrames}, setLevel(i, si = 0){ testLevel = null; seasonIndex = si; levelIndex = i; loadLevel(i); state = "playing"; }, get darts(){return darts}, get crumbles(){return crumbles}, get boss(){return boss}, solidAt,
-     SEASONS, get seasonIndex(){return seasonIndex}, get titleIndex(){return titleIndex}, isSeasonUnlocked, levelNumber, get flags(){return flags}, get checkpoint(){return checkpoint}, get retries(){return retries}, get toast(){return toast}, get level(){return level}, worldRange, get spikes(){return spikes}, get obsidian(){return obsidian}, get liquids(){return liquids}, starsOf, starCount, get golem(){return golem}, get rocks(){return rocks}, get waves(){return waves}, get tide(){return tide} };\n})();`,
+     SEASONS, get seasonIndex(){return seasonIndex}, get titleIndex(){return titleIndex}, isSeasonUnlocked, levelNumber, get flags(){return flags}, get checkpoint(){return checkpoint}, get retries(){return retries}, get toast(){return toast}, get level(){return level}, worldRange, get spikes(){return spikes}, get obsidian(){return obsidian}, get liquids(){return liquids}, starsOf, starCount, get golem(){return golem}, get rocks(){return rocks}, get waves(){return waves}, get tide(){return tide}, get hydra(){return hydra} };\n})();`,
 );
 // editor.js va antes que game.js (como en index.html); sin DOM solo define EditorCore.
 eval(fs.readFileSync(ROOT + "levels.js", "utf8") + "\nglobalThis.LEVELS = LEVELS;\n" + fs.readFileSync(ROOT + "levels2.js", "utf8") + "\nglobalThis.SEASON_2 = SEASON_2;\n" + fs.readFileSync(ROOT + "editor.js", "utf8") + "\n" + game);
@@ -2005,6 +2005,67 @@ fire = P("Fireboy"); water = P("Watergirl"); acid = P("AcidBaby");
 place(fire, 15, 10); place(acid, 16, 10);
 for (let i = 0; i < 1500 && playing(); i++) { place(water, 30, 14); run(1); }
 check("Sin nadie en el botón, la tapa para las balsas y el agua los alcanza", G.state === "dead", where());
+// --- Nivel 2-6: la Hidra del aljibe -------------------------------------------------------------------
+console.log("\nNivel 2-6 (jefe)");
+G.setLevel(11, 1); run(1);
+fire = P("Fireboy"); water = P("Watergirl"); acid = P("AcidBaby");
+const hyd = () => G.hydra;
+// En este combate se prueba la mecánica: a nadie le hacen daño los escupitajos (se prueban aparte).
+const shielded = (n, until) => { for (let i = 0; i < n && !(until && until()) && playing(); i++) { for (const p of G.players) p.hurt = 5; run(1); } };
+const shieldedWalk = (p, c) => { const k = keysOf(p), dir = c * 32 + 16 > center(p) ? k.r : k.l; down(dir); shielded(600, () => Math.abs(c * 32 + 16 - center(p)) <= 3); up(dir); shielded(20); };
+const shieldedRide = (p, c) => { shieldedWalk(p, c); shielded(90); const k = keysOf(p); down(k.r); shielded(40, () => p.onGround && feetRow(p) === 10); up(k.r); shielded(20); };
+check("La Hidra empieza inundando con agua", hyd() && G.tide.type === "water" && hyd().hits === 0);
+// Fase 1: agua. Fireboy y AcidBaby suben por el ventilador; Watergirl espera abajo.
+shieldedRide(fire, 1);
+shieldedRide(acid, 1);
+check("Fireboy y AcidBaby suben a la repisa", feetRow(fire) === 10 && feetRow(acid) === 10, where());
+shieldedWalk(water, 13);
+shielded(1200, () => hyd().armed);
+check("El agua llega arriba (y cubre a la Hidra)", hyd().armed && G.tide.y === 12 * 32 && playing(), where());
+shieldedWalk(water, 15);
+shielded(300, () => hyd().hits === 1);
+check("Watergirl vacía el aljibe con el desagüe: primera cabeza", hyd().hits === 1 && G.tide.type === "fire", `golpes ${hyd().hits}`);
+check("…y avisa de que ahora sube la lava", G.toast?.text.includes("lava") && G.toast.text.includes("Fireboy"), G.toast?.text);
+// Fase 2: lava. Watergirl sube; Fireboy baja.
+shieldedRide(water, 1);
+shieldedWalk(fire, 11);
+shielded(1200, () => hyd().armed);
+check("Sube la lava", hyd().armed && G.tide.type === "fire" && playing(), where());
+shieldedWalk(fire, 15);
+shielded(300, () => hyd().hits === 2);
+check("Fireboy la vacía: segunda cabeza", hyd().hits === 2 && G.tide.type === "acid");
+// Fase 3: ácido. Fireboy sube; AcidBaby baja.
+shieldedRide(fire, 1);
+shieldedWalk(acid, 11);
+shielded(1200, () => hyd().armed);
+shieldedWalk(acid, 24);
+shielded(300, () => hyd().hits === 3);
+check("AcidBaby vacía el ácido: tercera cabeza", hyd().hits === 3 && hyd().state === "dying");
+shielded(200);
+check("La Hidra cae y se rompe el sello", hyd().state === "dead" && [8, 9, 10].every((r) => G.grid[r][35] === " "));
+shielded(400);
+check("…y el aljibe ya no se vuelve a inundar", G.tide.y === 17 * 32);
+for (const p of [fire, water, acid]) { if (feetRow(p) === 10 && center(p) < 20 * 32) shieldedWalk(p, 11); shieldedRide(p, 30); shieldedWalk(p, G.doors[p.ch.door].c); }
+check("Todos a sus puertas", G.state === "won", where());
+// Vaciarla antes de que la marea llegue arriba no cuenta.
+G.setLevel(11, 1); run(1);
+place(P("Watergirl"), 15, 16);
+shielded(300);
+check("Pisar el desagüe antes de que se llene no le hace nada", G.hydra.hits === 0 && !G.hydra.armed);
+// Escupe bolas de su elemento a quien ve.
+G.setLevel(11, 1); run(1);
+fire = P("Fireboy");
+place(fire, 5, 10);
+for (let i = 0; i < 400 && !G.rocks.some((r) => r.element); i++) run(1);
+check("Escupe bolas de su elemento", G.rocks.some((r) => r.element === "water"));
+const heartsBefore = G.players.reduce((n, p) => n + p.hearts, 0);
+run(120);
+check("…que quitan corazones", G.players.reduce((n, p) => n + p.hearts, 0) < heartsBefore || !playing());
+G.setLevel(11, 1); run(1);
+acid = P("AcidBaby");
+place(acid, 19, 16);
+run(3);
+check("Tocar a la Hidra duele", acid.hearts < 3, `vidas ${acid.hearts}`);
 G.setLevel(0);
 
 process.exitCode = failures ? 1 : 0;

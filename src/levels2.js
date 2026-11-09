@@ -18,6 +18,9 @@
 //   Un mecanismo con kind: "drain" (desagüe) solo lleva botón o palanca: mientras está activo, la
 //   marea baja. Un barril del elemento contrario que se hunde en ella la hace bajar 3 casillas.
 //   Las cajas flotan en la marea y suben con ella, llevando a quien va encima (los barriles no).
+//   Ψ      la Hidra del aljibe (jefe del Mundo 2): necesita marea y un desagüe. En cada fase la marea
+//          es de un elemento (agua, lava, ácido); vaciarla con un desagüe después de que haya llegado
+//          arriba le quita una cabeza. Al perder las tres se rompen los sellos /
 //
 // Estrellas de cada nivel: completarlo, coger todas sus gemas y pasarlo sin perder un corazón
 // (ni volver a una bandera). Se pueden ganar en partidas distintas.
@@ -323,6 +326,35 @@ const SEASON_2 = {
             "#          ####                        #",
             "#          5555           z            #",
             "# fwb   xx 5555               Q     2  #",
+            "########################################",
+          ],
+        },
+        {
+          name: "El aljibe",
+          hint: "La Hidra inunda el aljibe. Que suba quien no aguante, y que el otro vacíe el desagüe: en seco, sufre.",
+          tide: { type: "water", delay: 200, speed: 0.7, top: 12 },
+          hydra: { name: "La Hidra del aljibe" },
+          mechanisms: {
+            d: { trigger: "button", kind: "drain" },
+          },
+          map: [
+            "########################################",
+            "########################################",
+            "########################################",
+            "#                                      #",
+            "#                                      #",
+            "#                                      #",
+            "#                                      #",
+            "#                                      #",
+            "#                                  /   #",
+            "#                                  /   #",
+            "#                                  /123#",
+            "#  #######                      ########",
+            "#                                      #",
+            "#                                      #",
+            "#        e  z              r           #",
+            "#                                      #",
+            "#^  fwb        D   Ψ    D     ^        #",
             "########################################",
           ],
         },
