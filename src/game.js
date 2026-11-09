@@ -92,6 +92,10 @@
   const HYDRA_FLOOD_DELAY = 200; // aviso antes de cada inundación
   const HYDRA_HURT = 120;
 
+  // Avisos de novedades: salen en la portada, en el menú de niveles y en la pausa.
+  // Para cambiarlos (o quitarlos), basta con editar esta lista.
+  const NEWS = ["Próximos niveles: 15 de noviembre", "Próximamente: jugad online, cada uno desde su PC"];
+
   const FONT = '"Segoe UI", system-ui, sans-serif';
   const MECH_COLORS = ["#f2c14e", "#c86bff", "#ff6fa8", "#4fd6c8", "#f0f0f0"];
 
@@ -3817,6 +3821,26 @@
     banner(toast.text, Math.min(1, toast.frames / 40, (TOAST_FRAMES - toast.frames) / 10), T + (below ? 52 : 10), "#ffe08a");
   }
 
+  // Cartel de novedades: una cinta dorada que late suavemente, centrada en y.
+  function drawNews(t, y) {
+    if (!NEWS.length) return;
+    const msg = `★ ${NEWS.join("   ·   ")}`;
+    ctx.font = `bold 15px ${FONT}`;
+    const w = Math.min(W - 24, ctx.measureText(msg).width + 36);
+    ctx.save();
+    ctx.shadowColor = "#ffb347";
+    ctx.shadowBlur = 10 + Math.sin(t * 3) * 6;
+    ctx.fillStyle = "#3b2a10";
+    roundRectPath(ctx, W / 2 - w / 2, y - 15, w, 30, 15);
+    ctx.fill();
+    ctx.restore();
+    ctx.strokeStyle = "#ffe08a";
+    ctx.lineWidth = 2;
+    roundRectPath(ctx, W / 2 - w / 2, y - 15, w, 30, 15);
+    ctx.stroke();
+    text(msg, W / 2, y, 15, "#ffe08a");
+  }
+
   function dim(alpha) {
     ctx.fillStyle = `rgba(10,8,5,${alpha})`;
     ctx.fillRect(0, 0, W, H);
@@ -3824,6 +3848,7 @@
 
   function drawTitle(t) {
     dim(0.82);
+    drawNews(t, 24);
     text("Fireboy, Watergirl & AcidBaby", W / 2, 70, 40, "#ffe9b8");
     text("Llevad a los tres a su puerta. Cada uno solo sobrevive a su elemento.", W / 2, 112, 18, "#d9c9a6", "center", "normal");
 
@@ -3958,6 +3983,7 @@
     dim(0.78);
     const { world, start, n } = worldRange();
     const worlds = season().worlds.length;
+    drawNews(tick / 60, 20);
     text(season().name, W / 2, 56, 34, "#ffe9b8");
     const sub = worlds > 1 ? `Mundo ${world + 1} de ${worlds} · ${season().worlds[world].name}` : season().subtitle;
     text(sub, W / 2, 90, 16, "#d9c9a6", "center", "normal");
@@ -4052,6 +4078,7 @@
     ctx.lineWidth = 2;
     ctx.stroke();
     text("Pausa", W / 2, H / 2 - 120, 40, "#ffe9b8");
+    drawNews(tick / 60, H / 2 - 200);
     pauseItems().forEach((item, i) => {
       const r = pauseItemRect(i);
       const selected = i === menuIndex;
