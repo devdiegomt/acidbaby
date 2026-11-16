@@ -2534,7 +2534,12 @@
     for (const e of enemies) if (e.alive && e.type === "ghost") out.push({ x: e.x + e.w / 2, y: e.y + e.h / 2, r: LIGHT.ghost });
     for (const s of shots) out.push({ x: s.x + s.w / 2, y: s.y + s.h / 2, r: LIGHT.shot });
     for (const g of geysers) {
-      if (g.plugged || g.type === "water") continue;
+      if (g.plugged) continue;
+      if (g.type === "water") {
+        // El agua no brilla, pero sus burbujas y su chorro se ven un poco (si no, sería una trampa invisible).
+        if (g.warn || g.h > 0) out.push({ x: g.c * T + T / 2, y: g.r * T - Math.max(8, g.h / 2), r: LIGHT.glow });
+        continue;
+      }
       const r = g.type === "fire" ? LIGHT.lava : LIGHT.acid;
       out.push({ x: g.c * T + T / 2, y: g.r * T, r });
       if (g.h > T) out.push({ x: g.c * T + T / 2, y: g.r * T - g.h / 2, r: r * 1.6 });
