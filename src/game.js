@@ -330,6 +330,10 @@
     return { ...s, levels, where };
   });
 
+  // Tamaño de la vista: el del nivel más grande de todas las temporadas.
+  const VIEW_COLS = Math.max(...SEASONS.flatMap((s) => s.levels.map((lv) => lv.map[0].length)));
+  const VIEW_ROWS = Math.max(...SEASONS.flatMap((s) => s.levels.map((lv) => lv.map.length)));
+
   let seasonIndex = 0;
   const season = () => SEASONS[seasonIndex];
   const seasonLevels = () => season().levels;
@@ -651,8 +655,15 @@
   // ---------------------------------------------------------------------------
   const canvas = document.getElementById("game");
   const ctx = canvas.getContext("2d");
+  // W × H es la vista (el lienzo): igual para todos los niveles, del tamaño del más grande, para
+  // que al cambiar de nivel o de temporada nada cambie de tamaño. El nivel (LW × LH) va centrado
+  // en ella (desplazado OX, OY) y el resto se rellena de pared. En el editor, la vista es el nivel.
   let W = 0;
   let H = 0;
+  let LW = 0;
+  let LH = 0;
+  let OX = 0;
+  let OY = 0;
 
   let state = "title"; // title (menú principal) | help | levels | editor | playing | paused | dead | won | ending
   let testLevel = null; // nivel del editor que se está probando (null: niveles del juego)
@@ -989,8 +1000,16 @@
       }
     }
 
-    canvas.width = W = grid[0].length * T;
-    canvas.height = H = grid.length * T;
+    LW = grid[0].length * T;
+    LH = grid.length * T;
+    const editing = state === "editor";
+    W = editing ? LW : Math.max(VIEW_COLS * T, LW);
+    H = editing ? LH : Math.max(VIEW_ROWS * T, LH);
+    // Centrado, en casillas enteras cuando se puede (así el relleno de pared casa con el nivel).
+    OX = Math.floor((W - LW) / 2 / (T / 2)) * (T / 2);
+    OY = Math.floor((H - LH) / 2 / (T / 2)) * (T / 2);
+    canvas.width = W;
+    canvas.height = H;
     fitCanvas();
     background = buildBackground();
     particles = [];
@@ -2089,7 +2108,7 @@
       w.x += w.vx;
       const hit = players.find((p) => p.alive && intersects(w.x, w.y, w.w, w.h, p));
       if (hit && hit.hurt === 0) hurtPlayer(hit, w, w.cause || "no saltó la onda del Guardián");
-      if (solidAt(w.x, w.y, w.w, w.h - 2, null) || w.x < -40 || w.x > W + 40) w.dead = true;
+      if (solidAt(w.x, w.y, w.w, w.h - 2, null) || w.x < -40 || w.x > LW + 40) w.dead = true;
       if (state !== "playing") break;
     }
     waves = waves.filter((w) => !w.dead);
@@ -3521,11 +3540,15 @@
       }
     }
 
-    // Los bloques oxidados se dibujan aparte porque pueden desaparecer.
+    // Los bloques oxidados se dibujan aparte porque pueden desaparecer. Fuera del nivel (el relleno
+    // de la vista) todo es pared: tileAt devuelve "#".
     const isWall = (t) => t === "#" || t in LIQUID_BY_TILE || t in GEYSER_BY_TILE;
-    for (let r = 0; r < grid.length; r++) {
-      for (let c = 0; c < grid[r].length; c++) {
-        if (!isWall(grid[r][c])) continue;
+    g.translate(OX, OY);
+    const c0 = -Math.ceil(OX / T);
+    const r0 = -Math.ceil(OY / T);
+    for (let r = r0; r < grid.length + Math.ceil(OY / T); r++) {
+      for (let c = c0; c < grid[0].length + Math.ceil(OX / T); c++) {
+        if (!isWall(tileAt(c, r))) continue;
         const x = c * T;
         const y = r * T;
         drawStone(g, x, y, r, theme);
@@ -5485,31 +5508,31 @@
     glow.addColorStop(0, `rgba(${el.glow},0)`);
     glow.addColorStop(1, `rgba(${el.glow},0.3)`);
     ctx.fillStyle = glow;
-    ctx.fillRect(0, tide.y - 26, W, 30);
+    ctx.fillRect(0, tide.y - 26, LW, 30);
     ctx.beginPath();
-    ctx.moveTo(0, H);
-    for (let x = 0; x <= W; x += 8) ctx.lineTo(x, surface(x));
-    ctx.lineTo(W, H);
+    ctx.moveTo(0, LH);
+    for (let x = 0; x <= LW; x += 8) ctx.lineTo(x, surface(x));
+    ctx.lineTo(LW, LH);
     ctx.closePath();
     ctx.globalAlpha = 0.5;
     ctx.fillStyle = el.body;
     ctx.fill();
     ctx.globalAlpha = 1;
     ctx.beginPath();
-    for (let x = 0; x <= W; x += 8) (x ? ctx.lineTo : ctx.moveTo).call(ctx, x, surface(x));
+    for (let x = 0; x <= LW; x += 8) (x ? ctx.lineTo : ctx.moveTo).call(ctx, x, surface(x));
     ctx.strokeStyle = el.top;
     ctx.lineWidth = 3;
     ctx.stroke();
     // Burbujas que suben (o remolinos si un desagüe la está bajando)
     for (let i = 0; i < 14; i++) {
-      const bx = ((i * 97.3) % 1) * W + ((i * 211) % W);
+      const bx = ((i * 97.3) % 1) * LW + ((i * 211) % LW);
       const phase = (t * (tide.draining ? -0.6 : 0.4) + i * 0.17) % 1;
       const by = H - (H - tide.y) * ((phase + 1) % 1);
       if (by < tide.y + 4) continue;
       ctx.globalAlpha = 0.5;
       ctx.fillStyle = el.top;
       ctx.beginPath();
-      ctx.arc(bx % W, by, 2.5, 0, Math.PI * 2);
+      ctx.arc(bx % LW, by, 2.5, 0, Math.PI * 2);
       ctx.fill();
     }
     ctx.restore();
@@ -5766,10 +5789,12 @@
     }
     const g = darkCanvas.getContext("2d");
     g.globalCompositeOperation = "source-over";
+    g.setTransform(1, 0, 0, 1, 0, 0);
     g.clearRect(0, 0, W, H);
     g.fillStyle = DARKNESS;
     g.fillRect(0, 0, W, H);
     g.globalCompositeOperation = "destination-out";
+    g.translate(OX, OY); // las luces van en coordenadas del nivel
     for (const L of lightSources(t)) {
       const grad = g.createRadialGradient(L.x, L.y, L.r * 0.3, L.x, L.y, L.r);
       grad.addColorStop(0, "rgba(0,0,0,1)");
@@ -5780,7 +5805,7 @@
       g.fill();
     }
     g.globalCompositeOperation = "source-over";
-    ctx.drawImage(darkCanvas, 0, 0);
+    ctx.drawImage(darkCanvas, -OX, -OY); // (el lienzo del juego ya está desplazado al nivel)
   }
 
   // Dispensador: un caño en el techo de la casilla que gotea agua.
@@ -5878,6 +5903,7 @@
     ctx.save();
     if (shake > 0) ctx.translate((Math.random() - 0.5) * shake * 0.8, (Math.random() - 0.5) * shake * 0.8);
     ctx.drawImage(background, 0, 0);
+    ctx.translate(OX, OY); // el mundo se dibuja en coordenadas del nivel, centrado en la vista
     drawBreakables(t);
     drawCrumbles(t);
     drawLiquids(t);
