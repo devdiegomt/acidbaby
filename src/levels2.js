@@ -22,6 +22,13 @@
 //          es de un elemento (agua, lava, ácido); vaciarla con un desagüe después de que haya llegado
 //          arriba le quita una cabeza. Al perder las tres se rompen los sellos /
 //
+// Oscuridad (Mundo 3): con "dark: true" en el nivel solo se ve lo que da luz: Chispa (mucha),
+// Gota y Acidito (un poco, a su alrededor), antorchas encendidas, faroles, lava, ácido (poco),
+// gemas, puertas, portales y fantasmas. El agua no brilla.
+//   †      antorcha apagada: la enciende Chispa al tocarla o una bola de fuego
+//   ‡      antorcha ya encendida
+//   ¤      farol: quien lo agarra lleva luz consigo (uno por personaje)
+//
 // Estrellas de cada nivel: completarlo, recoger todas sus gemas y pasarlo sin perder un corazón
 // (ni volver a una bandera). Se pueden ganar en partidas distintas.
 //
@@ -356,6 +363,64 @@ const SEASON_2 = {
             "#                                      #",
             "#^  fwb        D   Ψ    D     ^        #",
             "########################################",
+          ],
+        },
+      ],
+    },
+    {
+      name: "Las minas a oscuras",
+      levels: [
+        {
+          name: "Sin luz",
+          hint: "Todo está a oscuras: Chispa alumbra y prende las antorchas. Ojo, el agua no brilla.",
+          dark: true,
+          map: [
+            "########################################",
+            "########################################",
+            "########################################",
+            "########################################",
+            "##  ####  ##  ###  ####  ##  ####  ### #",
+            "#    ##        #    ##        #     #  #",
+            "#                                      #",
+            "#                                      #",
+            "#                                      #",
+            "#                              z       #",
+            "#                     1 2 3  †   †     #",
+            "#                   ################   #",
+            "#                                      #",
+            "#                                      #",
+            "#            z       r       e         #",
+            "#                                      #",
+            "# fwb †       †       †       †      ^ #",
+            "#########~~######LL######AA#############",
+          ],
+        },
+        {
+          name: "El farol",
+          hint: "Chispa, por arriba, baja el puente. Gota y Acidito, por abajo, se reparten un solo farol.",
+          dark: true,
+          mechanisms: {
+            h: { trigger: "lever", move: [0, 3] },
+          },
+          map: [
+            "########################################",
+            "########################################",
+            "########################################",
+            "########################################",
+            "###  ###  ## ####  ###  ####  ###  ##  #",
+            "#     #       ##    #     #    #       #",
+            "#                                      #",
+            "#                                      #",
+            "#                                      #",
+            "#                 r                    #",
+            "#       †   .   †   .   †       † H    #",
+            "#  #######################---#######   #",
+            "#                                      #",
+            "#                         hhhhhhh      #",
+            "#            z     e                   #",
+            "#                                      #",
+            "#^fwb¤                  @         1 2 3#",
+            "#########AA####~~####AA###~~~~~~~#######",
           ],
         },
       ],

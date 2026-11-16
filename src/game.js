@@ -96,7 +96,7 @@
 
   // Avisos de novedades: salen en la portada, en el menú de niveles y en la pausa.
   // Para cambiarlos (o quitarlos), basta con editar esta lista.
-  const NEWS = ["Próximos niveles: 15 de noviembre", "Próximamente: jueguen online, cada uno desde su PC"];
+  const NEWS = ["¡Nuevo! Mundo 3: Las minas a oscuras", "Próximamente: jueguen online, cada uno desde su PC"];
 
   const FONT = '"Segoe UI", system-ui, sans-serif';
   const MECH_COLORS = ["#f2c14e", "#c86bff", "#ff6fa8", "#4fd6c8", "#f0f0f0"];
@@ -146,7 +146,13 @@
     hedgehog: { name: "un erizo", w: 24, h: 20, speed: 1, flies: false, stompable: false },
     ghost: { name: "un fantasma", w: 24, h: 24, speed: 0.8, flies: true, stompable: false },
   };
-  const ITEM_BY_TILE = { $: "key", "*": "weapon", "?": "heart", "(": "boots", ")": "shield", "]": "bomb", "}": "swap" };
+  const ITEM_BY_TILE = { $: "key", "*": "weapon", "?": "heart", "(": "boots", ")": "shield", "]": "bomb", "}": "swap", "¤": "lantern" };
+  // Oscuridad (Temporada 2, Mundo 3): con "dark: true" en el nivel solo se ve lo que da luz.
+  // Las antorchas (†) las enciende Chispa al tocarlas (o con una bola de fuego); ‡ empieza encendida.
+  const TORCH_TILE = "†";
+  const LIT_TORCH_TILE = "‡";
+  const DARKNESS = "rgba(4,3,8,0.94)";
+  const LIGHT = { chispa: 150, glow: 44, torch: 150, lantern: 120, lava: 46, acid: 30, gem: 22, door: 34, portal: 34, ghost: 44, shot: 56 };
 
   const CHARACTERS = [
     {
@@ -430,6 +436,10 @@
         tone(990, 0.1, { vol: 0.08, delay: 0.05 });
       },
       locked: () => tone(150, 0.18, { type: "sawtooth", vol: 0.1, to: 110 }),
+      torch: () => {
+        noise(0.35, { vol: 0.14, freq: 900, filter: "bandpass" }); // fuego que prende
+        tone(220, 0.25, { type: "triangle", vol: 0.1, to: 440 });
+      },
       flood: () => {
         noise(1.2, { vol: 0.16, freq: 220, filter: "lowpass" }); // rugido del líquido que sube
         tone(70, 0.9, { type: "sine", vol: 0.15, to: 90 });
@@ -504,6 +514,7 @@
   let toast = null; // aviso breve en pantalla: { text, frames }
   let boss = null; // jefe final (si el nivel tiene)
   let golem = null; // Gólem de magma (jefe del Mundo 1 de la temporada 2)
+  let torches = []; // antorchas: { c, r, lit }
   let hydra = null; // la Hidra del aljibe (jefe del Mundo 2 de la temporada 2)
   let tide = null; // marea: { type, y (superficie, px), bottom, top, speed, delay, draining }
   let dispensers = []; // sueltan barriles de agua: { c, r, wait }
@@ -587,6 +598,7 @@
     boss = null;
     golem = null;
     hydra = null;
+    torches = [];
     dispensers = [];
     rocks = [];
     waves = [];
@@ -653,6 +665,10 @@
         }
         if (t === FLAG_TILE) {
           flags.push({ c, r, on: false });
+          continue;
+        }
+        if (t === TORCH_TILE || t === LIT_TORCH_TILE) {
+          torches.push({ c, r, lit: t === LIT_TORCH_TILE });
           continue;
         }
         if (t === GOLEM_TILE) {
@@ -740,7 +756,7 @@
         hearts: MAX_HEARTS,
         hurt: 0, // frames de invencibilidad que quedan
         shotCooldown: 0,
-        inv: { keys: 0, weapon: false, boots: false, shield: 0, bombs: 0 },
+        inv: { keys: 0, weapon: false, boots: false, shield: 0, bombs: 0, lantern: false },
         controls: ch.keys,
         controlLabel: ch.keyLabel,
         swapFlash: 0, // frames que se enseñan sus teclas encima tras un cambio de personaje
@@ -803,7 +819,7 @@
   function liveState() {
     return {
       grid, liquids, breakables, dissolving, barriers, fans, doors, boxes, gems, mechs, portals,
-      enemies, items, springs, crumbles, spikes, flags, obsidian, boss, bossDefeatedAt, golem, dispensers, tide, hydra,
+      enemies, items, springs, crumbles, spikes, flags, obsidian, boss, bossDefeatedAt, golem, dispensers, tide, hydra, torches,
       players: players.map((p) => ({
         ...p,
         ch: CHARACTERS.indexOf(p.ch),
@@ -826,7 +842,7 @@
   function backToCheckpoint() {
     const s = structuredClone(checkpoint);
     ({ grid, liquids, breakables, dissolving, barriers, fans, doors, boxes, gems, mechs, portals } = s);
-    ({ enemies, items, springs, crumbles, spikes, flags, obsidian, boss, bossDefeatedAt, golem, dispensers, tide, hydra } = s);
+    ({ enemies, items, springs, crumbles, spikes, flags, obsidian, boss, bossDefeatedAt, golem, dispensers, tide, hydra, torches } = s);
     players = s.players.map((p) =>
       Object.assign(p, {
         ch: CHARACTERS[p.ch],
@@ -1405,6 +1421,7 @@
         if (it.type === "weapon" && p.inv.weapon) continue;
         if (it.type === "boots" && p.inv.boots) continue;
         if (it.type === "shield" && p.inv.shield >= MAX_SHIELDS) continue;
+        if (it.type === "lantern" && p.inv.lantern) continue;
         if (it.type === "swap") {
           swapCharacters();
         } else if (it.type === "heart") {
@@ -1416,6 +1433,7 @@
           else if (it.type === "weapon") p.inv.weapon = true;
           else if (it.type === "boots") p.inv.boots = true;
           else if (it.type === "shield") p.inv.shield++;
+          else if (it.type === "lantern") p.inv.lantern = true;
           else p.inv.bombs++;
           sound.play("pickup");
         }
@@ -2086,6 +2104,43 @@
     breakSeals();
   }
 
+  // Chispa enciende una antorcha al tocarla; una bola de fuego también.
+  function updateTorches() {
+    for (const tc of torches) {
+      if (tc.lit) continue;
+      const x = tc.c * T + 8;
+      const y = tc.r * T + 4;
+      const byChispa = players.some((p) => p.alive && p.ch.immune === "fire" && intersects(x, y, T - 16, T - 4, p));
+      const byShot = shots.some((s) => s.type === "fire" && intersects(x, y, T - 16, T - 4, s));
+      if (!byChispa && !byShot) continue;
+      tc.lit = true;
+      burst(tc.c * T + T / 2, tc.r * T + 6, ["#ffd166", "#ff8a1a", "#ffffff"], 16);
+      sound.play("torch");
+    }
+  }
+
+  // Lo que da luz en un nivel a oscuras: { x, y, r } (radio en píxeles).
+  function lightSources(t) {
+    const out = [];
+    const flick = (k) => 1 + Math.sin(t * 9 + k) * 0.03 + Math.sin(t * 23 + k * 2) * 0.015;
+    for (const p of players) {
+      if (!p.alive) continue;
+      const cx = p.x + p.w / 2;
+      const cy = p.y + p.h / 2;
+      out.push({ x: cx, y: cy, r: p.ch.immune === "fire" ? LIGHT.chispa * flick(1) : LIGHT.glow });
+      if (p.inv.lantern) out.push({ x: cx, y: cy - 6, r: LIGHT.lantern * flick(3) });
+    }
+    torches.forEach((tc, i) => tc.lit && out.push({ x: tc.c * T + T / 2, y: tc.r * T + 6, r: LIGHT.torch * flick(i + 5) }));
+    for (const l of liquids) if (l.type !== "water") out.push({ x: l.c * T + T / 2, y: l.r * T + 6, r: l.type === "fire" ? LIGHT.lava : LIGHT.acid });
+    for (const g of gems) if (!g.taken) out.push({ x: g.c * T + T / 2, y: g.r * T + T / 2, r: LIGHT.gem });
+    for (const d of Object.values(doors)) out.push({ x: d.c * T + T / 2, y: d.r * T, r: LIGHT.door });
+    for (const p of portals) out.push({ x: p.c * T + T / 2, y: p.r * T + T / 2, r: LIGHT.portal });
+    for (const e of enemies) if (e.alive && e.type === "ghost") out.push({ x: e.x + e.w / 2, y: e.y + e.h / 2, r: LIGHT.ghost });
+    for (const s of shots) out.push({ x: s.x + s.w / 2, y: s.y + s.h / 2, r: LIGHT.shot });
+    for (const it of items) if (!it.taken && it.type === "lantern") out.push({ x: it.c * T + T / 2, y: it.r * T + T / 2, r: LIGHT.glow });
+    return out;
+  }
+
   // Los dispensadores sueltan un barril de agua cuando el suyo se ha gastado (al rato).
   function updateDispensers() {
     if (golem && (golem.state === "dying" || golem.state === "dead")) return;
@@ -2394,6 +2449,7 @@
         for (const p of players) updatePlayer(p);
         updateFlags();
         if (tide) updateTide();
+        if (torches.length) updateTorches();
         updateBoxes();
         updateCrumbles();
         for (const s of springs) if (s.squash > 0) s.squash--;
@@ -3176,6 +3232,7 @@
       else if (it.type === "shield") drawShieldIcon(cx, cy, 9);
       else if (it.type === "bomb") drawBombIcon(cx, cy, 9, t);
       else if (it.type === "swap") drawSwapIcon(cx, cy, 10, t);
+      else if (it.type === "lantern") drawLanternIcon(cx, cy, 10, t);
       else {
         ctx.save();
         ctx.shadowColor = "#ff4d6d";
@@ -3840,6 +3897,7 @@
       slot(p.inv.shield, (cx) => drawShieldIcon(cx, T / 2, 7), 14);
       slot(p.inv.bombs, (cx) => drawBombIcon(cx, T / 2, 6, tick / 60), 14);
       slot(p.inv.keys, (cx) => drawKeyIcon(cx, T / 2, 7), 16);
+      slot(p.inv.lantern ? 1 : 0, (cx) => drawLanternIcon(cx, T / 2, 7, tick / 60), 14);
       for (let i = MAX_HEARTS - 1; i >= 0; i--) {
         ctx.fillStyle = i < p.hearts ? "#ff4d6d" : "rgba(255,255,255,0.15)";
         heartPath(x - 6, T / 2, 6);
@@ -4591,6 +4649,88 @@
     });
   }
 
+  // Farol: una caja de metal con un cristal y una llama dentro.
+  function drawLanternIcon(cx, cy, s, t) {
+    ctx.strokeStyle = "#b9b4cc";
+    ctx.lineWidth = Math.max(1, s / 6);
+    ctx.beginPath();
+    ctx.arc(cx, cy - s * 0.75, s * 0.35, Math.PI, 0);
+    ctx.stroke();
+    ctx.fillStyle = "#4a4458";
+    ctx.fillRect(cx - s * 0.55, cy - s * 0.75, s * 1.1, s * 0.25);
+    ctx.fillRect(cx - s * 0.55, cy + s * 0.55, s * 1.1, s * 0.25);
+    ctx.save();
+    ctx.shadowColor = "#ffd166";
+    ctx.shadowBlur = s;
+    ctx.fillStyle = "rgba(255,209,102,0.85)";
+    ctx.fillRect(cx - s * 0.45, cy - s * 0.5, s * 0.9, s * 1.05);
+    ctx.restore();
+    ctx.fillStyle = "#ff8a1a";
+    ctx.beginPath();
+    ctx.ellipse(cx, cy + s * 0.05 + Math.sin(t * 12) * s * 0.05, s * 0.18, s * 0.32, 0, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  // Antorcha: un palo con un cuenco; encendida, una llama que baila.
+  function drawTorches(t) {
+    for (const tc of torches) {
+      const x = tc.c * T + T / 2;
+      const top = tc.r * T + 8;
+      ctx.fillStyle = "#6b4a2b";
+      ctx.fillRect(x - 2, top + 4, 4, T - 12);
+      ctx.fillStyle = "#3d3d46";
+      ctx.beginPath();
+      ctx.moveTo(x - 7, top);
+      ctx.lineTo(x + 7, top);
+      ctx.lineTo(x + 4, top + 6);
+      ctx.lineTo(x - 4, top + 6);
+      ctx.closePath();
+      ctx.fill();
+      if (!tc.lit) continue;
+      ctx.save();
+      ctx.shadowColor = "#ff8a1a";
+      ctx.shadowBlur = 16;
+      for (const [dx, k] of [[-2, 0], [2, 1.3]]) {
+        const fh = 11 + Math.sin(t * 14 + k + tc.c) * 3;
+        ctx.fillStyle = k ? "#ffd166" : "#ff8a1a";
+        ctx.beginPath();
+        ctx.moveTo(x + dx - 5, top + 1);
+        ctx.quadraticCurveTo(x + dx - 3, top - fh * 0.4, x + dx + Math.sin(t * 8 + k) * 2, top - fh);
+        ctx.quadraticCurveTo(x + dx + 3, top - fh * 0.4, x + dx + 5, top + 1);
+        ctx.fill();
+      }
+      ctx.restore();
+    }
+  }
+
+  // Oscuridad: una capa negra con agujeros de luz donde hay algo que alumbra.
+  let darkCanvas = null;
+  function drawDarkness(t) {
+    if (!level?.dark || state === "editor") return;
+    if (!darkCanvas || darkCanvas.width !== W || darkCanvas.height !== H) {
+      darkCanvas = document.createElement("canvas");
+      darkCanvas.width = W;
+      darkCanvas.height = H;
+    }
+    const g = darkCanvas.getContext("2d");
+    g.globalCompositeOperation = "source-over";
+    g.clearRect(0, 0, W, H);
+    g.fillStyle = DARKNESS;
+    g.fillRect(0, 0, W, H);
+    g.globalCompositeOperation = "destination-out";
+    for (const L of lightSources(t)) {
+      const grad = g.createRadialGradient(L.x, L.y, L.r * 0.3, L.x, L.y, L.r);
+      grad.addColorStop(0, "rgba(0,0,0,1)");
+      grad.addColorStop(1, "rgba(0,0,0,0)");
+      g.fillStyle = grad;
+      g.beginPath();
+      g.arc(L.x, L.y, L.r, 0, Math.PI * 2);
+      g.fill();
+    }
+    g.globalCompositeOperation = "source-over";
+    ctx.drawImage(darkCanvas, 0, 0);
+  }
+
   // Dispensador: un caño en el techo de la casilla que gotea agua.
   function drawDispensers(t) {
     for (const d of dispensers) {
@@ -4690,6 +4830,7 @@
     drawCrumbles(t);
     drawLiquids(t);
     drawObsidian();
+    drawTorches(t);
     drawDispensers(t);
     drawSpikes();
     drawSprings();
@@ -4714,6 +4855,7 @@
     drawRocksAndWaves(t);
     drawBarriers(t);
     drawParticles();
+    drawDarkness(t);
     // Tras un cambio de personaje, las teclas de cada jugador encima de su cabeza (por encima de todo).
     for (const p of players) {
       if (!p.alive || p.swapFlash <= 0) continue;
