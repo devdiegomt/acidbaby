@@ -2759,6 +2759,7 @@
     notice: "", // aviso en la portada (por ejemplo, si alguien se desconecta)
     syncs: 0, // veces que se ha corregido una desincronización
     stall: 0, // pasos del reloj seguidos esperando las teclas de alguien
+    waitingFor: [], // de quién faltan teclas (para decir a quién se espera)
   };
   const inLockstep = () => net.active && (state === "playing" || state === "dead" || state === "won" || state === "ending");
 
@@ -2847,6 +2848,10 @@
       }
     }
     net.stall = inLockstep() && !advanced ? net.stall + 1 : 0;
+    if (net.stall) {
+      const row = net.inputs.get(net.frame);
+      net.waitingFor = net.names.filter((_, i) => i !== net.slot && row?.[i] === undefined);
+    }
     if (!inLockstep()) update(); // menús (anfitrión) o espera (invitados)
     pressed.clear();
     pointerMoved = false;
@@ -3066,6 +3071,7 @@
     net: {
       begin({ host, slot, send }) {
         Object.assign(net, { active: true, host, slot, send, notice: "", syncs: 0, stall: 0, edges: 0 });
+        startBackgroundTicker();
         testLevel = null;
         if (host) openTitle();
         else state = "netwait";
@@ -3074,6 +3080,7 @@
         net.active = false;
         net.send = null;
         net.notice = reason;
+        stopBackgroundTicker();
         openTitle();
       },
       receive: netReceive,
@@ -3131,7 +3138,7 @@
   let last = performance.now();
   let acc = 0;
 
-  function frame(now) {
+  function advance(now) {
     acc += Math.min(now - last, 250);
     last = now;
     while (acc >= STEP) {
@@ -3139,8 +3146,33 @@
       else update();
       acc -= STEP;
     }
+  }
+
+  function frame(now) {
+    advance(now);
     render();
     requestAnimationFrame(frame);
+  }
+
+  // En red, si esta pestaña queda en segundo plano (minimizada o detrás de otra), el navegador deja
+  // de llamar a requestAnimationFrame y los otros dos se quedarían esperando sus teclas. Un reloj
+  // en un Worker (que el navegador no frena) sigue simulando mientras tanto, sin dibujar.
+  let bgTicker = null;
+  function startBackgroundTicker() {
+    if (bgTicker || typeof Worker === "undefined" || typeof Blob === "undefined") return;
+    try {
+      const src = `setInterval(() => postMessage(0), ${STEP});`;
+      bgTicker = new Worker(URL.createObjectURL(new Blob([src], { type: "text/javascript" })));
+      bgTicker.onmessage = () => {
+        if (net.active && document.hidden) advance(performance.now());
+      };
+    } catch {
+      bgTicker = null;
+    }
+  }
+  function stopBackgroundTicker() {
+    bgTicker?.terminate();
+    bgTicker = null;
   }
 
   // ---------------------------------------------------------------------------
@@ -4503,9 +4535,9 @@
   }
 
   // Cartel de novedades: una cinta dorada que late suavemente, centrada en y.
-  function drawNews(t, y) {
-    if (!NEWS.length) return;
-    const msg = `★ ${NEWS.join("   ·   ")}`;
+  function drawNews(t, y, items = NEWS) {
+    if (!items.length) return;
+    const msg = `★ ${items.join("   ·   ")}`;
     ctx.font = `bold 15px ${FONT}`;
     const w = Math.min(W - 24, ctx.measureText(msg).width + 36);
     ctx.save();
@@ -4529,7 +4561,8 @@
 
   function drawTitle(t) {
     dim(0.82);
-    drawNews(t, 24);
+    // En red, el anfitrión ve en el letrero que le toca elegir (si no, parece que no pasa nada).
+    drawNews(t, 24, net.active && net.host ? ["¡Están los tres! Tú eliges: temporada con ← → y ENTER para jugar"] : NEWS);
     text(GAME_TITLE, W / 2, 70, 44, "#ffe9b8");
     text("Lleven a Chispa, Gota y Acidito a su puerta. Cada uno solo sobrevive a su elemento.", W / 2, 112, 18, "#d9c9a6", "center", "normal");
 
@@ -4849,10 +4882,13 @@
     const me = CHARACTERS[net.slot];
     text(`En línea · eres ${me.name}`, 12, H - 14, 13, me.color, "left");
     if (net.stall > 20) {
-      ctx.fillStyle = "rgba(10,8,5,0.7)";
-      roundRectPath(ctx, W / 2 - 150, H / 2 - 20, 300, 40, 10);
+      const who = net.waitingFor.length ? net.waitingFor.join(" y ") : "los demás";
+      ctx.fillStyle = "rgba(10,8,5,0.75)";
+      roundRectPath(ctx, W / 2 - 220, H / 2 - 30, 440, net.stall > 300 ? 74 : 50, 10);
       ctx.fill();
-      text("Esperando a los demás…", W / 2, H / 2, 18, "#ffe9b8");
+      text(`Esperando a ${who}…`, W / 2, H / 2 - 6, 18, "#ffe9b8");
+      // Si tarda mucho, lo más probable es que se haya ido o tenga problemas de conexión.
+      if (net.stall > 300) text("Puede que tenga problemas de conexión. Si no vuelve, salgan con O.", W / 2, H / 2 + 22, 14, "#9c8d70", "center", "normal");
     }
   }
 
