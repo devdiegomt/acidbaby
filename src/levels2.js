@@ -33,6 +33,15 @@
 //          si se queda un rato a la luz de una antorcha encendida se quema (aguanta 5), apaga esa
 //          antorcha y huye. Cada cierto tiempo apaga otra. Al caer se rompen los sellos /
 //
+// Géiseres (Mundo 4): respiraderos en la fila del suelo (son suelo para todos) que cada poco lanzan
+// un chorro de su líquido hasta 6 casillas de alto (o hasta el primer obstáculo). Al personaje de su
+// elemento lo suben como un ventilador; a los demás los matan. Burbujean un segundo antes de salir.
+//   ↥ ↟ ⇞  géiser de lava, de agua y de ácido
+//   Una caja encima del respiradero lo tapa mientras esté ahí. Un barril del elemento contrario
+//   (agua sobre lava, lava sobre agua) lo sella con obsidiana para siempre.
+//   geyser: { calm: frames tranquilo, burst: frames del chorro, stagger: retraso entre un géiser y
+//             el siguiente (en orden de lectura), steady: "fire" | ["water", …] los que no paran nunca }
+//
 // Estrellas de cada nivel: completarlo, recoger todas sus gemas y pasarlo sin perder un corazón
 // (ni volver a una bandera). Se pueden ganar en partidas distintas.
 //
@@ -527,6 +536,65 @@ const SEASON_2 = {
             "#                                      #",
             "# fwb  †  ^    †        †    ^    †    #",
             "########################################",
+          ],
+        },
+      ],
+    },
+    {
+      name: "Las fuentes hirvientes",
+      theme: "springs",
+      levels: [
+        {
+          name: "Las fuentes",
+          hint: "Cada géiser sube a los de su elemento y mata a los demás. Crucen cuando no burbujee.",
+          geyser: { stagger: 90 },
+          map: [
+            "########################################",
+            "########################################",
+            "########################################",
+            "########################################",
+            "##  ####  ##  ###  ####  ##  ####  ### #",
+            "#    ##        #    ##        #     #  #",
+            "#                                      #",
+            "#                                      #",
+            "#                                      #",
+            "#                     e                #",
+            "#                               1 2 3  #",
+            "#       ## ####### ####### #############",
+            "#                                      #",
+            "#                                      #",
+            "#                                      #",
+            "#                                      #",
+            "# fwb                            z  r  #",
+            "##########↥#######↟#######⇞#############",
+          ],
+        },
+        {
+          name: "Tapones",
+          hint: "Un barril de agua sella para siempre el géiser de lava… pero antes Chispa tiene que subir con él a la palanca. ¡Salten el barril!",
+          geyser: { steady: "fire", stagger: 135 },
+          mechanisms: {
+            h: { trigger: "lever", move: [0, -5] },
+          },
+          map: [
+            "########################################",
+            "########################################",
+            "########################################",
+            "########################################",
+            "##  ####  ##  ###  ####  ##  ####  ### #",
+            "#    ##        #    ##        #     #  #",
+            "#                                      #",
+            "#                                      #",
+            "#                                      #",
+            "#                                      #",
+            "#     r   H   e              z         #",
+            "#    ### ###  ## ##    ### ####        #",
+            "#                    h                 #",
+            "#                    h                 #",
+            "#                    h                 #",
+            "#                    h                 #",
+            "#fwb ≈       x       h           1 2 3 #",
+            "########↥#######⇞#########↟#############",
           ],
         },
       ],

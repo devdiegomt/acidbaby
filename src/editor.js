@@ -92,6 +92,8 @@
     if (data.golem && typeof data.golem === "object") clean.golem = { ...data.golem }; // la del Gólem de magma
     if (data.tide && typeof data.tide === "object") clean.tide = { ...data.tide }; // la marea
     if (data.hydra && typeof data.hydra === "object") clean.hydra = { ...data.hydra }; // la Hidra
+    if (data.shade && typeof data.shade === "object") clean.shade = { ...data.shade }; // la Sombra
+    if (data.geyser && typeof data.geyser === "object") clean.geyser = { ...data.geyser }; // los géiseres
     if (data.dark) clean.dark = true; // nivel a oscuras
     return clean;
   }
@@ -110,7 +112,7 @@
       }
       lines.push("  },");
     }
-    for (const cfg of ["boss", "golem", "tide", "hydra"]) {
+    for (const cfg of ["boss", "golem", "tide", "hydra", "shade", "geyser"]) {
       if (!data[cfg]) continue;
       const fields = Object.entries(data[cfg]).map(([k, v]) => `${k}: ${q(v)}`);
       lines.push(`  ${cfg}: { ${fields.join(", ")} },`);
@@ -256,6 +258,8 @@
       ["9", "Portal turquesa A", "#4fd6c8"], ["0", "Portal turquesa B", "#4fd6c8"],
       ["⚑", "Bandera de control", "#ffe08a"],
       ["≈", "Barril de agua", "#1f7bff"], ["♨", "Barril de lava", "#ff5a1f"], ["■", "Obsidiana", "#1b1726"],
+      ["↥", "Géiser de lava (en la fila del suelo)", "#ff5a1f"], ["↟", "Géiser de agua (en la fila del suelo)", "#1f7bff"],
+      ["⇞", "Géiser de ácido (en la fila del suelo)", "#46c22a"],
     ]],
     ["Bichos", [
       ["@", "Escarabajo", "#9b4dca"], ["&", "Murciélago", "#8a63c4"], ["!", "Erizo (no se pisa)", "#8a5a2b"],
@@ -311,6 +315,8 @@
     if (clean.golem) data.golem = clean.golem;
     if (clean.tide) data.tide = clean.tide;
     if (clean.hydra) data.hydra = clean.hydra;
+    if (clean.shade) data.shade = clean.shade;
+    if (clean.geyser) data.geyser = clean.geyser;
     if (clean.dark) data.dark = true;
   }
 

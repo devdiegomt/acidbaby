@@ -76,6 +76,16 @@
   // Marea (Temporada 2, Mundo 2): un líquido que sube desde el suelo del nivel. Se configura con
   // "tide" en el nivel; los mecanismos con kind: "drain" la hacen bajar mientras están activos.
   const TIDE_DEFAULTS = { type: "water", delay: 180, speed: 0.25, top: 1 };
+  // Géiseres (Temporada 2, Mundo 4): respiraderos en el suelo que cada poco lanzan un chorro de su
+  // líquido. Al personaje de ese elemento lo suben como un ventilador; a los demás los matan.
+  // Una caja encima lo tapa mientras esté ahí; un barril del elemento contrario lo sella para siempre.
+  // Se configura con "geyser" en el nivel: { calm, burst, stagger, steady }.
+  const GEYSER_BY_TILE = { "↥": "fire", "↟": "water", "⇞": "acid" };
+  const GEYSER_DEFAULTS = { calm: 150, burst: 120, stagger: 0, steady: [] };
+  const GEYSER_WARN = 60; // frames antes del chorro en los que el respiradero burbujea
+  const GEYSER_RISE = 10; // píxeles por frame que crece el chorro al salir
+  const GEYSER_FALL = 16; // y que baja al acabar
+  const GEYSER_MARGIN = 6; // píxeles de cada lado del chorro que no matan (rozarlo no cuenta)
   const DRAIN_FACTOR = 3; // un desagüe la baja este número de veces más rápido de lo que sube
   const TIDE_BARREL_DROP = 3; // casillas que baja la marea cuando le cae un barril del elemento contrario
   const FLOAT_LINE = 0.6; // parte de una caja que queda por encima de la marea cuando flota
@@ -96,7 +106,7 @@
 
   // Avisos de novedades: salen en la portada, en el menú de niveles y en la pausa.
   // Para cambiarlos (o quitarlos), basta con editar esta lista.
-  const NEWS = ["¡Nuevo! Jueguen online, cada uno desde su PC (tecla O)", "Mundo 3: Las minas a oscuras"];
+  const NEWS = ["¡Nuevo! Jueguen online, cada uno desde su PC (tecla O)", "Mundo 4: Las fuentes hirvientes"];
 
   // Jefe del Mundo 3 (Temporada 2): la Sombra de la mina. Flota hacia Gota o Acidito atravesando
   // las paredes; si se queda un rato a la luz de una antorcha encendida se quema (un golpe), apaga
@@ -608,6 +618,10 @@
         noise(0.8, { vol: 0.14, freq: 600, filter: "bandpass" }); // gorgoteo
         tone(300, 0.5, { type: "sine", vol: 0.1, to: 120 });
       },
+      geyser: () => {
+        noise(0.9, { vol: 0.16, freq: 1400, filter: "bandpass" }); // chorro que sale con fuerza
+        tone(90, 0.5, { type: "sine", vol: 0.12, to: 180 });
+      },
       hiss: () => {
         noise(0.6, { vol: 0.2, freq: 4500, filter: "highpass" }); // vapor
         tone(140, 0.4, { type: "triangle", vol: 0.12, to: 70 });
@@ -679,6 +693,7 @@
   let hydra = null; // la Hidra del aljibe (jefe del Mundo 2 de la temporada 2)
   let tide = null; // marea: { type, y (superficie, px), bottom, top, speed, delay, draining }
   let dispensers = []; // sueltan barriles de agua: { c, r, wait }
+  let geysers = []; // { c, r, type, t, offset, steady, h (alto del chorro, px), max, warn, plugged }
   let rocks = []; // rocas que suelta el jefe
   let waves = []; // ondas de choque cuando se estrella contra el suelo
   let shake = 0; // frames que le quedan a la sacudida de pantalla
@@ -699,7 +714,7 @@
   }
 
   function isSolidTile(t) {
-    return t === "#" || t === OBSIDIAN_TILE || t === CRUMBLE_TILE || t in BREAKABLE || t in LIQUID_BY_TILE || t in BARRIER_BY_TILE;
+    return t === "#" || t === OBSIDIAN_TILE || t === CRUMBLE_TILE || t in BREAKABLE || t in LIQUID_BY_TILE || t in BARRIER_BY_TILE || t in GEYSER_BY_TILE;
   }
 
   // Como isSolidTile, pero cada personaje atraviesa la barrera de su elemento.
@@ -762,6 +777,7 @@
     torches = [];
     shade = null;
     dispensers = [];
+    geysers = [];
     rocks = [];
     waves = [];
     shake = 0;
@@ -802,6 +818,10 @@
         }
         if (t in BARRIER_BY_TILE) {
           barriers.push({ c, r, type: BARRIER_BY_TILE[t] });
+          continue;
+        }
+        if (t in GEYSER_BY_TILE) {
+          geysers.push({ c, r, type: GEYSER_BY_TILE[t], t: 0, offset: 0, steady: false, h: 0, max: 0, warn: false, plugged: false });
           continue;
         }
         if (t === CRUMBLE_TILE) {
@@ -947,6 +967,18 @@
       };
     }
 
+    if (geysers.length) {
+      const cfg = { ...GEYSER_DEFAULTS, ...level.geyser };
+      const steady = [].concat(cfg.steady || []);
+      for (const el of steady) if (!ELEMENTS[el]) fail(`"steady" de los géiseres solo admite "water", "fire" o "acid" (no "${el}")`);
+      geysers.forEach((g, i) => {
+        g.offset = i * (cfg.stagger || 0);
+        g.steady = steady.includes(g.type);
+        g.calm = Math.max(1, cfg.calm);
+        g.burst = Math.max(1, cfg.burst);
+      });
+    } else if (level.geyser) fail("hay \"geyser\" pero el mapa no tiene géiseres (↥ ↟ ⇞)");
+
     if (hydra) {
       if (!tide || !mechs.some((m) => m.def.kind === "drain")) fail("la Hidra necesita marea (\"tide\") y al menos un desagüe");
       hydra = makeHydra(hydra.c, hydra.r);
@@ -985,7 +1017,7 @@
   function liveState() {
     return {
       grid, liquids, breakables, dissolving, barriers, fans, doors, boxes, gems, mechs, portals,
-      enemies, items, springs, crumbles, spikes, flags, obsidian, boss, bossDefeatedAt, golem, dispensers, tide, hydra, torches, shade,
+      enemies, items, springs, crumbles, spikes, flags, obsidian, boss, bossDefeatedAt, golem, dispensers, tide, hydra, torches, shade, geysers,
       players: players.map((p) => ({
         ...p,
         ch: CHARACTERS.indexOf(p.ch),
@@ -1008,7 +1040,7 @@
   function backToCheckpoint() {
     const s = structuredClone(checkpoint);
     ({ grid, liquids, breakables, dissolving, barriers, fans, doors, boxes, gems, mechs, portals } = s);
-    ({ enemies, items, springs, crumbles, spikes, flags, obsidian, boss, bossDefeatedAt, golem, dispensers, tide, hydra, torches, shade } = s);
+    ({ enemies, items, springs, crumbles, spikes, flags, obsidian, boss, bossDefeatedAt, golem, dispensers, tide, hydra, torches, shade, geysers } = s);
     players = s.players.map((p) =>
       Object.assign(p, {
         ch: CHARACTERS[p.ch],
@@ -1250,6 +1282,74 @@
   }
 
   // ---------------------------------------------------------------------------
+  // Géiseres
+  // ---------------------------------------------------------------------------
+  // Lo que para un chorro: una pared, una plataforma o una caja encima.
+  function geyserBlocked(c, r) {
+    if (airBlocked(c, r)) return true;
+    return boxes.some((b) => intersects(c * T + 8, r * T + 4, T - 16, T - 8, b));
+  }
+
+  function updateGeysers() {
+    for (const g of geysers) {
+      if (g.plugged) continue;
+      g.t++;
+      // Hasta dónde puede subir: FAN_RANGE casillas (y un poco más, para salir andando arriba,
+      // como en los ventiladores) o hasta el primer obstáculo.
+      let rows = 0;
+      while (rows < FAN_RANGE && !geyserBlocked(g.c, g.r - 1 - rows)) rows++;
+      g.max = rows * T + (rows === FAN_RANGE ? FAN_HOVER : 0);
+      const phase = (g.t + g.offset) % (g.calm + g.burst);
+      const erupting = g.steady || phase >= g.calm;
+      g.warn = !erupting && phase >= g.calm - GEYSER_WARN;
+      if (erupting && g.h === 0 && g.max > 0) {
+        sound.play("geyser");
+        burst(g.c * T + T / 2, g.r * T, [ELEMENTS[g.type].top, ELEMENTS[g.type].body], 10);
+      }
+      g.h = erupting ? Math.min(g.max, g.h + GEYSER_RISE) : Math.max(0, g.h - GEYSER_FALL);
+      if (g.h > g.max) g.h = g.max; // algo lo tapó mientras salía
+    }
+  }
+
+  // El rectángulo del chorro (o null si no sale). inset: píxeles que se quitan por los lados.
+  function geyserRect(g, inset = 0) {
+    if (g.plugged || g.h <= 0) return null;
+    return { x: g.c * T + inset, y: g.r * T - g.h, w: T - inset * 2, h: g.h };
+  }
+
+  // El géiser cuyo chorro toca al personaje: el suyo lo sube (como un ventilador)…
+  function geyserLift(p) {
+    return (
+      geysers.find((g) => {
+        if (g.type !== p.ch.immune) return false;
+        const z = geyserRect(g);
+        return z && intersects(z.x, z.y, z.w, z.h, p);
+      }) || null
+    );
+  }
+
+  // …y uno ajeno lo mata.
+  function deadlyGeyser(p) {
+    for (const g of geysers) {
+      if (g.type === p.ch.immune) continue;
+      const z = geyserRect(g, GEYSER_MARGIN);
+      if (z && intersects(z.x, z.y, z.w, z.h, p)) return g.type;
+    }
+    return null;
+  }
+
+  // Un barril del elemento contrario encima del respiradero lo sella con obsidiana.
+  function plugGeyser(g) {
+    g.plugged = true;
+    g.h = 0;
+    grid[g.r][g.c] = OBSIDIAN_TILE;
+    obsidian.push({ c: g.c, r: g.r, age: 0 });
+    burst(g.c * T + T / 2, g.r * T, ["#e8e8f0", "#b9b4cc", "#ffffff", ELEMENTS[g.type].body], 30);
+    sound.play("hiss");
+    toast = { text: `¡Géiser de ${ELEMENTS[g.type].label} sellado!`, frames: TOAST_FRAMES / 2 };
+  }
+
+  // ---------------------------------------------------------------------------
   // Bloques que se rompen (óxido, hielo, sal)
   // ---------------------------------------------------------------------------
   const key = (c, r) => `${c},${r}`;
@@ -1343,7 +1443,7 @@
     }
 
     p.vy += GRAVITY;
-    const wind = windAt(p);
+    const wind = windAt(p) || geyserLift(p);
     if (wind && !p.inWind) sound.play("wind");
     p.inWind = !!wind;
     if (wind) {
@@ -1412,6 +1512,11 @@
         b.used = true;
         const el = ELEMENTS[b.fill];
         burst(b.x + b.w / 2, b.y + b.h / 2, [el.top, el.body, "#9a6a35", "#e8e8f0"], 24);
+      }
+      const g = geysers.find((o) => !o.plugged && o.c === c && o.r === r && o.type === MIXES_WITH[b.fill]);
+      if (g) {
+        plugGeyser(g);
+        b.used = true;
       }
     }
     // Un barril del elemento contrario que se hunde en la marea la hace bajar.
@@ -2427,6 +2532,12 @@
     for (const p of portals) out.push({ x: p.c * T + T / 2, y: p.r * T + T / 2, r: LIGHT.portal });
     for (const e of enemies) if (e.alive && e.type === "ghost") out.push({ x: e.x + e.w / 2, y: e.y + e.h / 2, r: LIGHT.ghost });
     for (const s of shots) out.push({ x: s.x + s.w / 2, y: s.y + s.h / 2, r: LIGHT.shot });
+    for (const g of geysers) {
+      if (g.plugged || g.type === "water") continue;
+      const r = g.type === "fire" ? LIGHT.lava : LIGHT.acid;
+      out.push({ x: g.c * T + T / 2, y: g.r * T, r });
+      if (g.h > T) out.push({ x: g.c * T + T / 2, y: g.r * T - g.h / 2, r: r * 1.6 });
+    }
     for (const it of items) if (!it.taken && it.type === "lantern") out.push({ x: it.c * T + T / 2, y: it.r * T + T / 2, r: LIGHT.glow });
     return out;
   }
@@ -2800,6 +2911,7 @@
     for (const b of boxes) [b.x, b.y].forEach(add);
     for (const e of enemies) [e.x, e.y, e.alive ? 1 : 0].forEach(add);
     for (const m of mechs) [m.ox, m.oy].forEach(add);
+    for (const g of geysers) [g.h, g.plugged ? 1 : 0].forEach(add);
     [levelFrames, STATE_CODE[state] || 0, tide ? tide.y : 0, gems.filter((g) => g.taken).length].forEach(add);
     for (const b of [boss, golem, hydra, shade]) if (b) [b.x || 0, b.y || 0, b.hits || b.hp || 0].forEach(add);
     return h;
@@ -2933,7 +3045,7 @@
     }
     const w = unpackWorld(s.world);
     ({ grid, liquids, breakables, dissolving, barriers, fans, doors, boxes, gems, mechs, portals } = w);
-    ({ enemies, items, springs, crumbles, spikes, flags, obsidian, boss, bossDefeatedAt, golem, dispensers, tide, hydra, torches, shade } = w);
+    ({ enemies, items, springs, crumbles, spikes, flags, obsidian, boss, bossDefeatedAt, golem, dispensers, tide, hydra, torches, shade, geysers } = w);
     players = w.players.map((p) => Object.assign(p, { ch: CHARACTERS[p.ch], controls: CHARACTERS[p.controls].keys }));
     checkpoint = s.checkpoint ? unpackWorld(s.checkpoint) : null;
     shots = s.shots.map((x) => ({ ...x, owner: players[x.owner] }));
@@ -2969,6 +3081,7 @@
         updateTriggers();
         updateMechs();
         updateFans();
+        if (geysers.length) updateGeysers();
         for (const p of players) updatePlayer(p);
         updateFlags();
         if (tide) updateTide();
@@ -2992,6 +3105,11 @@
           const type = state === "playing" && deadlyLiquidUnder(p);
           if (type) {
             drownPlayer(p, type);
+            break;
+          }
+          const jet = state === "playing" && p.alive && deadlyGeyser(p);
+          if (jet) {
+            killPlayer(p, `A ${p.ch.name} le dio un géiser de ${ELEMENTS[jet].label}`, [ELEMENTS[jet].top, ELEMENTS[jet].body]);
             break;
           }
         }
@@ -3276,9 +3394,18 @@
       sky: ["#1f1c2b", "#0b0a12"], bricks: "rgba(190,170,255,0.03)",
       stone: "#3b3550", joints: "#26213a70", edges: ["#7a6fa0", "#1a1726", "#564c78", "#252036"],
     },
+    // Mundo 4 de la temporada 2: roca caliente de las fuentes hirvientes.
+    springs: {
+      sky: ["#2a1915", "#0e0807"], bricks: "rgba(255,170,120,0.035)",
+      stone: "#55372d", joints: "#3a231c70", edges: ["#a5674c", "#22130e", "#7d4b3a", "#2e1a13"],
+    },
   };
-  // El tema sale de la temporada del nivel (los del editor, con el del templo).
-  const themeOf = (lv) => THEMES[SEASONS.find((s) => s.levels.includes(lv))?.theme] || THEMES.temple;
+  // El tema sale del mundo del nivel o, si no tiene, de su temporada (los del editor, el del templo).
+  function themeOf(lv) {
+    const s = SEASONS.find((x) => x.levels.includes(lv));
+    const w = s?.worlds.find((x) => x.levels.includes(lv));
+    return THEMES[w?.theme] || THEMES[s?.theme] || THEMES.temple;
+  }
   let levelTheme = THEMES.temple; // el del nivel cargado (lo fija buildBackground)
 
   // También la usan los bloques que se pueden romper (muro agrietado, sello), con el tema del nivel.
@@ -3323,7 +3450,7 @@
     }
 
     // Los bloques oxidados se dibujan aparte porque pueden desaparecer.
-    const isWall = (t) => t === "#" || t in LIQUID_BY_TILE;
+    const isWall = (t) => t === "#" || t in LIQUID_BY_TILE || t in GEYSER_BY_TILE;
     for (let r = 0; r < grid.length; r++) {
       for (let c = 0; c < grid[r].length; c++) {
         if (!isWall(grid[r][c])) continue;
@@ -4060,6 +4187,85 @@
         ctx.fillRect(x + 1, ey, T - 2, 4);
         ctx.fillStyle = el.body;
         ctx.fillRect(x + 6, ey + 1, T - 12, 2);
+      }
+    }
+  }
+
+  // Respiradero de un géiser: rejilla en el suelo con el color de su líquido; burbujea antes del chorro.
+  function drawGeyserVents(t) {
+    for (const g of geysers) {
+      if (g.plugged) continue;
+      const el = ELEMENTS[g.type];
+      const x = g.c * T;
+      const y = g.r * T;
+      const glow = ctx.createLinearGradient(0, y - 14, 0, y + 6);
+      glow.addColorStop(0, `rgba(${el.glow},0)`);
+      glow.addColorStop(1, `rgba(${el.glow},${g.warn ? 0.55 + Math.sin(t * 20) * 0.2 : 0.25})`);
+      ctx.fillStyle = glow;
+      ctx.fillRect(x, y - 14, T, 20);
+      ctx.fillStyle = "#2a2522";
+      roundRectPath(ctx, x + 2, y, T - 4, 9, 3);
+      ctx.fill();
+      ctx.fillStyle = el.body;
+      ctx.fillRect(x + 6, y + 2, T - 12, 5);
+      ctx.fillStyle = "#2a2522";
+      for (let k = 0; k < 4; k++) ctx.fillRect(x + 8 + k * 5, y + 1, 2, 7);
+      if (g.warn) {
+        // Burbujas cada vez más altas: avisa de que va a salir.
+        for (let k = 0; k < 4; k++) {
+          const phase = (t * 2.2 + k / 4 + g.c * 0.31) % 1;
+          ctx.globalAlpha = 1 - phase;
+          ctx.fillStyle = el.top;
+          ctx.beginPath();
+          ctx.arc(x + 8 + ((k * 7 + g.c * 5) % 16), y - phase * 22, 2 + (k % 2), 0, Math.PI * 2);
+          ctx.fill();
+        }
+        ctx.globalAlpha = 1;
+      }
+    }
+  }
+
+  // El chorro: columna del líquido con bordes que tiemblan y espuma arriba.
+  function drawGeyserJets(t) {
+    for (const g of geysers) {
+      const z = geyserRect(g);
+      if (!z) continue;
+      const el = ELEMENTS[g.type];
+      const glow = ctx.createLinearGradient(z.x - 10, 0, z.x + z.w + 10, 0);
+      glow.addColorStop(0, `rgba(${el.glow},0)`);
+      glow.addColorStop(0.5, `rgba(${el.glow},0.3)`);
+      glow.addColorStop(1, `rgba(${el.glow},0)`);
+      ctx.fillStyle = glow;
+      ctx.fillRect(z.x - 10, z.y, z.w + 20, z.h);
+      ctx.beginPath();
+      ctx.moveTo(z.x + 5, z.y + z.h);
+      for (let yy = z.y + z.h; yy > z.y; yy -= 6) ctx.lineTo(z.x + 5 + Math.sin(yy * 0.15 + t * 14) * 2, yy);
+      for (let yy = z.y; yy <= z.y + z.h; yy += 6) ctx.lineTo(z.x + z.w - 5 + Math.sin(yy * 0.13 - t * 12) * 2, yy);
+      ctx.closePath();
+      ctx.globalAlpha = 0.85;
+      ctx.fillStyle = el.body;
+      ctx.fill();
+      ctx.globalAlpha = 1;
+      // Vetas que suben
+      ctx.strokeStyle = el.top;
+      ctx.lineWidth = 2;
+      for (let k = 0; k < 4; k++) {
+        const phase = (t * 2.5 + k / 4) % 1;
+        const sy = z.y + z.h - phase * z.h;
+        ctx.globalAlpha = Math.sin(phase * Math.PI) * 0.8;
+        ctx.beginPath();
+        ctx.moveTo(z.x + 10 + k * 4, sy);
+        ctx.lineTo(z.x + 10 + k * 4, Math.max(z.y, sy - 12));
+        ctx.stroke();
+      }
+      ctx.globalAlpha = 1;
+      // Espuma arriba
+      ctx.fillStyle = el.top;
+      for (let k = 0; k < 5; k++) {
+        const a = t * 8 + k * 1.3;
+        ctx.beginPath();
+        ctx.arc(z.x + 4 + k * 6, z.y + 2 + Math.sin(a) * 3, 4 + Math.sin(a * 1.7) * 1.5, 0, Math.PI * 2);
+        ctx.fill();
       }
     }
   }
@@ -5541,6 +5747,7 @@
     drawBreakables(t);
     drawCrumbles(t);
     drawLiquids(t);
+    drawGeyserVents(t);
     drawObsidian();
     drawTorches(t);
     drawDispensers(t);
@@ -5561,6 +5768,7 @@
     drawGolem(t);
     drawHydra(t);
     drawShade(t);
+    drawGeyserJets(t);
     for (const p of players) if (p.alive) drawPlayer(p, t);
     drawTide(t);
     drawShots();
