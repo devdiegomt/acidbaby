@@ -94,6 +94,7 @@
     if (data.hydra && typeof data.hydra === "object") clean.hydra = { ...data.hydra }; // la Hidra
     if (data.shade && typeof data.shade === "object") clean.shade = { ...data.shade }; // la Sombra
     if (data.geyser && typeof data.geyser === "object") clean.geyser = { ...data.geyser }; // los géiseres
+    if (data.crab && typeof data.crab === "object") clean.crab = { ...data.crab }; // el Cangrejo
     if (data.dark) clean.dark = true; // nivel a oscuras
     return clean;
   }
@@ -112,7 +113,7 @@
       }
       lines.push("  },");
     }
-    for (const cfg of ["boss", "golem", "tide", "hydra", "shade", "geyser"]) {
+    for (const cfg of ["boss", "golem", "tide", "hydra", "shade", "geyser", "crab"]) {
       if (!data[cfg]) continue;
       const fields = Object.entries(data[cfg]).map(([k, v]) => `${k}: ${q(v)}`);
       lines.push(`  ${cfg}: { ${fields.join(", ")} },`);
@@ -270,6 +271,7 @@
       ["†", "Antorcha apagada (la enciende Chispa)", "#6b4a2b"], ["‡", "Antorcha encendida", "#ff8a1a"],
       ["¤", "Farol (lleva luz consigo)", "#ffd166"],
       ["☾", "La Sombra (jefe; mejor en un nivel a oscuras)", "#2c1f3d"],
+      ["Ж", "Cangrejo hirviente (jefe; necesita géiseres de los tres)", "#7a4636"],
     ]],
   ];
   const LABELS = Object.fromEntries(PALETTE.flatMap(([, tiles]) => tiles.map(([ch, label]) => [ch, label])));
@@ -317,6 +319,7 @@
     if (clean.hydra) data.hydra = clean.hydra;
     if (clean.shade) data.shade = clean.shade;
     if (clean.geyser) data.geyser = clean.geyser;
+    if (clean.crab) data.crab = clean.crab;
     if (clean.dark) data.dark = true;
   }
 

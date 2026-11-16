@@ -28,7 +28,7 @@ game = game.replace(
      get grid(){return grid}, get fans(){return fans}, get doors(){return doors}, get enemies(){return enemies}, get items(){return items}, get shots(){return shots},
      get save(){return save}, isUnlocked, get levelIndex(){return levelIndex}, get lastResult(){return lastResult},
      get menuIndex(){return menuIndex}, get levelFrames(){return levelFrames}, setLevel(i, si = 0){ testLevel = null; seasonIndex = si; levelIndex = i; loadLevel(i); state = "playing"; }, get darts(){return darts}, get crumbles(){return crumbles}, get boss(){return boss}, solidAt,
-     SEASONS, get seasonIndex(){return seasonIndex}, get titleIndex(){return titleIndex}, isSeasonUnlocked, levelNumber, get flags(){return flags}, get checkpoint(){return checkpoint}, get retries(){return retries}, get toast(){return toast}, get level(){return level}, worldRange, get spikes(){return spikes}, get obsidian(){return obsidian}, get liquids(){return liquids}, starsOf, starCount, get golem(){return golem}, get rocks(){return rocks}, get waves(){return waves}, get tide(){return tide}, get hydra(){return hydra}, get torches(){return torches}, lightSources, get shade(){return shade}, get geysers(){return geysers}, get mainIndex(){return mainIndex}, mainItems };\n})();`,
+     SEASONS, get seasonIndex(){return seasonIndex}, get titleIndex(){return titleIndex}, isSeasonUnlocked, levelNumber, get flags(){return flags}, get checkpoint(){return checkpoint}, get retries(){return retries}, get toast(){return toast}, get level(){return level}, worldRange, get spikes(){return spikes}, get obsidian(){return obsidian}, get liquids(){return liquids}, starsOf, starCount, get golem(){return golem}, get rocks(){return rocks}, get waves(){return waves}, get tide(){return tide}, get hydra(){return hydra}, get torches(){return torches}, lightSources, get shade(){return shade}, get geysers(){return geysers}, get mainIndex(){return mainIndex}, mainItems, get crab(){return crab} };\n})();`,
 );
 // editor.js va antes que game.js (como en index.html); sin DOM solo define EditorCore.
 eval(fs.readFileSync(ROOT + "levels.js", "utf8") + "\nglobalThis.LEVELS = LEVELS;\n" + fs.readFileSync(ROOT + "levels2.js", "utf8") + "\nglobalThis.SEASON_2 = SEASON_2;\n" + fs.readFileSync(ROOT + "editor.js", "utf8") + "\n" + game);
@@ -2569,6 +2569,71 @@ crossAt(fire, 20, 22);
 for (const p of [water, fire]) { walkTo(p, 22); leap(p, 1); }
 for (const p of [fire, water, acid]) walkTo(p, G.doors[p.ch.door].c);
 check("Pasan por encima de la caja y llegan a sus puertas", G.state === "won", where());
+
+// --- Nivel 4-6: el Cangrejo hirviente --------------------------------------------------------------
+console.log("\nNivel 4-6");
+const crabLevel = () => { G.setLevel(23, 1); run(1); fire = P("Chispa"); water = P("Gota"); acid = P("Acidito"); };
+const CR = () => G.crab;
+const crabCenter = () => CR().x + 44;
+crabLevel();
+check("El Cangrejo está en la arena, con un géiser de cada elemento", !!CR() && G.geysers.length === 3);
+run(130);
+check("Tras presentarse anda y avisa de lo que le duele (el agua)", CR().state === "walk" && /le duele el agua/.test(G.toast?.text || ""), G.toast?.text);
+// Prueba directa: encima de un géiser de lava (cuando le duele el agua) no le pasa nada…
+const parkAll = () => { place(fire, 6, 10); place(water, 14, 10); place(acid, 25, 10); };
+crabLevel(); run(130);
+for (let i = 0; i < 400; i++) { parkAll(); CR().x = 20 * 32 + 16 - 44; CR().state = "walk"; run(1); }
+check("Un chorro de lava no le hace nada mientras le duele el agua", CR().hits === 0 && playing(), `${CR().hits}`);
+for (let i = 0; i < 400 && CR().hits === 0; i++) { parkAll(); CR().x = 9 * 32 + 16 - 44; if (CR().state !== "hurt") CR().state = "walk"; run(1); }
+check("…y uno de agua debajo sí le da un golpe (y sale huyendo)", CR().hits === 1 && CR().state === "hurt", `${CR().hits} ${CR().state}`);
+check("Desde las repisas nadie está a su alcance", playing() && G.players.every((p) => p.hearts === 3));
+
+// La pelea de verdad: el del elemento que le duele lo atrae hasta su géiser; los otros dos esperan
+// en las repisas. Se pone al otro lado del géiser para que el Cangrejo se pare justo encima.
+const VENT = { water: 9, fire: 20, acid: 30 };
+const LEDGE = { Chispa: [6, 10], Gota: [14, 10], Acidito: [25, 10] };
+const owner = (el) => G.players.find((p) => p.ch.immune === el);
+function lure(maxFrames = 2400) {
+  const startHits = CR().hits;
+  const weak = ["water", "fire", "acid"][Math.floor(CR().hits / 2)];
+  const bait = owner(weak);
+  const vent = VENT[weak];
+  const g = GZ(vent);
+  for (let i = 0; i < maxFrames && CR().hits === startHits && playing(); i++) {
+    for (const p of G.players) if (p !== bait) place(p, ...LEDGE[p.ch.name]);
+    if (CR().state === "hurt" || CR().state === "intro") { run(1); continue; }
+    // Espera a que el géiser vaya a salir pronto y entonces se pone en su sitio.
+    const side = Math.sign(vent * 32 + 16 - crabCenter()) || 1;
+    const spot = vent + side * 2;
+    // Salta las ondas que le llegan.
+    const wave = G.waves.find((w) => Math.abs(w.x + w.w / 2 - center(bait)) < 70 && Math.sign(center(bait) - w.x) === Math.sign(w.vx));
+    if (wave && bait.onGround && feetRow(bait) === 16) { down(keysOf(bait).j); run(10); up(keysOf(bait).j); continue; }
+    if (!bait.onGround) { run(1); continue; }
+    if (calmLeft(g) < 130 && (feetRow(bait) !== 16 || Math.abs(center(bait) - (spot * 32 + 16)) > 6)) {
+      place(bait, spot, 16);
+    } else if (calmLeft(g) >= 130 && !(feetRow(bait) === 10)) {
+      place(bait, ...LEDGE[bait.ch.name]);
+    }
+    run(1);
+  }
+  return CR().hits > startHits;
+}
+crabLevel();
+let landed = 0;
+const hitsLog = [];
+for (let n = 0; n < 6 && playing(); n++) {
+  const weak = ["water", "fire", "acid"][Math.floor(CR().hits / 2)];
+  if (lure()) { landed++; hitsLog.push(weak); }
+  else break;
+}
+check("Gota, Chispa y Acidito lo atraen por turnos a su géiser: seis golpes", landed === 6, `${hitsLog.join(", ")} · ${where()} · vidas ${G.players.map((p) => p.hearts).join("/")}`);
+check("Cambia lo que le duele cada dos golpes (agua, lava, ácido)", hitsLog.join(",") === "water,water,fire,fire,acid,acid");
+run(200);
+check("Cae, se rompe el sello de las puertas", CR().state === "dead" && G.grid[14][33] === " ", `${CR().state}`);
+for (const p of G.players) place(p, 32, 16);
+run(5);
+for (const p of [fire, water, acid]) walkTo(p, G.doors[p.ch.door].c);
+check("Llegan a sus puertas", G.state === "won", where());
 
 // --- Código de progreso --------------------------------------------------------
 console.log("\nCódigo de progreso");

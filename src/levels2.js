@@ -42,6 +42,12 @@
 //   geyser: { calm: frames tranquilo, burst: frames del chorro, stagger: retraso entre un géiser y
 //             el siguiente (en orden de lectura), steady: "fire" | ["water", …] los que no paran nunca }
 //
+//   Ж      el Cangrejo hirviente (jefe del Mundo 4): necesita géiseres de los tres elementos. Persigue
+//          por el suelo al que tenga más cerca y abre las tenazas para pellizcar; a veces salta y
+//          hace ondas. Solo le duele el chorro del géiser de un elemento, que cambia por fases (agua,
+//          lava, ácido; dos golpes cada una). crab: { name, left, right } (columnas por las que anda).
+//          Al caer se rompen los sellos /
+//
 // Estrellas de cada nivel: completarlo, recoger todas sus gemas y pasarlo sin perder un corazón
 // (ni volver a una bandera). Se pueden ganar en partidas distintas.
 //
@@ -674,6 +680,32 @@ const SEASON_2 = {
             "#             q                        #",
             "#fwb          q Q ⚑              1 2 3 #",
             "########↥###########↟###⇞###############",
+          ],
+        },
+        {
+          name: "El Cangrejo hirviente",
+          hint: "Al Cangrejo solo le duele el chorro de un elemento (miren sus manchas). Atráiganlo a ese géiser justo cuando burbujee; los muelles llevan a las repisas.",
+          geyser: { calm: 140, burst: 100, stagger: 80 },
+          crab: { name: "El Cangrejo hirviente", left: 1, right: 32 },
+          map: [
+            "########################################",
+            "########################################",
+            "########################################",
+            "########################################",
+            "##  ####  ##  ###  ####  ##  ####  ### #",
+            "#    ##        #    ##        #     #  #",
+            "#                                /     #",
+            "#                                /     #",
+            "#                                /     #",
+            "#                                /     #",
+            "#                                /     #",
+            "#    ### z   ####   r   ####  e  /     #",
+            "#                                /     #",
+            "#                                /     #",
+            "#                                /     #",
+            "#                                /     #",
+            "#fwb;       ;         Ж;         /1 2 3#",
+            "#########↟##########↥#########⇞#########",
           ],
         },
       ],
