@@ -28,7 +28,7 @@ game = game.replace(
      get grid(){return grid}, get fans(){return fans}, get doors(){return doors}, get enemies(){return enemies}, get items(){return items}, get shots(){return shots},
      get save(){return save}, isUnlocked, get levelIndex(){return levelIndex}, get lastResult(){return lastResult},
      get menuIndex(){return menuIndex}, get levelFrames(){return levelFrames}, setLevel(i, si = 0){ testLevel = null; seasonIndex = si; levelIndex = i; loadLevel(i); state = "playing"; }, get darts(){return darts}, get crumbles(){return crumbles}, get boss(){return boss}, solidAt,
-     SEASONS, get seasonIndex(){return seasonIndex}, get titleIndex(){return titleIndex}, isSeasonUnlocked, levelNumber, get flags(){return flags}, get checkpoint(){return checkpoint}, get retries(){return retries}, get toast(){return toast}, get level(){return level}, worldRange, get spikes(){return spikes}, get obsidian(){return obsidian}, get liquids(){return liquids}, starsOf, starCount, get golem(){return golem}, get rocks(){return rocks}, get waves(){return waves}, get tide(){return tide}, get hydra(){return hydra}, get torches(){return torches}, lightSources };\n})();`,
+     SEASONS, get seasonIndex(){return seasonIndex}, get titleIndex(){return titleIndex}, isSeasonUnlocked, levelNumber, get flags(){return flags}, get checkpoint(){return checkpoint}, get retries(){return retries}, get toast(){return toast}, get level(){return level}, worldRange, get spikes(){return spikes}, get obsidian(){return obsidian}, get liquids(){return liquids}, starsOf, starCount, get golem(){return golem}, get rocks(){return rocks}, get waves(){return waves}, get tide(){return tide}, get hydra(){return hydra}, get torches(){return torches}, lightSources, get shade(){return shade} };\n})();`,
 );
 // editor.js va antes que game.js (como en index.html); sin DOM solo define EditorCore.
 eval(fs.readFileSync(ROOT + "levels.js", "utf8") + "\nglobalThis.LEVELS = LEVELS;\n" + fs.readFileSync(ROOT + "levels2.js", "utf8") + "\nglobalThis.SEASON_2 = SEASON_2;\n" + fs.readFileSync(ROOT + "editor.js", "utf8") + "\n" + game);
@@ -2140,6 +2140,136 @@ check("…y el puente del foso de agua", playing() && center(acid) > 33 * 32, wh
 walkTo(fire, 37); run(30); // Chispa baja por el hueco del final
 for (const p of [fire, water, acid]) walkTo(p, G.doors[p.ch.door].c);
 check("Llegan a sus puertas", G.state === "won", where());
+
+// --- La marea y las antorchas -------------------------------------------------------------------
+console.log("\nMarea y antorchas");
+tidebox({ type: "water", delay: 1, speed: 2, top: 10 }, (g) => { g[16][12] = "‡"; g[8][20] = "‡"; });
+for (let i = 0; i < 200; i++) { place(fire, 3, 5); place(acid, 4, 5); run(1); }
+check("La marea de agua apaga las antorchas que cubre (y no las de arriba)", !G.torches.find((t) => t.r === 16).lit && G.torches.find((t) => t.r === 8).lit, JSON.stringify(G.torches) + " " + G.tide.y + " " + G.state);
+tidebox({ type: "fire", delay: 1, speed: 2, top: 10 }, (g) => { g[16][12] = "†"; });
+for (let i = 0; i < 200; i++) { place(water, 3, 5); place(acid, 4, 5); run(1); }
+check("…y la de lava las enciende", G.torches.find((t) => t.r === 16).lit);
+G.setLevel(0);
+
+// Chispa con orbe dispara a un fantasma cuando lo tiene delante, a su altura.
+function shootGhosts(n = 600) {
+  for (let i = 0; i < n && playing(); i++) {
+    const gh = G.enemies.find((e) => e.alive && e.type === "ghost" && Math.abs(e.y + e.h / 2 - (fire.y + 12)) < 14 && Math.abs(e.x - fire.x) < 260);
+    if (!gh) { run(1); if (!G.enemies.some((e) => e.alive && e.type === "ghost" && Math.hypot(e.x - fire.x, e.y - fire.y) < 300)) break; continue; }
+    fire.facing = Math.sign(gh.x - fire.x) || 1;
+    tap("KeyS");
+  }
+}
+
+// --- Nivel 3-3: ecos -------------------------------------------------------------------------------
+console.log("\nNivel 3-3");
+G.setLevel(14, 1); run(1);
+fire = P("Chispa"); water = P("Gota"); acid = P("Acidito");
+walkTo(fire, 6);
+check("Chispa agarra el orbe", fire.inv.weapon);
+allWalk(new Map([[fire, 13], [water, 12], [acid, 11]]));
+check("Encienden la bandera y Chispa prende la antorcha del camino", G.flags[0].on && G.torches.find((t) => t.c === 9).lit, where());
+for (const p of G.players) p.hurt = 0;
+shootGhosts(900);
+check("Chispa espanta al fantasma del puente a bolas de fuego", !G.enemies.find((e) => e.x < 28 * 32).alive && playing(), where());
+allWalk(all3(27));
+check("Los tres cruzan juntos el puente de tablones sobre el agua", playing() && G.players.every((p) => center(p) > 26 * 32), where());
+check("…y la antorcha del otro lado queda encendida", G.torches.find((t) => t.c === 26).lit);
+ride(fire, 30, 1);
+shootGhosts(900);
+check("Arriba, Chispa espanta al fantasma de las puertas", G.enemies.every((e) => !e.alive) && playing(), where());
+for (const p of [water, acid]) ride(p, 30, 1);
+for (const p of [fire, water, acid]) walkTo(p, G.doors[p.ch.door].c);
+check("…y llegan a sus puertas", G.state === "won", where());
+
+// --- Nivel 3-4: mina inundada ----------------------------------------------------------------------
+console.log("\nNivel 3-4");
+G.setLevel(15, 1); run(1);
+fire = P("Chispa"); water = P("Gota"); acid = P("Acidito");
+allWalk(new Map([[fire, 9], [water, 12], [acid, 9]]));
+walkTo(water, 13);
+check("Gota se lleva el farol para bajar luego a por la llave", water.inv.lantern);
+allWalk(all3(9));
+for (const c of [7, 11, 15, 19, 23, 26]) allLeap(all3(c));
+check("Los tres suben antes que el agua", playing() && G.players.every((p) => feetRow(p) === 4), where());
+check("…y Chispa ha ido prendiendo las antorchas de la escalera", G.torches.filter((t) => t.c !== 27).every((t) => t.lit));
+for (let i = 0; i < 2500 && G.tide.y > 5 * 32; i++) run(1);
+check("El agua sube y apaga las antorchas que cubre", G.tide.y === 5 * 32 && G.torches.filter((t) => t.r > 5).every((t) => !t.lit) && playing(), where());
+walkTo(water, 24);
+hold(["ArrowLeft"], 300, () => feetRow(water) === 16);
+walkTo(water, 2);
+check("Gota bucea a oscuras (con su farol) hasta la llave", water.inv.keys === 1 && playing());
+walkTo(water, 9);
+for (const c of [7, 11, 15, 19, 23, 26]) allLeap(new Map([[water, c]]));
+walkTo(water, 30);
+run(60);
+check("…vuelve a subir y abre el candado", G.grid[3][28] === " ", where());
+for (const p of [fire, water, acid]) walkTo(p, G.doors[p.ch.door].c);
+check("Llegan a sus puertas", G.state === "won", where());
+
+// --- Nivel 3-5: la última galería -----------------------------------------------------------------
+console.log("\nNivel 3-5");
+G.setLevel(16, 1); run(1);
+fire = P("Chispa"); water = P("Gota"); acid = P("Acidito");
+walkTo(fire, 5);
+for (const p of [fire, water, acid]) runRightTo(p, 24 + G.players.indexOf(p));
+check("Abajo cruzan los charcos ajenos y encienden la bandera", playing() && G.flags[0].on, where());
+check("…con la luz de las antorchas que prende Chispa", G.torches.filter((t) => t.r === 16 && t.c < 20).every((t) => t.lit));
+walkTo(acid, 26); run(60);
+check("Acidito disuelve el muro de óxido", G.grid[13][27] === " ");
+// Aquí no hay orbe: a los fantasmas solo se les esquiva. Pasan de largo, deprisa y juntos.
+allWalk(all3(41));
+run(10);
+check("El portal los sube al camino de arriba", playing() && G.players.every((p) => feetRow(p) === 8), where());
+allWalk(all3(10));
+const keyHolder = G.players.find((p) => p.inv.keys === 1);
+check("Arriba, de vuelta, alguien agarra la llave", !!keyHolder, where());
+if (keyHolder) walkTo(keyHolder, 7);
+run(60);
+check("…y abre el candado", G.grid[7][8] === " ", where());
+for (const p of [fire, water, acid]) walkTo(p, G.doors[p.ch.door].c);
+check("Llegan a sus puertas", G.state === "won", where());
+
+// --- Nivel 3-6: la Sombra ---------------------------------------------------------------------------
+console.log("\nNivel 3-6 (jefe)");
+G.setLevel(17, 1); run(1);
+fire = P("Chispa"); water = P("Gota"); acid = P("Acidito");
+const sh = () => G.shade;
+check("La Sombra está en la mina, a oscuras", sh() && G.level.dark);
+// (Para probar la mecánica, a nadie le hace daño tocarla; se prueba aparte.)
+const guarded = (n, until) => { for (let i = 0; i < n && !(until && until()) && playing(); i++) { for (const p of G.players) p.hurt = 5; run(1); } };
+const guardedWalk = (p, c) => { const k = keysOf(p), dir = c * 32 + 16 > center(p) ? k.r : k.l; down(dir); guarded(600, () => Math.abs(c * 32 + 16 - center(p)) <= 3); up(dir); guarded(10); };
+guarded(130);
+check("Tras la presentación persigue a Gota o a Acidito, no a Chispa", (() => { const d0 = Math.hypot(sh().x - water.x, sh().y - water.y); guarded(30); return Math.hypot(sh().x - water.x, sh().y - water.y) < d0 || Math.hypot(sh().x - acid.x, sh().y - acid.y) < 9999; })());
+const torch15 = G.torches.find((t) => t.c === 15 && t.r === 16);
+let rounds = 0;
+while (sh().hits < 5 && rounds++ < 8 && playing()) {
+  guardedWalk(fire, 15);
+  guarded(20);
+  const before = sh().hits;
+  guardedWalk(water, 16); guardedWalk(acid, 16);
+  guarded(900, () => sh().hits > before);
+  if (sh().hits > before && sh().hits < 5) guardedWalk(fire, 10); // se aparta para volver a prenderla
+}
+check("Atraída a la luz de la antorcha, la Sombra se quema cinco veces", sh().hits === 5 && (sh().state === "dying" || sh().state === "dead"), `golpes ${sh().hits}`);
+check("…cada golpe le apaga la antorcha y la hace huir (Chispa la vuelve a prender)", rounds >= 5);
+guarded(120);
+check("Al caer se rompe el sello y la mina se ilumina", sh().state === "dead" && [8, 9, 10].every((r) => G.grid[r][35] === " ") && G.torches.every((t) => t.lit));
+for (const p of [fire, water, acid]) { ride(p, 29, 1); walkTo(p, G.doors[p.ch.door].c); }
+check("Todos a sus puertas", G.state === "won", where());
+// Apaga antorchas sola, y tocarla duele.
+G.setLevel(17, 1); run(1);
+fire = P("Chispa"); water = P("Gota");
+G.torches.forEach((t) => (t.lit = true));
+guarded(1000, () => G.torches.some((t) => !t.lit));
+check("Cada cierto tiempo apaga una antorcha por su cuenta", G.torches.some((t) => !t.lit));
+G.setLevel(17, 1); run(130);
+water = P("Gota");
+water.hurt = 0;
+water.x = G.shade.x + 18; water.y = G.shade.y + 14;
+run(2);
+check("Tocarla duele", water.hearts < 3, `vidas ${water.hearts}`);
+G.setLevel(0);
 
 // --- Teclas de Acidito: I J K L y también el teclado numérico ----------------------------------
 console.log("\nTeclas de Acidito");

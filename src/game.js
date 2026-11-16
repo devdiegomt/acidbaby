@@ -98,6 +98,17 @@
   // Para cambiarlos (o quitarlos), basta con editar esta lista.
   const NEWS = ["¡Nuevo! Mundo 3: Las minas a oscuras", "Próximamente: jueguen online, cada uno desde su PC"];
 
+  // Jefe del Mundo 3 (Temporada 2): la Sombra de la mina. Flota hacia Gota o Acidito atravesando
+  // las paredes; si se queda un rato a la luz de una antorcha encendida se quema (un golpe), apaga
+  // esa antorcha y huye. Cada cierto tiempo apaga otra antorcha por su cuenta.
+  const SHADOW_TILE = "☾";
+  const SHADOW_SIZE = 56;
+  const SHADOW_HP = 5;
+  const SHADOW_SPEED = [0.8, 0.95, 1.1, 1.25, 1.4]; // según los golpes que lleva
+  const SHADOW_SNUFF_RATE = [620, 540, 460, 380, 320]; // frames entre antorchas que apaga sola
+  const SHADOW_BURN = 50; // frames a la luz de una antorcha para quemarse
+  const SHADOW_HURT = 100; // frames que tarda en volver a por ellos tras un golpe
+
   const FONT = '"Segoe UI", system-ui, sans-serif';
   const MECH_COLORS = ["#f2c14e", "#c86bff", "#ff6fa8", "#4fd6c8", "#f0f0f0"];
 
@@ -515,6 +526,7 @@
   let boss = null; // jefe final (si el nivel tiene)
   let golem = null; // Gólem de magma (jefe del Mundo 1 de la temporada 2)
   let torches = []; // antorchas: { c, r, lit }
+  let shade = null; // la Sombra de la mina (jefe del Mundo 3 de la temporada 2)
   let hydra = null; // la Hidra del aljibe (jefe del Mundo 2 de la temporada 2)
   let tide = null; // marea: { type, y (superficie, px), bottom, top, speed, delay, draining }
   let dispensers = []; // sueltan barriles de agua: { c, r, wait }
@@ -599,6 +611,7 @@
     golem = null;
     hydra = null;
     torches = [];
+    shade = null;
     dispensers = [];
     rocks = [];
     waves = [];
@@ -665,6 +678,10 @@
         }
         if (t === FLAG_TILE) {
           flags.push({ c, r, on: false });
+          continue;
+        }
+        if (t === SHADOW_TILE) {
+          shade = makeShade(c, r);
           continue;
         }
         if (t === TORCH_TILE || t === LIT_TORCH_TILE) {
@@ -819,7 +836,7 @@
   function liveState() {
     return {
       grid, liquids, breakables, dissolving, barriers, fans, doors, boxes, gems, mechs, portals,
-      enemies, items, springs, crumbles, spikes, flags, obsidian, boss, bossDefeatedAt, golem, dispensers, tide, hydra, torches,
+      enemies, items, springs, crumbles, spikes, flags, obsidian, boss, bossDefeatedAt, golem, dispensers, tide, hydra, torches, shade,
       players: players.map((p) => ({
         ...p,
         ch: CHARACTERS.indexOf(p.ch),
@@ -842,7 +859,7 @@
   function backToCheckpoint() {
     const s = structuredClone(checkpoint);
     ({ grid, liquids, breakables, dissolving, barriers, fans, doors, boxes, gems, mechs, portals } = s);
-    ({ enemies, items, springs, crumbles, spikes, flags, obsidian, boss, bossDefeatedAt, golem, dispensers, tide, hydra, torches } = s);
+    ({ enemies, items, springs, crumbles, spikes, flags, obsidian, boss, bossDefeatedAt, golem, dispensers, tide, hydra, torches, shade } = s);
     players = s.players.map((p) =>
       Object.assign(p, {
         ch: CHARACTERS[p.ch],
@@ -2107,6 +2124,18 @@
   // Chispa enciende una antorcha al tocarla; una bola de fuego también.
   function updateTorches() {
     for (const tc of torches) {
+      // La marea de agua apaga las antorchas que cubre; la de lava las enciende.
+      if (tide && tide.y < tc.r * T + 8) {
+        if (tide.type === "water" && tc.lit) {
+          tc.lit = false;
+          burst(tc.c * T + T / 2, tc.r * T + 6, ["#e8e8f0", "#b9b4cc"], 10);
+          sound.play("hiss");
+        } else if (tide.type === "fire" && !tc.lit) {
+          tc.lit = true;
+          sound.play("torch");
+        }
+        continue;
+      }
       if (tc.lit) continue;
       const x = tc.c * T + 8;
       const y = tc.r * T + 4;
@@ -2117,6 +2146,118 @@
       burst(tc.c * T + T / 2, tc.r * T + 6, ["#ffd166", "#ff8a1a", "#ffffff"], 16);
       sound.play("torch");
     }
+  }
+
+  function makeShade(c, r) {
+    const cfg = level.shade || {};
+    return {
+      name: cfg.name || "La Sombra de la mina",
+      x: c * T + T / 2 - SHADOW_SIZE / 2,
+      y: r * T + T / 2 - SHADOW_SIZE / 2,
+      hits: 0,
+      state: "intro", // intro | hunt | hurt | dying | dead
+      timer: 120,
+      burn: 0, // frames seguidos a la luz de una antorcha
+      snuffTimer: SHADOW_SNUFF_RATE[0],
+      anim: 0,
+    };
+  }
+
+  const shadeCenter = (sh) => ({ x: sh.x + SHADOW_SIZE / 2, y: sh.y + SHADOW_SIZE / 2 });
+  // La antorcha encendida que la alumbra (si hay alguna lo bastante cerca).
+  function torchOnShade(sh) {
+    const c = shadeCenter(sh);
+    return torches.find((tc) => tc.lit && Math.hypot(tc.c * T + T / 2 - c.x, tc.r * T + 6 - c.y) < LIGHT.torch * 0.55) || null;
+  }
+
+  function snuff(tc) {
+    tc.lit = false;
+    burst(tc.c * T + T / 2, tc.r * T + 6, ["#3b2a4a", "#6f63a0", "#b9b4cc"], 14);
+    sound.play("hiss");
+  }
+
+  function updateShade() {
+    const sh = shade;
+    sh.anim++;
+    if (sh.state === "dead") return;
+    if (sh.state === "dying") {
+      if (sh.timer % 5 === 0) burst(sh.x + Math.random() * SHADOW_SIZE, sh.y + Math.random() * SHADOW_SIZE, ["#3b2a4a", "#6f63a0", "#ffe08a"], 10);
+      if (--sh.timer <= 0) {
+        sh.state = "dead";
+        bossDefeatedAt = levelFrames;
+        shake = 20;
+        burst(sh.x + SHADOW_SIZE / 2, sh.y + SHADOW_SIZE / 2, ["#ffe08a", "#ffffff", "#6f63a0"], 80);
+        sound.play("boom");
+        sound.play("win");
+        for (const tc of torches) tc.lit = true; // ya no hay quien las apague: todo se ilumina
+        breakSeals();
+      }
+      return;
+    }
+    if (sh.state === "intro") {
+      if (--sh.timer <= 0) sh.state = "hunt";
+      return;
+    }
+    const lvl = Math.min(sh.hits, SHADOW_SPEED.length - 1);
+    if (sh.state === "hurt" && --sh.timer <= 0) sh.state = "hunt";
+    // Persigue a quien no lleva luz propia (Gota o Acidito); si no queda nadie, a Chispa.
+    const alive = players.filter((p) => p.alive);
+    const prey = alive.filter((p) => p.ch.immune !== "fire");
+    const c = shadeCenter(sh);
+    const near = (list) => list.reduce((best, p) => (!best || Math.hypot(p.x - c.x, p.y - c.y) < Math.hypot(best.x - c.x, best.y - c.y) ? p : best), null);
+    const target = near(prey.length ? prey : alive);
+    if (target && sh.state === "hunt") {
+      const dx = target.x + target.w / 2 - c.x;
+      const dy = target.y + target.h / 2 - c.y;
+      const d = Math.hypot(dx, dy) || 1;
+      sh.x += (dx / d) * SHADOW_SPEED[lvl];
+      sh.y += (dy / d) * SHADOW_SPEED[lvl];
+    }
+    // A la luz de una antorcha se va quemando; si aguanta lo bastante, golpe.
+    const tc = sh.state === "hunt" ? torchOnShade(sh) : null;
+    sh.burn = tc ? sh.burn + 1 : Math.max(0, sh.burn - 2);
+    if (tc && sh.burn >= SHADOW_BURN) {
+      hitShade(sh, tc);
+      return;
+    }
+    // Apaga una antorcha por su cuenta de vez en cuando.
+    if (--sh.snuffTimer <= 0) {
+      sh.snuffTimer = SHADOW_SNUFF_RATE[lvl];
+      const lit = torches.filter((t) => t.lit);
+      if (lit.length) snuff(lit[sh.anim % lit.length]);
+    }
+    // Tocarla duele.
+    if (sh.state === "hunt") {
+      for (const p of players) {
+        if (p.alive && p.hurt === 0 && intersects(sh.x + 8, sh.y + 8, SHADOW_SIZE - 16, SHADOW_SIZE - 16, p)) {
+          hurtPlayer(p, { x: sh.x, w: SHADOW_SIZE }, "fue atrapado por la Sombra");
+          if (state !== "playing") return;
+        }
+      }
+    }
+  }
+
+  function hitShade(sh, tc) {
+    sh.hits++;
+    sh.burn = 0;
+    snuff(tc);
+    shake = Math.max(shake, 8);
+    burst(sh.x + SHADOW_SIZE / 2, sh.y + SHADOW_SIZE / 2, ["#ffe08a", "#ffffff", "#6f63a0"], 30);
+    sound.play("bossHit");
+    if (sh.hits >= SHADOW_HP) {
+      sh.state = "dying";
+      sh.timer = 90;
+      sound.play("roar");
+      return;
+    }
+    // Huye al rincón más lejano de quienes persigue.
+    const corners = [[2, 3], [grid[0].length - 3, 3], [2, grid.length - 6], [grid[0].length - 3, grid.length - 6]];
+    const far = (cc) => Math.min(...players.filter((p) => p.alive).map((p) => Math.hypot(cc[0] * T - p.x, cc[1] * T - p.y)));
+    const [fc, fr] = corners.reduce((a, b) => (far(b) > far(a) ? b : a));
+    sh.x = fc * T - SHADOW_SIZE / 2;
+    sh.y = fr * T - SHADOW_SIZE / 2;
+    sh.state = "hurt";
+    sh.timer = SHADOW_HURT;
   }
 
   // Lo que da luz en un nivel a oscuras: { x, y, r } (radio en píxeles).
@@ -2450,6 +2591,7 @@
         updateFlags();
         if (tide) updateTide();
         if (torches.length) updateTorches();
+        if (shade && state === "playing") updateShade();
         updateBoxes();
         updateCrumbles();
         for (const s of springs) if (s.squash > 0) s.squash--;
@@ -4703,6 +4845,84 @@
     }
   }
 
+  // La Sombra: humo oscuro con tentáculos (lo tapa la oscuridad; los ojos se dibujan aparte, encima).
+  function drawShade(t) {
+    const sh = shade;
+    if (!sh || sh.state === "dead") return;
+    const c = shadeCenter(sh);
+    const r = SHADOW_SIZE / 2;
+    const flicker = sh.burn > 0 ? Math.sin(t * 40) * (sh.burn / SHADOW_BURN) * 4 : 0;
+    ctx.save();
+    ctx.globalAlpha = sh.state === "hurt" ? 0.5 + Math.sin(t * 20) * 0.2 : sh.state === "dying" ? sh.timer / 90 : 0.92;
+    ctx.fillStyle = "#1a1224";
+    for (let i = 0; i < 6; i++) {
+      const a = (i / 6) * Math.PI * 2 + t * 0.8;
+      const len = r * (0.9 + Math.sin(t * 3 + i) * 0.25);
+      ctx.beginPath();
+      ctx.ellipse(c.x + Math.cos(a) * len * 0.55 + flicker, c.y + Math.sin(a) * len * 0.55 + r * 0.25, r * 0.35, r * 0.6, a, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    ctx.fillStyle = "#2c1f3d";
+    ctx.beginPath();
+    ctx.arc(c.x + flicker, c.y, r * 0.8, 0, Math.PI * 2);
+    ctx.fill();
+    if (sh.burn > 0) {
+      ctx.fillStyle = `rgba(255,209,102,${(sh.burn / SHADOW_BURN) * 0.45})`;
+      ctx.beginPath();
+      ctx.arc(c.x, c.y, r * 0.85, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    ctx.restore();
+  }
+
+  function drawShadeEyes(t) {
+    const sh = shade;
+    if (!sh || sh.state === "dead") return;
+    const c = shadeCenter(sh);
+    const blink = Math.floor(t * 2 + sh.anim * 0.003) % 7 === 0 ? 0.2 : 1;
+    ctx.save();
+    ctx.globalAlpha = sh.state === "dying" ? sh.timer / 90 : 1;
+    ctx.shadowColor = "#c86bff";
+    ctx.shadowBlur = 12;
+    ctx.fillStyle = sh.burn > SHADOW_BURN / 2 ? "#ffe08a" : "#e0b3ff";
+    for (const side of [-1, 1]) {
+      ctx.beginPath();
+      ctx.ellipse(c.x + side * 9, c.y - 4, 4, 3 * blink, 0, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    ctx.restore();
+  }
+
+  function drawShadeBar() {
+    const sh = shade;
+    if (sh.state === "dead") {
+      const since = levelFrames - bossDefeatedAt;
+      if (since < 240) {
+        ctx.save();
+        ctx.globalAlpha = Math.min(1, since / 20, (240 - since) / 40);
+        ctx.fillStyle = "rgba(10,8,5,0.75)";
+        ctx.fillRect(0, H / 2 - 50, W, 100);
+        text(`¡${sh.name} se ha deshecho con la luz!`, W / 2, H / 2 - 12, 30, "#ffe08a");
+        text("El sello de las puertas se rompe…", W / 2, H / 2 + 26, 18, "#d9c9a6", "center", "normal");
+        ctx.restore();
+      }
+      return;
+    }
+    const w = Math.min(420, W - 120);
+    const x = W / 2 - w / 2;
+    const y = T + 12;
+    text(sh.name, W / 2, y, 15, "#ffe9b8");
+    const seg = w / SHADOW_HP;
+    for (let i = 0; i < SHADOW_HP; i++) {
+      ctx.fillStyle = "rgba(0,0,0,0.6)";
+      ctx.fillRect(x + i * seg + 2, y + 12, seg - 4, 10);
+      if (i >= sh.hits) {
+        ctx.fillStyle = "#8a63c4";
+        ctx.fillRect(x + i * seg + 2, y + 12, seg - 4, 10);
+      }
+    }
+  }
+
   // Oscuridad: una capa negra con agujeros de luz donde hay algo que alumbra.
   let darkCanvas = null;
   function drawDarkness(t) {
@@ -4848,6 +5068,7 @@
     drawBoss(t);
     drawGolem(t);
     drawHydra(t);
+    drawShade(t);
     for (const p of players) if (p.alive) drawPlayer(p, t);
     drawTide(t);
     drawShots();
@@ -4856,6 +5077,7 @@
     drawBarriers(t);
     drawParticles();
     drawDarkness(t);
+    drawShadeEyes(t);
     // Tras un cambio de personaje, las teclas de cada jugador encima de su cabeza (por encima de todo).
     for (const p of players) {
       if (!p.alive || p.swapFlash <= 0) continue;
@@ -4876,7 +5098,10 @@
       drawHud();
       if (boss && levelFrames > HINT_FRAMES / 2) drawBossBar(t);
       else if (golem && levelFrames > HINT_FRAMES / 2) drawGolemBar();
-      else if (hydra && levelFrames > HINT_FRAMES / 2) {
+      else if (shade && levelFrames > HINT_FRAMES / 2) {
+        drawShadeBar();
+        drawToast(true);
+      } else if (hydra && levelFrames > HINT_FRAMES / 2) {
         drawHydraBar();
         drawToast(true);
       } else drawToast(drawHint());
