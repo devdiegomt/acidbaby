@@ -94,8 +94,8 @@
     #editor-panel .mech input[type="number"] { width: 48px; }
     #editor-panel .mech [data-act="del-mech"] { margin-left: auto; padding: 2px 7px; }
 
-    /* Panel del juego online */
-    #online-panel {
+    /* Paneles encima del juego: online y progreso */
+    .overlay-panel {
       position: fixed;
       inset: 0;
       display: flex;
@@ -105,8 +105,8 @@
       font: 14px "Segoe UI", system-ui, sans-serif;
       color: #f3e6c8;
     }
-    #online-panel[hidden], #online-panel [hidden] { display: none !important; }
-    #online-panel .box {
+    .overlay-panel[hidden], .overlay-panel [hidden] { display: none !important; }
+    .overlay-panel .box {
       box-sizing: border-box;
       width: min(420px, calc(100vw - 32px));
       padding: 16px 18px;
@@ -115,13 +115,13 @@
       border-radius: 12px;
       box-shadow: 0 0 40px rgba(0, 0, 0, 0.8);
     }
-    #online-panel header { display: flex; align-items: center; justify-content: space-between; }
-    #online-panel h1 { margin: 0; font-size: 20px; color: #ffe9b8; }
-    #online-panel .help, #online-panel .note { color: #9c8d70; margin: 8px 0; }
-    #online-panel .note { font-size: 12px; }
-    #online-panel .start { display: flex; flex-direction: column; gap: 10px; margin: 12px 0; }
-    #online-panel .row { display: flex; gap: 8px; }
-    #online-panel input {
+    .overlay-panel header { display: flex; align-items: center; justify-content: space-between; }
+    .overlay-panel h1 { margin: 0; font-size: 20px; color: #ffe9b8; }
+    .overlay-panel .help, .overlay-panel .note { color: #9c8d70; margin: 8px 0; }
+    .overlay-panel .note { font-size: 12px; }
+    .overlay-panel .start { display: flex; flex-direction: column; gap: 10px; margin: 12px 0; }
+    .overlay-panel .row { display: flex; gap: 8px; }
+    .overlay-panel input {
       flex: 1;
       min-width: 0;
       background: #0d0b08;
@@ -133,7 +133,7 @@
       letter-spacing: 0.2em;
       text-transform: uppercase;
     }
-    #online-panel button {
+    .overlay-panel button {
       background: #2b2419;
       color: #f3e6c8;
       border: 1px solid #6e5b3e;
@@ -142,14 +142,29 @@
       font: inherit;
       cursor: pointer;
     }
-    #online-panel button:hover { border-color: #ffe08a; }
-    #online-panel button.primary { background: #ffe08a; color: #1a150f; font-weight: 700; border-color: #ffe08a; }
-    #online-panel .code-label { margin: 12px 0 0; color: #d9c9a6; }
-    #online-panel .code { margin: 4px 0 10px; font: bold 34px Consolas, monospace; letter-spacing: 0.25em; color: #ffe08a; }
-    #online-panel .slots { list-style: none; padding: 0; margin: 0 0 12px; }
-    #online-panel .slots li { display: flex; justify-content: space-between; padding: 6px 0; border-bottom: 1px solid #3b3022; }
-    #online-panel .slots span { color: #9c8d70; }
-    #online-panel .status { min-height: 1.2em; color: #ffe08a; margin: 10px 0 0; }
+    .overlay-panel button:hover { border-color: #ffe08a; }
+    .overlay-panel button.primary { background: #ffe08a; color: #1a150f; font-weight: 700; border-color: #ffe08a; }
+    .overlay-panel .code-label { margin: 12px 0 0; color: #d9c9a6; }
+    .overlay-panel .code { margin: 4px 0 10px; font: bold 34px Consolas, monospace; letter-spacing: 0.25em; color: #ffe08a; }
+    .overlay-panel .slots { list-style: none; padding: 0; margin: 0 0 12px; }
+    .overlay-panel .slots li { display: flex; justify-content: space-between; padding: 6px 0; border-bottom: 1px solid #3b3022; }
+    .overlay-panel .slots span { color: #9c8d70; }
+    .overlay-panel .status { min-height: 1.2em; color: #ffe08a; margin: 10px 0 0; }
+    .overlay-panel textarea {
+      box-sizing: border-box;
+      width: 100%;
+      resize: none;
+      background: #0d0b08;
+      color: #ffe08a;
+      border: 1px solid #6e5b3e;
+      border-radius: 6px;
+      padding: 6px 8px;
+      font: 13px Consolas, monospace;
+      word-break: break-all;
+    }
+    .overlay-panel .summary { color: #d9c9a6; margin: 8px 0; }
+    .overlay-panel .label { color: #d9c9a6; margin: 14px 0 4px; }
+    #progress-panel .row { margin-top: 8px; }
   </style>
 </head>
 <body>
@@ -159,5 +174,6 @@
   <script src="src/editor.js"></script>
   <script src="src/game.js"></script>
   <script src="src/online.js"></script>
+  <script src="src/progreso.js"></script>
 </body>
 </html>

@@ -197,7 +197,7 @@
     ok: ["Enter", "Space"],
     back: ["Escape"],
   };
-  const GAME_KEYS = new Set(["KeyR", "KeyM", "KeyP", "KeyE", "KeyO", ...Object.values(MENU_KEYS).flat()]);
+  const GAME_KEYS = new Set(["KeyR", "KeyM", "KeyP", "KeyE", "KeyO", "KeyG", ...Object.values(MENU_KEYS).flat()]);
   for (const ch of CHARACTERS) Object.values(ch.keys).flat().forEach((k) => GAME_KEYS.add(k));
 
   const held = new Set();
@@ -221,9 +221,10 @@
     };
   }
 
+  const overlayOpen = () => !!(globalThis.Online?.isOpen || globalThis.Progreso?.isOpen);
   addEventListener("keydown", (e) => {
     if (e.target?.closest?.("input, textarea, select")) return; // escribiendo en el editor
-    if (globalThis.Online?.isOpen) return; // con el panel online abierto, las teclas son suyas
+    if (overlayOpen()) return; // con el panel online o el de progreso abierto, las teclas son suyas
     if (GAME_KEYS.has(e.code)) e.preventDefault();
     if (!e.repeat) pressed.add(e.code);
     held.add(e.code);
@@ -241,12 +242,12 @@
     if (state === "playing" && !net.active) pauseGame();
   });
   addEventListener("pointermove", (e) => {
-    if (globalThis.Online?.isOpen) return;
+    if (overlayOpen()) return;
     pointer = toCanvas(e);
     pointerMoved = true;
   });
   addEventListener("pointerdown", (e) => {
-    if (globalThis.Online?.isOpen) return; // un clic en el panel online no es un clic en el juego
+    if (overlayOpen()) return; // un clic en un panel no es un clic en el juego
     pointer = toCanvas(e);
     pointerMoved = true;
     clicked = true;
@@ -274,6 +275,21 @@
       globalThis.localStorage.setItem(SAVE_KEY, JSON.stringify(save));
     } catch {
       // Sin guardado: no pasa nada.
+    }
+  }
+
+  // Pide al navegador que no borre el progreso por su cuenta cuando le falta espacio (Chrome y Edge
+  // lo conceden sin preguntar; Firefox sacaría un aviso en mitad del juego, así que ahí no se pide).
+  let persistAsked = false;
+  function askPersistentStorage() {
+    if (persistAsked) return;
+    persistAsked = true;
+    try {
+      const nav = globalThis.navigator;
+      if (/firefox/i.test(nav?.userAgent || "")) return;
+      nav?.storage?.persist?.().catch(() => {});
+    } catch {
+      // No pasa nada: el código de progreso sigue sirviendo.
     }
   }
 
@@ -326,6 +342,130 @@
     return [done, done && rec.bestGems >= levelGemTotal(i, s), done && !!rec.clean];
   }
   const starCount = (s) => s.levels.reduce((n, _, i) => n + starsOf(s, i).filter(Boolean).length, 0);
+  // ---------------------------------------------------------------------------
+  // Código de progreso: todo lo guardado (niveles, gemas, estrellas, récords) en un texto que se
+  // puede copiar, mandar por WhatsApp y cargar en otro PC. No hace falta servidor ni cuenta.
+  // ---------------------------------------------------------------------------
+  // Formato (bytes, luego en base 32): versión; por cada nivel terminado, 2 bytes con un resumen
+  // (hash) de su clave, 1 byte con «sin perder corazón» y las gemas, y el mejor tiempo en frames
+  // (de 7 en 7 bits); al final, 2 bytes de comprobación para detectar un código mal copiado.
+  // El hash hace que el código siga valiendo aunque se añadan niveles o mundos nuevos.
+  const PROGRESS_VERSION = 1;
+  const PROGRESS_PREFIX = "ACID";
+  const B32 = "0123456789ABCDEFGHJKMNPQRSTVWXYZ"; // sin I, L, O ni U para no confundirlas
+  function hash16(bytesOrText) {
+    let h = 0x811c9dc5;
+    const list = typeof bytesOrText === "string" ? [...bytesOrText].map((c) => c.codePointAt(0)) : bytesOrText;
+    for (const b of list) h = Math.imul(h ^ b, 0x01000193) >>> 0;
+    return (h ^ (h >>> 16)) & 0xffff;
+  }
+  const allRecordKeys = () => SEASONS.flatMap((s) => s.levels.map((lv) => recordKey(s, lv)));
+
+  function progressCode() {
+    const bytes = [PROGRESS_VERSION];
+    for (const key of allRecordKeys()) {
+      const rec = save.levels[key];
+      if (!rec?.done) continue;
+      const h = hash16(key);
+      bytes.push(h >> 8, h & 0xff, (rec.clean ? 0x80 : 0) | Math.min(127, rec.bestGems | 0));
+      let f = Math.max(0, Math.min(2 ** 28, rec.bestFrames | 0));
+      while (f >= 0x80) {
+        bytes.push((f & 0x7f) | 0x80);
+        f >>>= 7;
+      }
+      bytes.push(f);
+    }
+    const check = hash16(bytes);
+    bytes.push(check >> 8, check & 0xff);
+    // Bytes → base 32 (5 bits por letra), en grupos de 4 para que se lea mejor.
+    let bits = 0;
+    let acc = 0;
+    let out = "";
+    for (const b of bytes) {
+      acc = (acc << 8) | b;
+      bits += 8;
+      while (bits >= 5) {
+        out += B32[(acc >>> (bits - 5)) & 31];
+        bits -= 5;
+      }
+      acc &= (1 << bits) - 1;
+    }
+    if (bits) out += B32[(acc << (5 - bits)) & 31];
+    return [PROGRESS_PREFIX, ...out.match(/.{1,4}/g)].join("-");
+  }
+
+  // Lee un código y lo combina con lo de este PC: de cada nivel se queda lo mejor (nunca se
+  // pierde nada). Devuelve { ok, levels, improved } o { ok: false, error }.
+  function loadProgressCode(text) {
+    const bad = { ok: false, error: "Ese código no es válido. Revisen que esté completo." };
+    let clean = String(text || "").toUpperCase();
+    // Si pegan el enlace entero, se toma lo que va después de «progreso=».
+    const fromLink = clean.match(/PROGRESO=([0-9A-Z-]+)/);
+    if (fromLink) clean = fromLink[1];
+    clean = clean.replace(/[\s-]/g, "");
+    if (!clean.startsWith(PROGRESS_PREFIX)) return bad;
+    // Letras que se confunden al copiarlo a mano: O por 0, I y L por 1.
+    clean = clean.slice(PROGRESS_PREFIX.length).replace(/O/g, "0").replace(/[IL]/g, "1");
+    const bytes = [];
+    let bits = 0;
+    let acc = 0;
+    for (const ch of clean) {
+      const v = B32.indexOf(ch);
+      if (v < 0) return bad;
+      acc = (acc << 5) | v;
+      bits += 5;
+      if (bits >= 8) {
+        bytes.push((acc >>> (bits - 8)) & 0xff);
+        bits -= 8;
+      }
+      acc &= (1 << bits) - 1;
+    }
+    if (bytes.length < 3) return bad;
+    const body = bytes.slice(0, -2);
+    if (hash16(body) !== ((bytes[bytes.length - 2] << 8) | bytes[bytes.length - 1])) return bad;
+    if (body[0] !== PROGRESS_VERSION) return { ok: false, error: "Ese código es de otra versión del juego." };
+    const byHash = new Map(allRecordKeys().map((k) => [hash16(k), k]));
+    const found = [];
+    let at = 1;
+    while (at < body.length) {
+      if (at + 3 > body.length) return bad;
+      const h = (body[at] << 8) | body[at + 1];
+      const gemsByte = body[at + 2];
+      at += 3;
+      let frames = 0;
+      let shift = 0;
+      for (;;) {
+        if (at >= body.length || shift > 28) return bad;
+        const b = body[at++];
+        frames += (b & 0x7f) * 2 ** shift;
+        shift += 7;
+        if (!(b & 0x80)) break;
+      }
+      found.push({ key: byHash.get(h), clean: !!(gemsByte & 0x80), gems: gemsByte & 0x7f, frames });
+    }
+    let improved = 0;
+    for (const r of found) {
+      if (!r.key) continue; // un nivel que este PC no conoce: se ignora
+      const prev = save.levels[r.key];
+      const next = {
+        done: true,
+        bestFrames: prev?.done ? Math.min(prev.bestFrames, r.frames) : r.frames,
+        bestGems: Math.max(prev?.bestGems || 0, r.gems),
+        clean: !!prev?.clean || r.clean,
+      };
+      if (!prev?.done || next.bestFrames !== prev.bestFrames || next.bestGems !== prev.bestGems || next.clean !== !!prev.clean) improved++;
+      save.levels[r.key] = next;
+    }
+    writeSave();
+    return { ok: true, levels: found.filter((r) => r.key).length, improved };
+  }
+
+  function progressSummary() {
+    const levels = allRecordKeys().filter((k) => save.levels[k]?.done).length;
+    const stars = SEASONS.reduce((n, s) => n + starCount(s), 0);
+    return { levels, stars };
+  }
+
   const levelNumber = (i) => (seasonIndex === 0 ? String(i + 1) : `${season().where[i].world + 1}-${season().where[i].num + 1}`);
 
   // ---------------------------------------------------------------------------
@@ -2344,6 +2484,7 @@
     // Terminar una temporada abre la siguiente.
     lastResult.newSeason = SEASONS[seasonIndex + 1] && !nextSeasonWasOpen && isSeasonUnlocked(seasonIndex + 1) ? SEASONS[seasonIndex + 1] : null;
     writeSave();
+    askPersistentStorage();
   }
 
   // ---------------------------------------------------------------------------
@@ -2424,6 +2565,10 @@
       globalThis.Online.open();
       return;
     }
+    if (pressed.has("KeyG") && globalThis.Progreso) {
+      globalThis.Progreso.open();
+      return;
+    }
     const n = SEASONS.length;
     const before = titleIndex;
     if (menuKey("left")) titleIndex = (titleIndex + n - 1) % n;
@@ -2476,6 +2621,10 @@
   }
 
   function updateLevelMenu() {
+    if (pressed.has("KeyG") && globalThis.Progreso) {
+      globalThis.Progreso.open();
+      return;
+    }
     const all = seasonLevels().length;
     const { start, n } = worldRange();
     const worlds = season().worlds.length;
@@ -2941,6 +3090,8 @@
       },
       names: net.names,
     },
+    // Código de progreso (progreso.js lo enseña y lo carga)
+    progress: { code: progressCode, load: loadProgressCode, summary: progressSummary },
     T,
     characters: CHARACTERS,
     // Los niveles de todas las temporadas, para abrirlos en el editor.
@@ -4452,7 +4603,7 @@
     });
     const hint = SEASONS.length > 1 ? "← →: temporada · ENTER: jugar" : "ENTER: jugar";
     const online = net.active ? "En línea: tú eliges por los tres" : globalThis.Online ? "O: jugar online" : "";
-    text(`${hint} · ${online ? online + " · " : ""}S ↓ K: disparar · R: reintentar · M: sonido ${save.muted ? "(apagado)" : ""}`, W / 2, 540, 14, "#9c8d70", "center", "normal");
+    text(`${hint} · ${online ? online + " · " : ""}G: guardar progreso · S ↓ K: disparar · R: reintentar · M: sonido ${save.muted ? "(apagado)" : ""}`, W / 2, 540, 14, "#9c8d70", "center", "normal");
     if (net.notice) text(net.notice, W / 2, 140, 15, "#f0a58f", "center", "normal");
   }
 
@@ -4597,7 +4748,7 @@
     drawStar(W / 2 + 92, footer - 30, 8, true);
     text(`${starCount(season())} / ${seasonLevels().length * 3}`, W / 2 + 104, footer - 30, 16, "#f3e6c8", "left");
     const keys = worlds > 1 ? "← →: elegir · ↑ ↓: mundo" : "← →: elegir";
-    text(`${keys} · ENTER o clic: jugar · ESC: volver`, W / 2, footer, 15, "#9c8d70", "center", "normal");
+    text(`${keys} · ENTER o clic: jugar · G: guardar progreso · ESC: volver`, W / 2, footer, 15, "#9c8d70", "center", "normal");
   }
 
   function drawPause() {
