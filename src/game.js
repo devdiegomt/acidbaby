@@ -96,7 +96,7 @@
 
   // Avisos de novedades: salen en la portada, en el menú de niveles y en la pausa.
   // Para cambiarlos (o quitarlos), basta con editar esta lista.
-  const NEWS = ["¡Nuevo! Mundo 3: Las minas a oscuras", "Próximamente: jueguen online, cada uno desde su PC"];
+  const NEWS = ["¡Nuevo! Jueguen online, cada uno desde su PC (tecla O)", "Mundo 3: Las minas a oscuras"];
 
   // Jefe del Mundo 3 (Temporada 2): la Sombra de la mina. Flota hacia Gota o Acidito atravesando
   // las paredes; si se queda un rato a la luz de una antorcha encendida se quema (un golpe), apaga
@@ -197,7 +197,7 @@
     ok: ["Enter", "Space"],
     back: ["Escape"],
   };
-  const GAME_KEYS = new Set(["KeyR", "KeyM", "KeyP", "KeyE", ...Object.values(MENU_KEYS).flat()]);
+  const GAME_KEYS = new Set(["KeyR", "KeyM", "KeyP", "KeyE", "KeyO", ...Object.values(MENU_KEYS).flat()]);
   for (const ch of CHARACTERS) Object.values(ch.keys).flat().forEach((k) => GAME_KEYS.add(k));
 
   const held = new Set();
@@ -223,21 +223,30 @@
 
   addEventListener("keydown", (e) => {
     if (e.target?.closest?.("input, textarea, select")) return; // escribiendo en el editor
+    if (globalThis.Online?.isOpen) return; // con el panel online abierto, las teclas son suyas
     if (GAME_KEYS.has(e.code)) e.preventDefault();
     if (!e.repeat) pressed.add(e.code);
     held.add(e.code);
     sound.unlock();
+    // En red, las pulsaciones se apuntan para mandarlas con las teclas del siguiente frame.
+    if (net.active && !e.repeat) {
+      if (ALL_KEYS.jump.includes(e.code)) net.edges |= BIT.jumpPressed;
+      if (ALL_KEYS.fire.includes(e.code)) net.edges |= BIT.firePressed;
+      if (e.code === "KeyR") net.edges |= BIT.retry;
+    }
   });
   addEventListener("keyup", (e) => held.delete(e.code));
   addEventListener("blur", () => {
     held.clear();
-    if (state === "playing") pauseGame();
+    if (state === "playing" && !net.active) pauseGame();
   });
   addEventListener("pointermove", (e) => {
+    if (globalThis.Online?.isOpen) return;
     pointer = toCanvas(e);
     pointerMoved = true;
   });
   addEventListener("pointerdown", (e) => {
+    if (globalThis.Online?.isOpen) return; // un clic en el panel online no es un clic en el juego
     pointer = toCanvas(e);
     pointerMoved = true;
     clicked = true;
@@ -660,7 +669,7 @@
           continue;
         }
         if (t === OBSIDIAN_TILE) {
-          obsidian.push({ c, r, age: Infinity });
+          obsidian.push({ c, r, age: 1e9 }); // (no Infinity: el estado tiene que poder viajar como JSON)
           continue;
         }
         grid[r][c] = " ";
@@ -1160,15 +1169,15 @@
   // Jugadores
   // ---------------------------------------------------------------------------
   function updatePlayer(p) {
-    const k = p.controls; // las teclas son del jugador; el personaje (p.ch) puede cambiar con un amuleto
-    const dir = (isHeld(k.right) ? 1 : 0) - (isHeld(k.left) ? 1 : 0);
+    const k = inputOf(p); // las teclas son del jugador; el personaje (p.ch) puede cambiar con un amuleto
+    const dir = (k.right ? 1 : 0) - (k.left ? 1 : 0);
     if (dir) p.facing = dir;
 
     const speed = p.pushing ? MOVE_SPEED * PUSH_SPEED_FACTOR : MOVE_SPEED;
     p.vx += (dir * speed - p.vx) * (p.onGround ? 0.35 : 0.2);
     if (Math.abs(p.vx) < 0.05) p.vx = 0;
 
-    if (wasPressed(k.jump)) p.jumpBuffer = JUMP_BUFFER_FRAMES;
+    if (k.jumpPressed) p.jumpBuffer = JUMP_BUFFER_FRAMES;
     else if (p.jumpBuffer > 0) p.jumpBuffer--;
 
     if (p.onGround) {
@@ -1182,7 +1191,7 @@
       p.jumpBuffer = 0;
       p.coyote = 0;
       sound.play("jump");
-    } else if (wasPressed(k.jump) && p.airJumps > 0 && !p.inWind) {
+    } else if (k.jumpPressed && p.airJumps > 0 && !p.inWind) {
       // Segundo salto en el aire gracias a las botas.
       p.airJumps--;
       p.vy = -DOUBLE_JUMP_SPEED;
@@ -1201,7 +1210,7 @@
       p.vy = Math.max(p.vy - FAN_LIFT, -FAN_MAX_RISE);
       // Sin teclas, la corriente centra al personaje para que no se enganche en los bordes del hueco.
       if (!dir) p.vx += ((wind.c + 0.5) * T - (p.x + p.w / 2)) * FAN_CENTERING;
-    } else if (!isHeld(k.jump) && p.vy < 0 && !p.springing) {
+    } else if (!k.jumpHeld && p.vy < 0 && !p.springing) {
       // Soltar el salto antes de tiempo hace un salto más corto.
       p.vy += GRAVITY;
     }
@@ -1229,7 +1238,7 @@
     if (p.hurt > 0) p.hurt--;
     if (p.swapFlash > 0) p.swapFlash--;
     if (p.shotCooldown > 0) p.shotCooldown--;
-    if (wasPressed(k.fire) && p.inv.weapon && p.shotCooldown === 0) shoot(p);
+    if (k.firePressed && p.inv.weapon && p.shotCooldown === 0) shoot(p);
 
     const door = doors[p.ch.door];
     const cx = p.x + p.w / 2;
@@ -2098,7 +2107,7 @@
       h.state = "dying";
       h.timer = 100;
       tide.top = tide.bottom / T; // ya no vuelve a subir
-      tide.delay = Infinity;
+      tide.delay = 1e9;
       return;
     }
     h.state = "hurt";
@@ -2411,6 +2420,10 @@
 
   // En la portada se elige temporada; el fondo enseña su primer nivel.
   function updateTitle() {
+    if (pressed.has("KeyO") && !net.active && globalThis.Online) {
+      globalThis.Online.open();
+      return;
+    }
     const n = SEASONS.length;
     const before = titleIndex;
     if (menuKey("left")) titleIndex = (titleIndex + n - 1) % n;
@@ -2490,7 +2503,10 @@
     if (menuKey("ok") || (clicked && pointed !== null)) {
       if (isUnlocked(levelIndex)) {
         sound.play("select");
-        restartLevel();
+        if (net.active) {
+          net.send?.({ t: "start", season: seasonIndex, level: levelIndex });
+          netStartLevel(seasonIndex, levelIndex);
+        } else restartLevel();
       } else {
         sound.play("locked");
       }
@@ -2562,6 +2578,216 @@
   }
 
   // ---------------------------------------------------------------------------
+  // Juego en red: cada PC maneja un personaje (0 Chispa, 1 Gota, 2 Acidito) y simula la partida
+  // entera; solo viajan las teclas de cada frame. Un frame no se simula hasta tener las teclas de
+  // los tres (se mandan NET_DELAY frames por adelantado). Cada NET_HASH_EVERY frames los invitados
+  // mandan un resumen del estado al anfitrión; si no coincide con el suyo, el anfitrión les manda
+  // el estado completo. La conexión (salas, códigos, WebRTC) está en online.js.
+  // ---------------------------------------------------------------------------
+  const NET_DELAY = 6;
+  const NET_HASH_EVERY = 30;
+  const NET_MAX_STEPS = 4; // frames que se pueden recuperar de golpe tras un parón
+  const BIT = { left: 1, right: 2, jump: 4, jumpPressed: 8, firePressed: 16, retry: 32 };
+  const ALL_KEYS = {
+    left: CHARACTERS.flatMap((ch) => keyList(ch.keys.left)),
+    right: CHARACTERS.flatMap((ch) => keyList(ch.keys.right)),
+    jump: CHARACTERS.flatMap((ch) => keyList(ch.keys.jump)),
+    fire: CHARACTERS.flatMap((ch) => keyList(ch.keys.fire)),
+  };
+  const net = {
+    active: false,
+    host: false,
+    slot: 0,
+    send: null, // la pone online.js: reparte un mensaje a los demás
+    frame: 0, // siguiente frame de juego por simular
+    sent: 0, // siguiente frame para el que mandaré mis teclas
+    inputs: new Map(), // frame -> [teclas de cada jugador]
+    current: [0, 0, 0], // teclas del frame que se simula
+    edges: 0, // pulsaciones (saltar, disparar, reintentar) desde la última muestra
+    hashes: new Map(), // anfitrión: frame -> resumen propio
+    theirs: new Map(), // anfitrión: frame -> [{ slot, h }] de los invitados
+    names: ["Chispa", "Gota", "Acidito"],
+    notice: "", // aviso en la portada (por ejemplo, si alguien se desconecta)
+    syncs: 0, // veces que se ha corregido una desincronización
+    stall: 0, // pasos del reloj seguidos esperando las teclas de alguien
+  };
+  const inLockstep = () => net.active && (state === "playing" || state === "dead" || state === "won" || state === "ending");
+
+  // Las teclas de un jugador en este frame: en red, las que llegaron para él; si no, las del teclado.
+  function inputOf(p) {
+    if (net.active) {
+      const b = net.current[players.indexOf(p)] || 0;
+      return { left: !!(b & BIT.left), right: !!(b & BIT.right), jumpHeld: !!(b & BIT.jump), jumpPressed: !!(b & BIT.jumpPressed), firePressed: !!(b & BIT.firePressed) };
+    }
+    const k = p.controls;
+    return { left: isHeld(k.left), right: isHeld(k.right), jumpHeld: isHeld(k.jump), jumpPressed: wasPressed(k.jump), firePressed: wasPressed(k.fire) };
+  }
+  const anyRetry = () => (net.active ? net.current.some((b) => b & BIT.retry) : pressed.has("KeyR"));
+
+  // En red, cada uno juega con cualquiera de los tres juegos de teclas.
+  function sampleLocalBits() {
+    let b = net.edges;
+    net.edges = 0;
+    if (ALL_KEYS.left.some((c) => held.has(c))) b |= BIT.left;
+    if (ALL_KEYS.right.some((c) => held.has(c))) b |= BIT.right;
+    if (ALL_KEYS.jump.some((c) => held.has(c))) b |= BIT.jump;
+    return b;
+  }
+
+  function netInput(slot, f, b) {
+    if (f < net.frame - 240) return;
+    let row = net.inputs.get(f);
+    if (!row) net.inputs.set(f, (row = [undefined, undefined, undefined]));
+    row[slot] = b;
+  }
+
+  // Un resumen del estado para comparar entre PCs (posiciones redondeadas, vidas, estado…).
+  const STATE_CODE = { playing: 1, dead: 2, won: 3, ending: 4 };
+  function netHash() {
+    let h = 7;
+    const add = (v) => (h = (Math.imul(h, 31) + Math.round((v || 0) * 100)) | 0);
+    for (const p of players) [p.x, p.y, p.vx, p.vy, p.hearts, p.alive ? 1 : 0, CHARACTERS.indexOf(p.ch)].forEach(add);
+    for (const b of boxes) [b.x, b.y].forEach(add);
+    for (const e of enemies) [e.x, e.y, e.alive ? 1 : 0].forEach(add);
+    for (const m of mechs) [m.ox, m.oy].forEach(add);
+    [levelFrames, STATE_CODE[state] || 0, tide ? tide.y : 0, gems.filter((g) => g.taken).length].forEach(add);
+    for (const b of [boss, golem, hydra, shade]) if (b) [b.x || 0, b.y || 0, b.hits || b.hp || 0].forEach(add);
+    return h;
+  }
+
+  // Empieza (o reempieza) un nivel en red: todos a la vez, desde el frame 0.
+  function netStartLevel(si, li) {
+    seasonIndex = si;
+    levelIndex = li;
+    testLevel = null;
+    restartLevel();
+    net.frame = 0;
+    net.sent = NET_DELAY;
+    net.inputs = new Map();
+    net.hashes = new Map();
+    net.theirs = new Map();
+    for (let f = 0; f < NET_DELAY; f++) net.inputs.set(f, [0, 0, 0]);
+  }
+
+  // Un paso del reloj local (1/60 s): manda mis teclas y simula los frames que ya estén completos.
+  function netTick() {
+    // Se mandan las teclas siempre NET_DELAY frames por delante (ni más: si no, tras un parón de la
+    // red el retraso de los controles crecería para siempre).
+    if (net.sent < net.frame + NET_DELAY) {
+      const b = sampleLocalBits();
+      netInput(net.slot, net.sent, b);
+      net.send?.({ t: "in", slot: net.slot, f: net.sent, b });
+      net.sent++;
+    }
+    let advanced = false;
+    for (let steps = 0; steps < NET_MAX_STEPS && inLockstep(); steps++) {
+      const row = net.inputs.get(net.frame);
+      if (!row || row.some((b) => b === undefined)) break;
+      advanced = true;
+      net.current = row;
+      update();
+      net.inputs.delete(net.frame - 240);
+      net.frame++;
+      if (net.frame % NET_HASH_EVERY === 0) {
+        const h = netHash();
+        if (net.host) {
+          net.hashes.set(net.frame, h);
+          net.hashes.delete(net.frame - NET_HASH_EVERY * 20);
+          compareHashes(net.frame);
+        } else net.send?.({ t: "hash", slot: net.slot, f: net.frame, h });
+      }
+    }
+    net.stall = inLockstep() && !advanced ? net.stall + 1 : 0;
+    if (!inLockstep()) update(); // menús (anfitrión) o espera (invitados)
+    pressed.clear();
+    pointerMoved = false;
+    clicked = false;
+  }
+
+  function compareHashes(f) {
+    const mine = net.hashes.get(f);
+    const list = net.theirs.get(f);
+    if (mine === undefined || !list) return;
+    net.theirs.delete(f);
+    if (list.some((x) => x.h !== mine)) {
+      net.syncs++;
+      net.send?.({ t: "sync", f: net.frame, s: fullState() });
+    }
+  }
+
+  // Mensajes que llegan de los demás (online.js los entrega aquí).
+  function netReceive(msg) {
+    if (!net.active) return;
+    if (msg.t === "in") netInput(msg.slot, msg.f, msg.b);
+    else if (msg.t === "start") netStartLevel(msg.season, msg.level);
+    else if (msg.t === "menu") state = "netwait";
+    else if (msg.t === "hash" && net.host) {
+      if (!net.theirs.has(msg.f)) net.theirs.set(msg.f, []);
+      net.theirs.get(msg.f).push({ slot: msg.slot, h: msg.h });
+      compareHashes(msg.f);
+    } else if (msg.t === "sync" && !net.host) {
+      applyFullState(msg.s);
+      net.frame = msg.f;
+      net.syncs++;
+    }
+  }
+
+  // El estado completo, en un formato que viaja como JSON (sin Map ni referencias entre objetos).
+  function packWorld(w) {
+    const lock = (b) => ({ ...b, portalLock: b.portalLock ? w.portals.indexOf(b.portalLock) : -1 });
+    return JSON.parse(JSON.stringify({
+      ...w,
+      dissolving: [...w.dissolving.entries()],
+      fans: w.fans.map((f) => ({ ...f, mech: f.mech ? w.mechs.indexOf(f.mech) : -1 })),
+      portals: w.portals.map((p) => ({ ...p, pair: p.pair ? w.portals.indexOf(p.pair) : -1 })),
+      players: w.players.map(lock),
+      boxes: w.boxes.map(lock),
+    }));
+  }
+
+  function unpackWorld(o) {
+    const portalList = o.portals.map((p) => ({ ...p }));
+    portalList.forEach((p) => (p.pair = p.pair >= 0 ? portalList[p.pair] : null));
+    const lock = (b) => ({ ...b, portalLock: b.portalLock >= 0 ? portalList[b.portalLock] : null });
+    return {
+      ...o,
+      dissolving: new Map(o.dissolving),
+      portals: portalList,
+      fans: o.fans.map((f) => ({ ...f, mech: f.mech >= 0 ? o.mechs[f.mech] : null })),
+      players: o.players.map(lock),
+      boxes: o.boxes.map(lock),
+    };
+  }
+
+  function fullState() {
+    return {
+      level: { season: seasonIndex, index: levelIndex },
+      world: packWorld(liveState()),
+      checkpoint: checkpoint ? packWorld(checkpoint) : null,
+      shots: shots.map((x) => ({ ...x, owner: players.indexOf(x.owner) })),
+      darts: darts.map((d) => ({ ...d, target: d.target ? players.indexOf(d.target) : -1 })),
+      rocks, waves, state, deadTimer, deathMessage, levelFrames, cleanRun, retries, shake, toast, lastResult,
+    };
+  }
+
+  function applyFullState(s) {
+    if (seasonIndex !== s.level.season || levelIndex !== s.level.index || !level) {
+      seasonIndex = s.level.season;
+      levelIndex = s.level.index;
+      testLevel = null;
+      loadLevel(levelIndex);
+    }
+    const w = unpackWorld(s.world);
+    ({ grid, liquids, breakables, dissolving, barriers, fans, doors, boxes, gems, mechs, portals } = w);
+    ({ enemies, items, springs, crumbles, spikes, flags, obsidian, boss, bossDefeatedAt, golem, dispensers, tide, hydra, torches, shade } = w);
+    players = w.players.map((p) => Object.assign(p, { ch: CHARACTERS[p.ch], controls: CHARACTERS[p.controls].keys }));
+    checkpoint = s.checkpoint ? unpackWorld(s.checkpoint) : null;
+    shots = s.shots.map((x) => ({ ...x, owner: players[x.owner] }));
+    darts = s.darts.map((d) => ({ ...d, target: d.target >= 0 ? players[d.target] : null }));
+    ({ rocks, waves, state, deadTimer, deathMessage, levelFrames, cleanRun, retries, shake, toast, lastResult } = s);
+  }
+
+  // ---------------------------------------------------------------------------
   // Bucle principal
   // ---------------------------------------------------------------------------
   function update() {
@@ -2577,10 +2803,12 @@
       if (menuKey("back")) closeEditor();
     } else if (state === "paused") {
       updatePauseMenu();
+    } else if (state === "netwait") {
+      // Invitado en red: espera a que el anfitrión elija nivel.
     } else if (state === "playing") {
-      if (pressed.has("KeyR")) {
+      if (anyRetry()) {
         retry();
-      } else if (menuKey("back") || pressed.has("KeyP")) {
+      } else if (!net.active && (menuKey("back") || pressed.has("KeyP"))) {
         pauseGame();
       } else {
         levelFrames++;
@@ -2621,7 +2849,24 @@
       }
     } else if (state === "dead") {
       deadTimer++;
-      if (pressed.has("KeyR") || deadTimer > RESTART_DELAY) retry();
+      if (anyRetry() || deadTimer > RESTART_DELAY) retry();
+    } else if (state === "won" && net.active) {
+      // En red, solo el anfitrión decide: siguiente nivel (para todos) o volver a elegir.
+      if (net.host && menuKey("ok")) {
+        sound.play("select");
+        if (levelIndex + 1 < seasonLevels().length) {
+          net.send?.({ t: "start", season: seasonIndex, level: levelIndex + 1 });
+          netStartLevel(seasonIndex, levelIndex + 1);
+        } else state = "ending";
+      } else if (net.host && menuKey("back")) {
+        net.send?.({ t: "menu" });
+        openLevelMenu();
+      }
+    } else if (state === "ending" && net.active) {
+      if (net.host && (menuKey("ok") || menuKey("back"))) {
+        net.send?.({ t: "menu" });
+        openLevelMenu();
+      }
     } else if (state === "won") {
       if (testLevel) {
         if (menuKey("ok") || menuKey("back")) backToEditor();
@@ -2668,6 +2913,34 @@
   }
 
   globalThis.Juego = {
+    // Juego en red (online.js habla con esto)
+    net: {
+      begin({ host, slot, send }) {
+        Object.assign(net, { active: true, host, slot, send, notice: "", syncs: 0, stall: 0, edges: 0 });
+        testLevel = null;
+        if (host) openTitle();
+        else state = "netwait";
+      },
+      end(reason = "") {
+        net.active = false;
+        net.send = null;
+        net.notice = reason;
+        openTitle();
+      },
+      receive: netReceive,
+      tick: netTick,
+      hash: netHash,
+      get frame() {
+        return net.frame;
+      },
+      get syncs() {
+        return net.syncs;
+      },
+      get active() {
+        return net.active;
+      },
+      names: net.names,
+    },
     T,
     characters: CHARACTERS,
     // Los niveles de todas las temporadas, para abrirlos en el editor.
@@ -2711,7 +2984,8 @@
     acc += Math.min(now - last, 250);
     last = now;
     while (acc >= STEP) {
-      update();
+      if (net.active) netTick();
+      else update();
       acc -= STEP;
     }
     render();
@@ -4177,7 +4451,9 @@
       }
     });
     const hint = SEASONS.length > 1 ? "← →: temporada · ENTER: jugar" : "ENTER: jugar";
-    text(`${hint} · S ↓ K: disparar · ESC: pausa · R: reintentar · M: sonido ${save.muted ? "(apagado)" : ""}`, W / 2, 540, 14, "#9c8d70", "center", "normal");
+    const online = net.active ? "En línea: tú eliges por los tres" : globalThis.Online ? "O: jugar online" : "";
+    text(`${hint} · ${online ? online + " · " : ""}S ↓ K: disparar · R: reintentar · M: sonido ${save.muted ? "(apagado)" : ""}`, W / 2, 540, 14, "#9c8d70", "center", "normal");
+    if (net.notice) text(net.notice, W / 2, 140, 15, "#f0a58f", "center", "normal");
   }
 
   // Total de gemas de un nivel sin tener que cargarlo.
@@ -4394,10 +4670,39 @@
     news.forEach((msg, i) => text(msg, W / 2, H / 2 + 110 + i * 24, 17, "#9dff8a"));
 
     const y = H / 2 + 120 + news.length * 24;
+    if (net.active && !net.host) {
+      text(`Esperando a ${net.names[0]} (anfitrión)…`, W / 2, y + 16, 20, "#d9c9a6", "center", "normal");
+      return;
+    }
     ctx.globalAlpha = 0.6 + Math.sin(t * 4) * 0.4;
     text(`ENTER: ${isLast ? "final" : "siguiente nivel"}`, W / 2, y + 16, 22, "#ffffff");
     ctx.globalAlpha = 1;
     text("ESC: elegir nivel", W / 2, y + 46, 15, "#9c8d70", "center", "normal");
+  }
+
+  // Invitado en red, esperando a que el anfitrión elija nivel.
+  function drawNetWait(t) {
+    dim(0.8);
+    const me = CHARACTERS[net.slot];
+    text("En línea", W / 2, H / 2 - 70, 36, "#ffe9b8");
+    text(`Juegas con ${me.name}`, W / 2, H / 2 - 24, 24, me.color);
+    ctx.globalAlpha = 0.6 + Math.sin(t * 3) * 0.4;
+    text(`Esperando a que ${net.names[0]} (anfitrión) elija nivel…`, W / 2, H / 2 + 20, 18, "#d9c9a6", "center", "normal");
+    ctx.globalAlpha = 1;
+    text("Puedes usar W A S D, las flechas o I J K L", W / 2, H / 2 + 56, 15, "#9c8d70", "center", "normal");
+  }
+
+  // En red: quién eres y, si hace falta, que se está esperando a los demás.
+  function drawNetBadge() {
+    if (!net.active || !inLockstep()) return;
+    const me = CHARACTERS[net.slot];
+    text(`En línea · eres ${me.name}`, 12, H - 14, 13, me.color, "left");
+    if (net.stall > 20) {
+      ctx.fillStyle = "rgba(10,8,5,0.7)";
+      roundRectPath(ctx, W / 2 - 150, H / 2 - 20, 300, 40, 10);
+      ctx.fill();
+      text("Esperando a los demás…", W / 2, H / 2, 18, "#ffe9b8");
+    }
   }
 
   function drawEnding(t) {
@@ -5091,6 +5396,7 @@
     ctx.restore();
 
     if (state === "title") drawTitle(t);
+    else if (state === "netwait") drawNetWait(t);
     else if (state === "levels") drawLevelMenu(t);
     else if (state === "ending") drawEnding(t);
     else if (state === "editor") globalThis.Editor?.drawOverlay(ctx);
@@ -5108,6 +5414,7 @@
       if (state === "paused") drawPause();
       else if (state === "dead") drawDead();
       else if (state === "won") drawWon(t);
+      drawNetBadge();
     }
   }
 

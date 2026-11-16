@@ -93,6 +93,63 @@
     #editor-panel .mech label { margin: 0; }
     #editor-panel .mech input[type="number"] { width: 48px; }
     #editor-panel .mech [data-act="del-mech"] { margin-left: auto; padding: 2px 7px; }
+
+    /* Panel del juego online */
+    #online-panel {
+      position: fixed;
+      inset: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: rgba(10, 8, 5, 0.6);
+      font: 14px "Segoe UI", system-ui, sans-serif;
+      color: #f3e6c8;
+    }
+    #online-panel[hidden], #online-panel [hidden] { display: none !important; }
+    #online-panel .box {
+      box-sizing: border-box;
+      width: min(420px, calc(100vw - 32px));
+      padding: 16px 18px;
+      background: #1a150f;
+      border: 2px solid #6e5b3e;
+      border-radius: 12px;
+      box-shadow: 0 0 40px rgba(0, 0, 0, 0.8);
+    }
+    #online-panel header { display: flex; align-items: center; justify-content: space-between; }
+    #online-panel h1 { margin: 0; font-size: 20px; color: #ffe9b8; }
+    #online-panel .help, #online-panel .note { color: #9c8d70; margin: 8px 0; }
+    #online-panel .note { font-size: 12px; }
+    #online-panel .start { display: flex; flex-direction: column; gap: 10px; margin: 12px 0; }
+    #online-panel .row { display: flex; gap: 8px; }
+    #online-panel input {
+      flex: 1;
+      min-width: 0;
+      background: #0d0b08;
+      color: #ffe9b8;
+      border: 1px solid #6e5b3e;
+      border-radius: 8px;
+      padding: 8px 10px;
+      font: bold 18px Consolas, monospace;
+      letter-spacing: 0.2em;
+      text-transform: uppercase;
+    }
+    #online-panel button {
+      background: #2b2419;
+      color: #f3e6c8;
+      border: 1px solid #6e5b3e;
+      border-radius: 8px;
+      padding: 8px 12px;
+      font: inherit;
+      cursor: pointer;
+    }
+    #online-panel button:hover { border-color: #ffe08a; }
+    #online-panel button.primary { background: #ffe08a; color: #1a150f; font-weight: 700; border-color: #ffe08a; }
+    #online-panel .code-label { margin: 12px 0 0; color: #d9c9a6; }
+    #online-panel .code { margin: 4px 0 10px; font: bold 34px Consolas, monospace; letter-spacing: 0.25em; color: #ffe08a; }
+    #online-panel .slots { list-style: none; padding: 0; margin: 0 0 12px; }
+    #online-panel .slots li { display: flex; justify-content: space-between; padding: 6px 0; border-bottom: 1px solid #3b3022; }
+    #online-panel .slots span { color: #9c8d70; }
+    #online-panel .status { min-height: 1.2em; color: #ffe08a; margin: 10px 0 0; }
   </style>
 </head>
 <body>
@@ -101,5 +158,6 @@
   <script src="src/levels2.js"></script>
   <script src="src/editor.js"></script>
   <script src="src/game.js"></script>
+  <script src="src/online.js"></script>
 </body>
 </html>
