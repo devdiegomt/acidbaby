@@ -654,11 +654,12 @@
   let W = 0;
   let H = 0;
 
-  let state = "title"; // title | levels | editor | playing | paused | dead | won | ending
+  let state = "title"; // title (menú principal) | help | levels | editor | playing | paused | dead | won | ending
   let testLevel = null; // nivel del editor que se está probando (null: niveles del juego)
   let levelIndex = 0; // dentro de la temporada elegida
   let titleIndex = 0; // temporada marcada en la portada
   let menuIndex = 0; // opción marcada en el menú de pausa
+  let mainIndex = 0; // opción marcada en el menú principal
   let lastResult = null; // qué récords se batieron en la última victoria
   let level = null;
   let grid = [];
@@ -2654,7 +2655,32 @@
     const w = 340;
     const gap = 30;
     const total = SEASONS.length * w + (SEASONS.length - 1) * gap;
-    return { x: W / 2 - total / 2 + i * (w + gap), y: 458, w, h: 58 };
+    return { x: W / 2 - total / 2 + i * (w + gap), y: 132, w, h: 58 };
+  }
+
+  // Menú principal: [id, texto]. En red (el anfitrión) solo lo que tiene sentido para los tres.
+  function mainItems() {
+    const fullscreen = !!globalThis.document?.documentElement?.requestFullscreen;
+    const items = net.active
+      ? [["play", "Elegir nivel para los tres"], ["online", "Sala online"], ["help", "Cómo se juega"], ["sound"]]
+      : [
+          ["play", "Jugar en este PC"],
+          ...(globalThis.Online ? [["online", "Jugar online (cada uno en su PC)"]] : []),
+          ...(globalThis.Progreso ? [["progress", "Guardar o cargar progreso"]] : []),
+          ["help", "Cómo se juega"],
+          ["sound"],
+          ...(fullscreen ? [["fullscreen"]] : []),
+          ...(globalThis.Editor ? [["editor", "Editor de niveles"]] : []),
+        ];
+    return items;
+  }
+  function mainLabel([id, label]) {
+    if (id === "sound") return `Sonido: ${save.muted ? "no" : "sí"}`;
+    if (id === "fullscreen") return `Pantalla completa: ${globalThis.document?.fullscreenElement ? "sí" : "no"}`;
+    return label;
+  }
+  function mainItemRect(i) {
+    return { x: W / 2 - 180, y: 208 + i * 45, w: 360, h: 38 };
   }
 
   function pauseItemRect(i) {
@@ -2671,6 +2697,7 @@
   }
 
   // En la portada se elige temporada; el fondo enseña su primer nivel.
+  // Menú principal: ← → eligen temporada; ↑ ↓, la opción; ENTER (o clic) la acepta.
   function updateTitle() {
     if (pressed.has("KeyO") && !net.active && globalThis.Online) {
       globalThis.Online.open();
@@ -2684,19 +2711,53 @@
     const before = titleIndex;
     if (menuKey("left")) titleIndex = (titleIndex + n - 1) % n;
     if (menuKey("right")) titleIndex = (titleIndex + 1) % n;
-    const pointed = pointedItem(n, seasonButtonRect);
-    if (pointed !== null) titleIndex = pointed;
+    const pointedSeason = pointedItem(n, seasonButtonRect);
+    if (pointedSeason !== null && clicked) titleIndex = pointedSeason;
     if (titleIndex !== before) {
       sound.play("move");
       if (isSeasonUnlocked(titleIndex)) loadLevelData(SEASONS[titleIndex].levels[0]);
     }
-    if (menuKey("ok") || clicked) {
+
+    const items = mainItems();
+    if (mainIndex >= items.length) mainIndex = 0;
+    const beforeItem = mainIndex;
+    if (menuKey("up")) mainIndex = (mainIndex + items.length - 1) % items.length;
+    if (menuKey("down")) mainIndex = (mainIndex + 1) % items.length;
+    const pointed = pointedItem(items.length, mainItemRect);
+    if (pointed !== null) mainIndex = pointed;
+    if (mainIndex !== beforeItem) sound.play("move");
+    if (menuKey("ok") || (clicked && pointed !== null)) chooseMainItem(items[mainIndex][0]);
+  }
+
+  function chooseMainItem(id) {
+    if (id === "play") {
       if (!isSeasonUnlocked(titleIndex)) {
         sound.play("locked");
         return;
       }
       sound.play("select");
       openSeason(titleIndex);
+      return;
+    }
+    sound.play("select");
+    if (id === "online") globalThis.Online?.open();
+    else if (id === "progress") globalThis.Progreso?.open();
+    else if (id === "help") state = "help";
+    else if (id === "sound") sound.toggleMute();
+    else if (id === "fullscreen") toggleFullscreen();
+    else if (id === "editor") {
+      loadLevelData(SEASONS[titleIndex].levels[0]);
+      openEditor();
+    }
+  }
+
+  function toggleFullscreen() {
+    const doc = globalThis.document;
+    try {
+      if (doc.fullscreenElement) doc.exitFullscreen();
+      else doc.documentElement.requestFullscreen().catch(() => {});
+    } catch {
+      // El navegador no lo permite: no pasa nada.
     }
   }
 
@@ -2711,6 +2772,7 @@
   function openTitle() {
     state = "title";
     titleIndex = seasonIndex;
+    mainIndex = 0;
   }
 
   // El fondo del menú de niveles es el propio nivel marcado.
@@ -3063,6 +3125,11 @@
 
     if (state === "title") {
       updateTitle();
+    } else if (state === "help") {
+      if (menuKey("ok") || menuKey("back") || clicked) {
+        sound.play("select");
+        state = "title";
+      }
     } else if (state === "levels") {
       updateLevelMenu();
     } else if (state === "editor") {
@@ -4765,43 +4832,14 @@
     ctx.fillRect(0, 0, W, H);
   }
 
+  // Menú principal: temporada arriba, opciones en el centro, los tres a un lado y, al otro, los
+  // mundos de la temporada marcada con lo que lleva cada uno.
   function drawTitle(t) {
     dim(0.82);
     // En red, el anfitrión ve en el letrero que le toca elegir (si no, parece que no pasa nada).
     drawNews(t, 24, net.active && net.host ? ["¡Están los tres! Tú eliges: temporada con ← → y ENTER para jugar"] : NEWS);
     text(GAME_TITLE, W / 2, 70, 44, "#ffe9b8");
-    text("Lleven a Chispa, Gota y Acidito a su puerta. Cada uno solo sobrevive a su elemento.", W / 2, 112, 18, "#d9c9a6", "center", "normal");
-
-    const cardW = 260;
-    const cardH = 292;
-    const gap = 40;
-    const startX = W / 2 - (cardW * 3 + gap * 2) / 2;
-    CHARACTERS.forEach((ch, i) => {
-      const x = startX + i * (cardW + gap);
-      const y = 150;
-      ctx.fillStyle = "rgba(255,255,255,0.06)";
-      roundRectPath(ctx, x, y, cardW, cardH, 14);
-      ctx.fill();
-      ctx.strokeStyle = ch.color;
-      ctx.lineWidth = 2;
-      ctx.stroke();
-
-      ctx.save();
-      ctx.translate(x + cardW / 2, y + 70);
-      ctx.scale(2.4, 2.4);
-      drawPlayer(
-        { ch, x: -PW / 2, y: -PH / 2, w: PW, h: PH, vx: 0, onGround: true, anim: 0, facing: 1 },
-        t,
-      );
-      ctx.restore();
-
-      const others = CHARACTERS.filter((o) => o !== ch).map((o) => ELEMENTS[o.immune].label);
-      text(ch.name, x + cardW / 2, y + 140, 24, ch.color);
-      text(ch.keyLabel, x + cardW / 2, y + 180, 22, "#ffffff");
-      text(`Sobrevive a: ${ELEMENTS[ch.immune].label}`, x + cardW / 2, y + 218, 15, "#bfe8a8", "center", "normal");
-      text(`Muere con: ${others.join(" y ")}`, x + cardW / 2, y + 242, 15, "#f0a58f", "center", "normal");
-      text(`Poder: ${ch.power.toLowerCase()}`, x + cardW / 2, y + 266, 15, "#ffe08a", "center", "normal");
-    });
+    text("Lleven a Chispa, Gota y Acidito a su puerta. Cada uno solo sobrevive a su elemento.", W / 2, 108, 17, "#d9c9a6", "center", "normal");
 
     // Temporadas: la marcada parpadea; las cerradas dicen cómo abrirlas.
     const pulse = 0.6 + Math.sin(t * 4) * 0.4;
@@ -4815,6 +4853,10 @@
       ctx.strokeStyle = selected ? `rgba(255,224,138,${pulse})` : "#3b3022";
       ctx.lineWidth = selected ? 3 : 2;
       ctx.stroke();
+      if (selected && SEASONS.length > 1) {
+        text("◀", r.x - 16, r.y + r.h / 2, 16, "#ffe08a");
+        text("▶", r.x + r.w + 16, r.y + r.h / 2, 16, "#ffe08a");
+      }
       const color = open ? (selected ? "#ffe9b8" : "#d9c9a6") : "#7a6d55";
       text(`${s.name} · ${s.subtitle}`, r.x + r.w / 2, r.y + 20, 17, color);
       if (open) {
@@ -4840,10 +4882,97 @@
         text(why, r.x + r.w / 2 + 8, r.y + 42, 13, "#7a6d55", "center", "normal");
       }
     });
-    const hint = SEASONS.length > 1 ? "← →: temporada · ENTER: jugar" : "ENTER: jugar";
-    const online = net.active ? "En línea: tú eliges por los tres" : globalThis.Online ? "O: jugar online" : "";
-    text(`${hint} · ${online ? online + " · " : ""}G: guardar progreso · S ↓ K: disparar · R: reintentar · M: sonido ${save.muted ? "(apagado)" : ""}`, W / 2, 540, 14, "#9c8d70", "center", "normal");
-    if (net.notice) text(net.notice, W / 2, 140, 15, "#f0a58f", "center", "normal");
+
+    // Opciones
+    const items = mainItems();
+    items.forEach((item, i) => {
+      const r = mainItemRect(i);
+      const selected = i === mainIndex;
+      const main = item[0] === "play";
+      ctx.fillStyle = selected ? (main ? "rgba(255,224,138,0.3)" : "rgba(255,233,184,0.16)") : main ? "rgba(255,224,138,0.1)" : "rgba(255,255,255,0.05)";
+      roundRectPath(ctx, r.x, r.y, r.w, r.h, 10);
+      ctx.fill();
+      if (selected) {
+        ctx.strokeStyle = "#ffe08a";
+        ctx.lineWidth = 2;
+        ctx.stroke();
+      }
+      const locked = main && !isSeasonUnlocked(titleIndex);
+      text(locked ? `${mainLabel(item)} (temporada cerrada)` : mainLabel(item), W / 2, r.y + r.h / 2, main ? 19 : 17, locked ? "#7a6d55" : selected ? "#ffe9b8" : "#d9c9a6", "center", main ? "bold" : "normal");
+    });
+    const last = mainItemRect(items.length - 1);
+
+    // A la izquierda, los tres; a la derecha, los mundos de la temporada marcada.
+    const menuLeft = mainItemRect(0).x;
+    const menuRight = menuLeft + mainItemRect(0).w;
+    const midY = (mainItemRect(0).y + last.y + last.h) / 2;
+    const side = Math.min(160, (menuLeft - 40) / 2);
+    if (side > 90) {
+      CHARACTERS.forEach((ch, i) => {
+        ctx.save();
+        ctx.translate(menuLeft - side - 30 + (i - 1) * 58, midY + 10 + Math.sin(t * 2 + i * 1.7) * 3);
+        ctx.scale(1.9, 1.9);
+        drawPlayer({ ch, x: -PW / 2, y: -PH / 2, w: PW, h: PH, vx: 0, onGround: true, anim: 0, facing: i === 0 ? 1 : i === 2 ? -1 : 1 }, t);
+        ctx.restore();
+        text(ch.name, menuLeft - side - 30 + (i - 1) * 58, midY + 50, 13, ch.color);
+      });
+      const s = SEASONS[titleIndex];
+      const x = menuRight + 30;
+      if (isSeasonUnlocked(titleIndex) && s.worlds.length > 1) {
+        text("Mundos", x, mainItemRect(0).y + 10, 14, "#9c8d70", "left");
+        s.worlds.forEach((w, wi) => {
+          const idx = s.where.map((wh, k) => (wh.world === wi ? k : -1)).filter((k) => k >= 0);
+          const done = idx.filter((k) => recordIn(s, k)?.done).length;
+          const y = mainItemRect(0).y + 36 + wi * 26;
+          const color = done === idx.length ? "#bfe8a8" : done ? "#ffe9b8" : "#9c8d70";
+          text(`${wi + 1}. ${w.name}`, x, y, 14, color, "left", "normal");
+          text(`${done}/${idx.length}`, x + Math.min(side * 2 + 40, 300), y, 13, color, "right", "normal");
+        });
+      }
+    }
+
+    const hint = SEASONS.length > 1 ? "← →: temporada · ↑ ↓: elegir · ENTER: aceptar" : "↑ ↓: elegir · ENTER: aceptar";
+    text(`${hint} · M: sonido`, W / 2, Math.min(H - 16, last.y + last.h + 26), 14, "#9c8d70", "center", "normal");
+    if (net.notice) text(net.notice, W / 2, Math.min(H - 36, last.y + last.h + 6) - 2, 15, "#f0a58f", "center", "normal");
+  }
+
+  // «Cómo se juega»: una tarjeta por personaje y las teclas de siempre.
+  function drawHelp(t) {
+    dim(0.88);
+    text("Cómo se juega", W / 2, 46, 34, "#ffe9b8");
+    text("Lleven a cada uno a su puerta. Cada uno solo sobrevive a su elemento: los charcos de los otros dos lo matan.", W / 2, 84, 16, "#d9c9a6", "center", "normal");
+    const cardW = Math.min(260, (W - 120) / 3);
+    const cardH = 292;
+    const gap = 30;
+    const startX = W / 2 - (cardW * 3 + gap * 2) / 2;
+    CHARACTERS.forEach((ch, i) => {
+      const x = startX + i * (cardW + gap);
+      const y = 108;
+      ctx.fillStyle = "rgba(255,255,255,0.06)";
+      roundRectPath(ctx, x, y, cardW, cardH, 14);
+      ctx.fill();
+      ctx.strokeStyle = ch.color;
+      ctx.lineWidth = 2;
+      ctx.stroke();
+      ctx.save();
+      ctx.translate(x + cardW / 2, y + 70);
+      ctx.scale(2.4, 2.4);
+      drawPlayer({ ch, x: -PW / 2, y: -PH / 2, w: PW, h: PH, vx: 0, onGround: true, anim: 0, facing: 1 }, t);
+      ctx.restore();
+      const others = CHARACTERS.filter((o) => o !== ch).map((o) => ELEMENTS[o.immune].label);
+      text(ch.name, x + cardW / 2, y + 140, 24, ch.color);
+      text(ch.keyLabel, x + cardW / 2, y + 180, 22, "#ffffff");
+      text(`Sobrevive a: ${ELEMENTS[ch.immune].label}`, x + cardW / 2, y + 218, 15, "#bfe8a8", "center", "normal");
+      text(`Muere con: ${others.join(" y ")}`, x + cardW / 2, y + 242, 15, "#f0a58f", "center", "normal");
+      text(`Poder: ${ch.power.toLowerCase()}`, x + cardW / 2, y + 266, 15, "#ffe08a", "center", "normal");
+    });
+    const lines = [
+      "Estrellas de cada nivel: terminarlo, agarrar todas sus gemas y no perder ningún corazón.",
+      "R: reintentar · ESC o P: pausa · S ↓ K: disparar (con el orbe) · M: sonido",
+      "Online, cada uno juega desde su PC con el juego de teclas que quiera.",
+    ];
+    lines.forEach((l, i) => text(l, W / 2, 432 + i * 26, 15, i === 1 ? "#ffffff" : "#d9c9a6", "center", "normal"));
+    text("ENTER o ESC: volver", W / 2, Math.min(H - 20, 520), 14, "#9c8d70", "center", "normal");
   }
 
   // Total de gemas de un nivel sin tener que cargarlo.
@@ -5791,6 +5920,7 @@
     ctx.restore();
 
     if (state === "title") drawTitle(t);
+    else if (state === "help") drawHelp(t);
     else if (state === "netwait") drawNetWait(t);
     else if (state === "levels") drawLevelMenu(t);
     else if (state === "ending") drawEnding(t);

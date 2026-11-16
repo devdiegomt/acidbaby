@@ -28,7 +28,7 @@ game = game.replace(
      get grid(){return grid}, get fans(){return fans}, get doors(){return doors}, get enemies(){return enemies}, get items(){return items}, get shots(){return shots},
      get save(){return save}, isUnlocked, get levelIndex(){return levelIndex}, get lastResult(){return lastResult},
      get menuIndex(){return menuIndex}, get levelFrames(){return levelFrames}, setLevel(i, si = 0){ testLevel = null; seasonIndex = si; levelIndex = i; loadLevel(i); state = "playing"; }, get darts(){return darts}, get crumbles(){return crumbles}, get boss(){return boss}, solidAt,
-     SEASONS, get seasonIndex(){return seasonIndex}, get titleIndex(){return titleIndex}, isSeasonUnlocked, levelNumber, get flags(){return flags}, get checkpoint(){return checkpoint}, get retries(){return retries}, get toast(){return toast}, get level(){return level}, worldRange, get spikes(){return spikes}, get obsidian(){return obsidian}, get liquids(){return liquids}, starsOf, starCount, get golem(){return golem}, get rocks(){return rocks}, get waves(){return waves}, get tide(){return tide}, get hydra(){return hydra}, get torches(){return torches}, lightSources, get shade(){return shade}, get geysers(){return geysers} };\n})();`,
+     SEASONS, get seasonIndex(){return seasonIndex}, get titleIndex(){return titleIndex}, isSeasonUnlocked, levelNumber, get flags(){return flags}, get checkpoint(){return checkpoint}, get retries(){return retries}, get toast(){return toast}, get level(){return level}, worldRange, get spikes(){return spikes}, get obsidian(){return obsidian}, get liquids(){return liquids}, starsOf, starCount, get golem(){return golem}, get rocks(){return rocks}, get waves(){return waves}, get tide(){return tide}, get hydra(){return hydra}, get torches(){return torches}, lightSources, get shade(){return shade}, get geysers(){return geysers}, get mainIndex(){return mainIndex}, mainItems };\n})();`,
 );
 // editor.js va antes que game.js (como en index.html); sin DOM solo define EditorCore.
 eval(fs.readFileSync(ROOT + "levels.js", "utf8") + "\nglobalThis.LEVELS = LEVELS;\n" + fs.readFileSync(ROOT + "levels2.js", "utf8") + "\nglobalThis.SEASON_2 = SEASON_2;\n" + fs.readFileSync(ROOT + "editor.js", "utf8") + "\n" + game);
@@ -62,6 +62,22 @@ console.log("\nMenús y progreso");
 const tap = (code) => { down(code); run(1); up(code); run(1); };
 const saved = () => JSON.parse([...storage.values()][0] || "{}");
 check("Empieza en la portada", G.state === "title");
+check("El menú principal empieza en «Jugar en este PC»", G.mainIndex === 0 && G.mainItems()[0][0] === "play");
+tap("ArrowDown");
+check("↓ baja por las opciones del menú", G.mainIndex === 1);
+const helpAt = G.mainItems().findIndex(([id]) => id === "help");
+const soundAt = G.mainItems().findIndex(([id]) => id === "sound");
+while (G.mainIndex !== helpAt) tap("ArrowDown");
+tap("Enter");
+check("«Cómo se juega» abre la pantalla de ayuda", G.state === "help");
+tap("Escape");
+check("…y ESC vuelve al menú", G.state === "title");
+while (G.mainIndex !== soundAt) tap("ArrowDown");
+const mutedBefore = G.save.muted;
+tap("Enter");
+check("Desde el menú se apaga y se prende el sonido", G.save.muted !== mutedBefore);
+tap("Enter");
+while (G.mainIndex !== 0) tap("ArrowUp");
 tap("Enter");
 check("ENTER abre el menú de niveles en el nivel 1", G.state === "levels" && G.levelIndex === 0);
 check("Sin progreso, solo el nivel 1 está abierto", G.isUnlocked(0) && !G.isUnlocked(1));
@@ -114,7 +130,7 @@ check("Tras el último nivel sale la pantalla final", G.state === "ending");
 tap("Enter");
 check("…y desde ahí se vuelve a los niveles", G.state === "levels");
 let drawError = null;
-for (const st of ["title", "levels", "playing", "paused", "dead", "won", "ending"]) {
+for (const st of ["title", "help", "levels", "playing", "paused", "dead", "won", "ending"]) {
   G.state = st;
   try { G.render(); } catch (e) { drawError = `${st}: ${e.message}`; }
 }
@@ -1383,7 +1399,7 @@ check("El récord de un nivel de la temporada 1 sigue con su nombre de siempre",
 G.state = "levels";
 check("El menú enseña solo los niveles del mundo marcado", G.worldRange().start === 0 && G.worldRange().n === T2.worlds[0].levels.length);
 let drawError2 = null;
-for (const st of ["title", "levels", "playing", "paused", "dead", "won", "ending"]) {
+for (const st of ["title", "help", "levels", "playing", "paused", "dead", "won", "ending"]) {
   G.state = st;
   try { G.render(); } catch (e) { drawError2 = `${st}: ${e.message}`; }
 }
