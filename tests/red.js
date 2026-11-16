@@ -149,7 +149,7 @@ step(latency + 3);
 check("El anfitrión pasa al siguiente nivel para todos", games.every((g) => g.G.state === "playing" && g.G.levelIndex === 1));
 // La corrección del estado completo funciona en niveles con de todo (portales, ventiladores,
 // banderas, marea, oscuridad, jefes…): se desincroniza un invitado y tiene que volver a coincidir.
-const LEVELS_TO_SYNC = [[0, 8, "Portales"], [0, 3, "Corrientes de aire"], [0, 20, "El Guardián"], [1, 0, "1-1 (bandera)"], [1, 5, "1-6 (Gólem)"], [1, 7, "2-2 (marea y desagüe)"], [1, 11, "2-6 (Hidra)"], [1, 13, "3-2 (oscuridad y farol)"], [1, 17, "3-6 (Sombra)"], [1, 19, "4-2 (géiseres)"], [1, 22, "4-5 (relevos)"]];
+const LEVELS_TO_SYNC = [[0, 8, "Portales"], [0, 3, "Corrientes de aire"], [0, 20, "El Guardián"], [1, 0, "1-1 (bandera)"], [1, 5, "1-6 (Gólem)"], [1, 7, "2-2 (marea y desagüe)"], [1, 11, "2-6 (Hidra)"], [1, 13, "3-2 (oscuridad y farol)"], [1, 17, "3-6 (Sombra)"], [1, 19, "4-2 (géiseres)"], [1, 22, "4-5 (relevos)"], [1, 23, "4-6 (Cangrejo)"]];
 for (const [season, level, label] of LEVELS_TO_SYNC) {
   for (const g of games) g.J.net.receive({ t: "start", season, level });
   host.down("KeyD"); g1.down("ArrowLeft"); g2.down("KeyI");

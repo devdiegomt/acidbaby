@@ -106,7 +106,7 @@
 
   // Avisos de novedades: salen en la portada, en el menú de niveles y en la pausa.
   // Para cambiarlos (o quitarlos), basta con editar esta lista.
-  const NEWS = ["¡Nuevo! Jueguen online, cada uno desde su PC (tecla O)", "Mundo 4: Las fuentes hirvientes"];
+  const NEWS = ["¡Nuevo! Jueguen online, cada uno desde su PC (tecla O)", "Mundo 4 completo: Las fuentes hirvientes"];
 
   // Jefe del Mundo 3 (Temporada 2): la Sombra de la mina. Flota hacia Gota o Acidito atravesando
   // las paredes; si se queda un rato a la luz de una antorcha encendida se quema (un golpe), apaga
@@ -118,6 +118,22 @@
   const SHADOW_SNUFF_RATE = [620, 540, 460, 380, 320]; // frames entre antorchas que apaga sola
   const SHADOW_BURN = 50; // frames a la luz de una antorcha para quemarse
   const SHADOW_HURT = 100; // frames que tarda en volver a por ellos tras un golpe
+
+  // Jefe del Mundo 4 (Temporada 2): el Cangrejo hirviente. Persigue al que tenga más cerca por el
+  // suelo, se para y abre las tenazas (pellizco); de vez en cuando salta y hace ondas. Solo le duele
+  // el chorro de un géiser de un elemento, que cambia por fases: agua, lava, ácido (2 golpes cada una).
+  const CRAB_TILE = "Ж";
+  const CRAB_W = 88;
+  const CRAB_H = 52;
+  const CRAB_PHASES = ["water", "fire", "acid"];
+  const CRAB_HITS_PER_PHASE = 2;
+  const CRAB_HP = CRAB_PHASES.length * CRAB_HITS_PER_PHASE;
+  const CRAB_SPEED = [0.9, 1, 1.1, 1.2, 1.35, 1.5]; // según los golpes que lleva
+  const CRAB_REACH = 60; // a esta distancia (de centro a centro) se para a pellizcar
+  const CRAB_WINDUP = 70; // frames con las tenazas abiertas antes del pellizco
+  const CRAB_REST = 45; // frames quieto después del pellizco
+  const CRAB_HURT = 100; // frames huyendo tras un golpe (sin recibir más)
+  const CRAB_JUMP_RATE = [520, 470, 420, 380, 340, 300]; // salto con ondas
 
   const FONT = '"Segoe UI", system-ui, sans-serif';
   const MECH_COLORS = ["#f2c14e", "#c86bff", "#ff6fa8", "#4fd6c8", "#f0f0f0"];
@@ -700,6 +716,7 @@
   let toast = null; // aviso breve en pantalla: { text, frames }
   let boss = null; // jefe final (si el nivel tiene)
   let golem = null; // Gólem de magma (jefe del Mundo 1 de la temporada 2)
+  let crab = null; // el Cangrejo hirviente (jefe del Mundo 4 de la temporada 2)
   let torches = []; // antorchas: { c, r, lit }
   let shade = null; // la Sombra de la mina (jefe del Mundo 3 de la temporada 2)
   let hydra = null; // la Hidra del aljibe (jefe del Mundo 2 de la temporada 2)
@@ -785,6 +802,7 @@
     toast = null;
     boss = null;
     golem = null;
+    crab = null;
     hydra = null;
     torches = [];
     shade = null;
@@ -871,6 +889,10 @@
         }
         if (t === GOLEM_TILE) {
           golem = makeGolem(c, r);
+          continue;
+        }
+        if (t === CRAB_TILE) {
+          crab = { c, r }; // se completa al final, cuando ya hay géiseres
           continue;
         }
         if (t === HYDRA_TILE) {
@@ -991,6 +1013,13 @@
       });
     } else if (level.geyser) fail("hay \"geyser\" pero el mapa no tiene géiseres (↥ ↟ ⇞)");
 
+    if (crab) {
+      for (const el of CRAB_PHASES) {
+        if (!geysers.some((g) => g.type === el)) fail(`el Cangrejo necesita al menos un géiser de ${ELEMENTS[el].label}`);
+      }
+      crab = makeCrab(crab.c, crab.r);
+    }
+
     if (hydra) {
       if (!tide || !mechs.some((m) => m.def.kind === "drain")) fail("la Hidra necesita marea (\"tide\") y al menos un desagüe");
       hydra = makeHydra(hydra.c, hydra.r);
@@ -1037,7 +1066,7 @@
   function liveState() {
     return {
       grid, liquids, breakables, dissolving, barriers, fans, doors, boxes, gems, mechs, portals,
-      enemies, items, springs, crumbles, spikes, flags, obsidian, boss, bossDefeatedAt, golem, dispensers, tide, hydra, torches, shade, geysers,
+      enemies, items, springs, crumbles, spikes, flags, obsidian, boss, bossDefeatedAt, golem, crab, dispensers, tide, hydra, torches, shade, geysers,
       players: players.map((p) => ({
         ...p,
         ch: CHARACTERS.indexOf(p.ch),
@@ -1060,7 +1089,7 @@
   function backToCheckpoint() {
     const s = structuredClone(checkpoint);
     ({ grid, liquids, breakables, dissolving, barriers, fans, doors, boxes, gems, mechs, portals } = s);
-    ({ enemies, items, springs, crumbles, spikes, flags, obsidian, boss, bossDefeatedAt, golem, dispensers, tide, hydra, torches, shade, geysers } = s);
+    ({ enemies, items, springs, crumbles, spikes, flags, obsidian, boss, bossDefeatedAt, golem, crab, dispensers, tide, hydra, torches, shade, geysers } = s);
     players = s.players.map((p) =>
       Object.assign(p, {
         ch: CHARACTERS[p.ch],
@@ -2266,6 +2295,186 @@
     breakSeals();
   }
 
+  // ---------------------------------------------------------------------------
+  // Cangrejo hirviente
+  // ---------------------------------------------------------------------------
+  function makeCrab(c, r) {
+    const cfg = level.crab || {};
+    return {
+      name: cfg.name || "El Cangrejo hirviente",
+      x: c * T + T / 2 - CRAB_W / 2,
+      y: (r + 1) * T - CRAB_H,
+      floorY: (r + 1) * T - CRAB_H, // siempre anda por este suelo (al saltar vuelve a él)
+      minX: (cfg.left ?? 2) * T,
+      maxX: ((cfg.right ?? grid[0].length - 3) + 1) * T - CRAB_W,
+      dir: -1,
+      hits: 0,
+      state: "intro", // intro | walk | windup | rest | jump | hurt | dying | dead
+      timer: 120,
+      jumpTimer: CRAB_JUMP_RATE[0],
+      vy: 0,
+      flash: 0,
+      anim: 0,
+    };
+  }
+
+  const crabWeak = (k) => CRAB_PHASES[Math.min(CRAB_PHASES.length - 1, Math.floor(k.hits / CRAB_HITS_PER_PHASE))];
+  const crabBody = (k) => ({ x: k.x + 6, y: k.y + 8, w: CRAB_W - 12, h: CRAB_H - 8 });
+  const crabWeakText = (k) => {
+    const el = crabWeak(k);
+    return `Ahora le duele ${ELEMENTS[el].name}: llévenlo a un géiser de ${CHARACTERS.find((ch) => ch.immune === el).name}`;
+  };
+
+  function updateCrab() {
+    const k = crab;
+    if (k.flash > 0) k.flash--;
+    k.anim++;
+    updateRocksAndWaves();
+    if (k.state === "dead" || state !== "playing") return;
+    if (k.state === "dying") {
+      shake = Math.max(shake, 3);
+      if (k.timer % 6 === 0) {
+        burst(k.x + Math.random() * CRAB_W, k.y + Math.random() * CRAB_H, ["#e8e8f0", "#ff8a3d", "#ffd166", "#ffffff"], 10);
+        sound.play("hiss");
+      }
+      if (--k.timer <= 0) defeatCrab(k);
+      return;
+    }
+    if (k.state === "intro") {
+      if (--k.timer <= 0) {
+        k.state = "walk";
+        toast = { text: crabWeakText(k), frames: TOAST_FRAMES };
+      }
+      return;
+    }
+
+    // Un chorro del elemento que le duele, saliendo debajo de él: un golpe.
+    const body = crabBody(k);
+    if (k.state !== "hurt" && k.state !== "jump") {
+      const weak = crabWeak(k);
+      const jet = geysers.find((g) => {
+        if (g.type !== weak || g.h < T) return false;
+        const z = geyserRect(g);
+        return z && intersects(z.x, z.y, z.w, z.h, body);
+      });
+      if (jet) {
+        hitCrab(k);
+        return;
+      }
+    }
+
+    const lvl = Math.min(k.hits, CRAB_SPEED.length - 1);
+    // Persigue al más cercano de los que pisan su suelo; si todos están en las repisas, se queda
+    // debajo del más cercano (allí no los alcanza).
+    const cx = k.x + CRAB_W / 2;
+    const onFloor = (p) => Math.abs(p.y + p.h - (k.floorY + CRAB_H)) < T;
+    const alive = players.filter((p) => p.alive);
+    const pool = alive.some(onFloor) ? alive.filter(onFloor) : alive;
+    const target = pool.reduce((best, p) => {
+      const d = Math.abs(p.x + p.w / 2 - cx);
+      return !best || d < best.d ? { p, d } : best;
+    }, null)?.p;
+    const move = (dx) => {
+      k.x = Math.max(k.minX, Math.min(k.maxX, k.x + dx));
+    };
+
+    if (k.state === "hurt") {
+      // Huye hacia la pared que tenga más lejos, rápido.
+      move(k.dir * 2.6);
+      if (--k.timer <= 0) k.state = "walk";
+    } else if (k.state === "walk") {
+      if (target) {
+        const dx = target.x + target.w / 2 - cx;
+        k.dir = Math.sign(dx) || k.dir;
+        const sameFloor = Math.abs(target.y + target.h - (k.y + CRAB_H)) < T;
+        if (Math.abs(dx) <= CRAB_REACH && sameFloor) {
+          k.state = "windup";
+          k.timer = CRAB_WINDUP;
+          sound.play("move");
+        } else if (Math.abs(dx) > 8) move(k.dir * CRAB_SPEED[lvl]);
+      }
+      if (--k.jumpTimer <= 0) {
+        k.state = "jump";
+        k.vy = -9;
+      }
+    } else if (k.state === "windup") {
+      if (--k.timer <= 0) {
+        // Pellizco: hace daño a quien siga al alcance de las tenazas.
+        const reach = { x: k.x - 26, y: k.y - 6, w: CRAB_W + 52, h: CRAB_H + 6 };
+        for (const p of players) {
+          if (p.alive && p.hurt === 0 && intersects(reach.x, reach.y, reach.w, reach.h, p)) {
+            hurtPlayer(p, { x: k.x, w: CRAB_W }, "se llevó un pellizco del Cangrejo hirviente");
+            if (state !== "playing") return;
+          }
+        }
+        burst(cx + k.dir * (CRAB_W / 2 + 10), k.y + 20, ["#ff8a3d", "#ffffff"], 10);
+        sound.play("hurt");
+        k.state = "rest";
+        k.timer = CRAB_REST;
+      }
+    } else if (k.state === "rest") {
+      if (--k.timer <= 0) k.state = "walk";
+    } else if (k.state === "jump") {
+      k.vy += GRAVITY;
+      k.y += k.vy;
+      if (k.y >= k.floorY) {
+        k.y = k.floorY;
+        k.vy = 0;
+        k.state = "walk";
+        k.jumpTimer = CRAB_JUMP_RATE[lvl];
+        shake = 14;
+        const cause = "no saltó la onda del Cangrejo";
+        waves.push({ x: k.x - 24, y: k.y + CRAB_H - 14, w: 22, h: 14, vx: -4, cause }, { x: k.x + CRAB_W + 2, y: k.y + CRAB_H - 14, w: 22, h: 14, vx: 4, cause });
+        burst(cx, k.y + CRAB_H, ["#ff8a3d", "#ffd166", "#5a3a30"], 24);
+        sound.play("boom");
+      }
+    }
+
+    // Tocarlo quema (menos mientras huye: así no castiga al que lo acaba de golpear).
+    if (k.state !== "hurt") {
+      for (const p of players) {
+        if (p.alive && p.hurt === 0 && intersects(body.x, body.y, body.w, body.h, p)) {
+          hurtPlayer(p, { x: k.x, w: CRAB_W }, "se quemó con el Cangrejo hirviente");
+          if (state !== "playing") return;
+        }
+      }
+    }
+  }
+
+  function hitCrab(k) {
+    const before = crabWeak(k);
+    k.hits++;
+    k.flash = 30;
+    shake = Math.max(shake, 8);
+    burst(k.x + CRAB_W / 2, k.y + CRAB_H / 3, ["#e8e8f0", "#ffffff", ELEMENTS[before].top, ELEMENTS[before].body], 40);
+    sound.play("hiss");
+    sound.play("bossHit");
+    if (k.hits >= CRAB_HP) {
+      k.state = "dying";
+      k.timer = 90;
+      sound.play("roar");
+      return;
+    }
+    k.state = "hurt";
+    k.timer = CRAB_HURT;
+    // Huye hacia la pared que tiene más lejos.
+    k.dir = k.x - k.minX > k.maxX - k.x ? -1 : 1;
+    if (crabWeak(k) !== before) toast = { text: crabWeakText(k), frames: TOAST_FRAMES };
+  }
+
+  function defeatCrab(k) {
+    k.state = "dead";
+    bossDefeatedAt = levelFrames;
+    shake = 30;
+    burst(k.x + CRAB_W / 2, k.y + CRAB_H / 2, ["#ff8a3d", "#ffd166", "#e8e8f0", "#ffffff"], 90);
+    sound.play("boom");
+    sound.play("win");
+    for (const e of enemies) if (e.alive) defeatEnemy(e);
+    rocks = [];
+    waves = [];
+    breakSeals();
+  }
+
   // La marea espera un rato y luego sube; un desagüe activo la hace bajar. Quien no es de su
   // elemento y se queda con la cabeza por debajo de la superficie se hunde.
   function updateTide() {
@@ -2999,7 +3208,7 @@
     for (const m of mechs) [m.ox, m.oy].forEach(add);
     for (const g of geysers) [g.h, g.plugged ? 1 : 0].forEach(add);
     [levelFrames, STATE_CODE[state] || 0, tide ? tide.y : 0, gems.filter((g) => g.taken).length].forEach(add);
-    for (const b of [boss, golem, hydra, shade]) if (b) [b.x || 0, b.y || 0, b.hits || b.hp || 0].forEach(add);
+    for (const b of [boss, golem, hydra, shade, crab]) if (b) [b.x || 0, b.y || 0, b.hits || b.hp || 0].forEach(add);
     return h;
   }
 
@@ -3131,7 +3340,7 @@
     }
     const w = unpackWorld(s.world);
     ({ grid, liquids, breakables, dissolving, barriers, fans, doors, boxes, gems, mechs, portals } = w);
-    ({ enemies, items, springs, crumbles, spikes, flags, obsidian, boss, bossDefeatedAt, golem, dispensers, tide, hydra, torches, shade, geysers } = w);
+    ({ enemies, items, springs, crumbles, spikes, flags, obsidian, boss, bossDefeatedAt, golem, crab, dispensers, tide, hydra, torches, shade, geysers } = w);
     players = w.players.map((p) => Object.assign(p, { ch: CHARACTERS[p.ch], controls: CHARACTERS[p.controls].keys }));
     checkpoint = s.checkpoint ? unpackWorld(s.checkpoint) : null;
     shots = s.shots.map((x) => ({ ...x, owner: players[x.owner] }));
@@ -3187,6 +3396,7 @@
         updateDarts();
         if (boss && state === "playing") updateBoss();
         if (golem && state === "playing") updateGolem();
+        if (crab && state === "playing") updateCrab();
         if (hydra && state === "playing") updateHydra();
         updateDispensers();
         updateBreakables();
@@ -5498,6 +5708,158 @@
     }
   }
 
+  // Cangrejo hirviente: caparazón de roca caliente con manchas del color de lo que le duele ahora,
+  // patas que se mueven al andar, ojos con antenas y tenazas que se abren antes del pellizco.
+  function drawCrab(t) {
+    const k = crab;
+    if (!k) return;
+    const ground = k.y + CRAB_H;
+    if (k.state === "dead") {
+      // Queda el caparazón vacío, humeando.
+      ctx.fillStyle = "#3a2620";
+      ctx.beginPath();
+      ctx.ellipse(k.x + CRAB_W / 2, ground - 8, CRAB_W / 2 - 6, 12, 0, Math.PI, 0);
+      ctx.fill();
+      const phase = (t * 0.6) % 1;
+      ctx.globalAlpha = 1 - phase;
+      ctx.fillStyle = "#e8e8f0";
+      ctx.beginPath();
+      ctx.arc(k.x + CRAB_W / 2, ground - 20 - phase * 30, 4 + phase * 6, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.globalAlpha = 1;
+      return;
+    }
+    const weak = ELEMENTS[crabWeak(k)];
+    const x = k.x + (k.state === "dying" ? Math.sin(t * 60) * 3 : 0);
+    const y = k.y;
+    const cx = x + CRAB_W / 2;
+    const walking = k.state === "walk" || k.state === "hurt";
+    const open = k.state === "windup" ? Math.min(1, (CRAB_WINDUP - k.timer) / 20) : 0;
+    ctx.save();
+    if (k.state === "hurt" && k.timer % 10 < 5) ctx.globalAlpha = 0.7;
+    // Patas (tres por lado)
+    ctx.strokeStyle = "#5a3a30";
+    ctx.lineWidth = 4;
+    ctx.lineCap = "round";
+    for (let i = 0; i < 3; i++) {
+      const sw = walking ? Math.sin(k.anim * 0.3 + i * 2) * 4 : 0;
+      for (const side of [-1, 1]) {
+        const hx = cx + side * (14 + i * 9);
+        ctx.beginPath();
+        ctx.moveTo(hx, y + 30);
+        ctx.lineTo(hx + side * 12, y + 34 + sw * side);
+        ctx.lineTo(hx + side * 16 + sw, ground);
+        ctx.stroke();
+      }
+    }
+    // Tenazas: se levantan y se abren antes del pellizco (la de delante, más).
+    for (const side of [-1, 1]) {
+      const front = side === k.dir;
+      const lift = front ? open * 14 : open * 6;
+      const ax = cx + side * (CRAB_W / 2 - 4);
+      const ay = y + 22 - lift;
+      ctx.beginPath();
+      ctx.moveTo(cx + side * 22, y + 24);
+      ctx.lineTo(ax, ay + 4);
+      ctx.stroke();
+      ctx.fillStyle = k.state === "windup" && k.timer % 12 < 6 ? "#ff6b4d" : "#7a4636";
+      const gap = (front ? 0.5 : 0.25) * open + 0.12;
+      ctx.beginPath();
+      ctx.moveTo(ax, ay);
+      ctx.arc(ax, ay, 13, side > 0 ? -gap * 3 : Math.PI + gap * 3, side > 0 ? Math.PI * 0.5 : Math.PI * 0.5, side < 0);
+      ctx.fill();
+      ctx.beginPath();
+      ctx.moveTo(ax, ay);
+      ctx.arc(ax, ay, 11, side > 0 ? -Math.PI * 0.5 : Math.PI * 1.5, side > 0 ? -gap * 3 - 0.3 : Math.PI + gap * 3 + 0.3, side < 0);
+      ctx.fill();
+    }
+    ctx.lineCap = "butt";
+    // Caparazón
+    ctx.shadowColor = `rgb(${weak.glow})`;
+    ctx.shadowBlur = 14;
+    ctx.fillStyle = "#7a4636";
+    ctx.beginPath();
+    ctx.ellipse(cx, y + 28, CRAB_W / 2 - 14, 20, 0, Math.PI, 0);
+    ctx.lineTo(cx + CRAB_W / 2 - 14, y + 34);
+    ctx.lineTo(cx - CRAB_W / 2 + 14, y + 34);
+    ctx.closePath();
+    ctx.fill();
+    ctx.shadowBlur = 0;
+    // Manchas del color de lo que le duele
+    ctx.fillStyle = weak.body;
+    for (const [dx, dy, r] of [[-14, 18, 5], [2, 13, 6], [17, 19, 4], [-2, 26, 3]]) {
+      ctx.globalAlpha = 0.75 + Math.sin(t * 4 + dx) * 0.2;
+      ctx.beginPath();
+      ctx.arc(cx + dx, y + dy, r, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    ctx.globalAlpha = 1;
+    // Ojos con antenas
+    for (const side of [-1, 1]) {
+      const ex = cx + side * 9 + k.dir * 3;
+      ctx.strokeStyle = "#5a3a30";
+      ctx.lineWidth = 3;
+      ctx.beginPath();
+      ctx.moveTo(cx + side * 7, y + 12);
+      ctx.lineTo(ex, y + 2);
+      ctx.stroke();
+      ctx.fillStyle = "#ffffff";
+      ctx.beginPath();
+      ctx.arc(ex, y + 1, 5, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = k.state === "hurt" ? "#9a9a9a" : "#1a150f";
+      ctx.beginPath();
+      ctx.arc(ex + k.dir * 1.5, y + 1, 2.4, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    // Vapor que sale del caparazón
+    const phase = (t * 1.2) % 1;
+    ctx.globalAlpha = (1 - phase) * 0.6;
+    ctx.fillStyle = "#e8e8f0";
+    ctx.beginPath();
+    ctx.arc(cx - 10 + Math.sin(t * 3) * 4, y + 6 - phase * 26, 3 + phase * 5, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.globalAlpha = 1;
+    if (k.flash > 0) {
+      ctx.fillStyle = `rgba(255,255,255,${k.flash / 45})`;
+      roundRectPath(ctx, x, y, CRAB_W, CRAB_H, 16);
+      ctx.fill();
+    }
+    ctx.restore();
+  }
+
+  function drawCrabBar() {
+    const k = crab;
+    if (k.state === "dead") {
+      const since = levelFrames - bossDefeatedAt;
+      if (since < 240) {
+        ctx.save();
+        ctx.globalAlpha = Math.min(1, since / 20, (240 - since) / 40);
+        ctx.fillStyle = "rgba(10,8,5,0.75)";
+        ctx.fillRect(0, H / 2 - 50, W, 100);
+        text(`¡${k.name} se fue a pique!`, W / 2, H / 2 - 12, 34, "#ffe08a");
+        text("El sello de las puertas se rompe…", W / 2, H / 2 + 26, 18, "#d9c9a6", "center", "normal");
+        ctx.restore();
+      }
+      return;
+    }
+    const w = Math.min(420, W - 120);
+    const x = W / 2 - w / 2;
+    const y = T + 12;
+    const weak = crabWeak(k);
+    text(`${k.name} · le duele ${ELEMENTS[weak].name}`, W / 2, y, 15, "#ffe9b8");
+    const seg = w / CRAB_HP;
+    for (let i = 0; i < CRAB_HP; i++) {
+      const sx = x + i * seg;
+      ctx.fillStyle = "rgba(0,0,0,0.6)";
+      ctx.fillRect(sx + 2, y + 12, seg - 4, 10);
+      if (i >= k.hits) {
+        ctx.fillStyle = ELEMENTS[CRAB_PHASES[Math.floor(i / CRAB_HITS_PER_PHASE)]].body;
+        ctx.fillRect(sx + 2, y + 12, seg - 4, 10);
+      }
+    }
+  }
+
   // Marea: una capa translúcida del líquido que lo cubre todo por debajo de la superficie.
   function drawTide(t) {
     if (!tide || tide.y >= tide.bottom) return;
@@ -5926,6 +6288,7 @@
     drawEnemies(t);
     drawBoss(t);
     drawGolem(t);
+    drawCrab(t);
     drawHydra(t);
     drawShade(t);
     drawGeyserJets(t);
@@ -5960,6 +6323,10 @@
       drawHud();
       if (boss && levelFrames > HINT_FRAMES / 2) drawBossBar(t);
       else if (golem && levelFrames > HINT_FRAMES / 2) drawGolemBar();
+      else if (crab && levelFrames > HINT_FRAMES / 2) {
+        drawCrabBar();
+        drawToast(true);
+      }
       else if (shade && levelFrames > HINT_FRAMES / 2) {
         drawShadeBar();
         drawToast(true);
