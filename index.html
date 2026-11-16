@@ -146,9 +146,50 @@
     .overlay-panel button.primary { background: #ffe08a; color: #1a150f; font-weight: 700; border-color: #ffe08a; }
     .overlay-panel .code-label { margin: 12px 0 0; color: #d9c9a6; }
     .overlay-panel .code { margin: 4px 0 10px; font: bold 34px Consolas, monospace; letter-spacing: 0.25em; color: #ffe08a; }
-    .overlay-panel .slots { list-style: none; padding: 0; margin: 0 0 12px; }
-    .overlay-panel .slots li { display: flex; justify-content: space-between; padding: 6px 0; border-bottom: 1px solid #3b3022; }
-    .overlay-panel .slots span { color: #9c8d70; }
+    /* Barra de conexión: un tramo por personaje (vacío, conectando o listo) */
+    #online-panel .bar { display: flex; gap: 6px; margin: 4px 0 6px; }
+    #online-panel .seg {
+      position: relative;
+      flex: 1;
+      height: 34px;
+      overflow: hidden;
+      background: #0d0b08;
+      border: 1px solid #3b3022;
+      border-radius: 8px;
+    }
+    #online-panel .seg i {
+      position: absolute;
+      inset: 0;
+      width: 0;
+      background: var(--c);
+      transition: width 0.5s ease;
+    }
+    #online-panel .seg.joining i {
+      width: 55%;
+      opacity: 0.55;
+      background: repeating-linear-gradient(-45deg, var(--c) 0 8px, transparent 8px 16px);
+      background-size: 22.6px 22.6px;
+      animation: online-stripes 0.8s linear infinite;
+    }
+    #online-panel .seg.ready i { width: 100%; opacity: 0.85; }
+    #online-panel .seg.ready { border-color: var(--c); }
+    #online-panel .seg span {
+      position: relative;
+      display: flex;
+      height: 100%;
+      align-items: center;
+      justify-content: center;
+      font-size: 12px;
+      font-weight: 700;
+      color: #f3e6c8;
+      text-shadow: 0 1px 2px #000;
+      white-space: nowrap;
+    }
+    @keyframes online-stripes { to { background-position: 22.6px 0; } }
+    #online-panel .countdown { min-height: 0; margin: 8px 0 0; font-size: 20px; font-weight: 700; color: #bfe8a8; text-align: center; }
+    #online-panel .countdown:empty, #online-panel .slow:empty { display: none; }
+    #online-panel .slow { color: #f0a58f; font-size: 13px; margin: 6px 0; }
+    #online-panel .room > button { margin-top: 10px; }
     .overlay-panel .status { min-height: 1.2em; color: #ffe08a; margin: 10px 0 0; }
     .overlay-panel textarea {
       box-sizing: border-box;
