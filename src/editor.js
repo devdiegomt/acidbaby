@@ -92,6 +92,7 @@
     if (data.golem && typeof data.golem === "object") clean.golem = { ...data.golem }; // la del Gólem de magma
     if (data.tide && typeof data.tide === "object") clean.tide = { ...data.tide }; // la marea
     if (data.hydra && typeof data.hydra === "object") clean.hydra = { ...data.hydra }; // la Hidra
+    if (data.dark) clean.dark = true; // nivel a oscuras
     return clean;
   }
 
@@ -114,6 +115,7 @@
       const fields = Object.entries(data[cfg]).map(([k, v]) => `${k}: ${q(v)}`);
       lines.push(`  ${cfg}: { ${fields.join(", ")} },`);
     }
+    if (data.dark) lines.push("  dark: true,");
     lines.push("  map: [", ...data.map.map((row) => `    ${q(row)},`), "  ],", "},");
     return lines.join("\n");
   }
@@ -261,6 +263,8 @@
       ["{", "Jefe final (el Guardián)", "#5a4a33"], ["/", "Sello (cae con el jefe)", "#c86bff"],
       ["Ω", "Gólem de magma (jefe)", "#ff8a3d"], ["▼", "Dispensador de barriles de agua", "#4a4f5c"],
       ["Ψ", "Hidra del aljibe (jefe; necesita marea)", "#3b5a52"],
+      ["†", "Antorcha apagada (la enciende Chispa)", "#6b4a2b"], ["‡", "Antorcha encendida", "#ff8a1a"],
+      ["¤", "Farol (lleva luz consigo)", "#ffd166"],
     ]],
   ];
   const LABELS = Object.fromEntries(PALETTE.flatMap(([, tiles]) => tiles.map(([ch, label]) => [ch, label])));
@@ -306,6 +310,7 @@
     if (clean.golem) data.golem = clean.golem;
     if (clean.tide) data.tide = clean.tide;
     if (clean.hydra) data.hydra = clean.hydra;
+    if (clean.dark) data.dark = true;
   }
 
   // Tras cada cambio: guarda el borrador, vuelve a cargar la vista previa y refresca el panel.

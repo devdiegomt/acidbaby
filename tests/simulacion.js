@@ -28,7 +28,7 @@ game = game.replace(
      get grid(){return grid}, get fans(){return fans}, get doors(){return doors}, get enemies(){return enemies}, get items(){return items}, get shots(){return shots},
      get save(){return save}, isUnlocked, get levelIndex(){return levelIndex}, get lastResult(){return lastResult},
      get menuIndex(){return menuIndex}, get levelFrames(){return levelFrames}, setLevel(i, si = 0){ testLevel = null; seasonIndex = si; levelIndex = i; loadLevel(i); state = "playing"; }, get darts(){return darts}, get crumbles(){return crumbles}, get boss(){return boss}, solidAt,
-     SEASONS, get seasonIndex(){return seasonIndex}, get titleIndex(){return titleIndex}, isSeasonUnlocked, levelNumber, get flags(){return flags}, get checkpoint(){return checkpoint}, get retries(){return retries}, get toast(){return toast}, get level(){return level}, worldRange, get spikes(){return spikes}, get obsidian(){return obsidian}, get liquids(){return liquids}, starsOf, starCount, get golem(){return golem}, get rocks(){return rocks}, get waves(){return waves}, get tide(){return tide}, get hydra(){return hydra} };\n})();`,
+     SEASONS, get seasonIndex(){return seasonIndex}, get titleIndex(){return titleIndex}, isSeasonUnlocked, levelNumber, get flags(){return flags}, get checkpoint(){return checkpoint}, get retries(){return retries}, get toast(){return toast}, get level(){return level}, worldRange, get spikes(){return spikes}, get obsidian(){return obsidian}, get liquids(){return liquids}, starsOf, starCount, get golem(){return golem}, get rocks(){return rocks}, get waves(){return waves}, get tide(){return tide}, get hydra(){return hydra}, get torches(){return torches}, lightSources };\n})();`,
 );
 // editor.js va antes que game.js (como en index.html); sin DOM solo define EditorCore.
 eval(fs.readFileSync(ROOT + "levels.js", "utf8") + "\nglobalThis.LEVELS = LEVELS;\n" + fs.readFileSync(ROOT + "levels2.js", "utf8") + "\nglobalThis.SEASON_2 = SEASON_2;\n" + fs.readFileSync(ROOT + "editor.js", "utf8") + "\n" + game);
@@ -2067,6 +2067,80 @@ acid = P("Acidito");
 place(acid, 19, 16);
 run(3);
 check("Tocar a la Hidra duele", acid.hearts < 3, `vidas ${acid.hearts}`);
+// --- Oscuridad, antorchas y farol (Mundo 3) --------------------------------------------------------
+console.log("\nOscuridad");
+function darkbox(edit) {
+  const lv = E.blankLevel();
+  const g = E.toGrid(lv.map);
+  edit(g);
+  const problems = J.test({ ...lv, dark: true, map: E.fromGrid(g) });
+  if (problems.length) console.log("   problemas:", problems.join("; "));
+  run(1);
+  fire = P("Chispa"); water = P("Gota"); acid = P("Acidito");
+}
+const lightAt = (x, y) => G.lightSources(0).some((L) => Math.hypot(L.x - x, L.y - y) < L.r * 0.8);
+darkbox((g) => { g[16][12] = "†"; g[16][20] = "†"; g[17][26] = "~"; g[17][28] = "L"; });
+check("Chispa da mucha luz y los otros dos, poca", G.lightSources(0).find((L) => Math.abs(L.x - center(fire)) < 2).r > 3 * G.lightSources(0).find((L) => Math.abs(L.x - center(water)) < 2).r);
+check("Una antorcha apagada no alumbra", !lightAt(20 * 32 + 16, 16 * 32 + 6) && !G.torches[1].lit);
+check("El agua no brilla; la lava, sí", !lightAt(26 * 32 + 16, 17 * 32 + 6) && lightAt(28 * 32 + 16, 17 * 32 + 6));
+walkTo(water, 12);
+check("Gota no enciende las antorchas", !G.torches[0].lit);
+walkTo(fire, 12);
+check("Chispa enciende la antorcha al tocarla", G.torches[0].lit && lightAt(12 * 32 + 16, 16 * 32 + 6));
+walkTo(fire, 3);
+check("…y se queda encendida", G.torches[0].lit);
+darkbox((g) => { g[16][6] = "*"; g[16][20] = "†"; });
+walkTo(fire, 6);
+place(fire, 10, 16); fire.facing = 1; run(5);
+tap("KeyS");
+run(60);
+check("Una bola de fuego enciende una antorcha de lejos", G.torches[0].lit);
+darkbox((g) => { g[16][6] = "¤"; });
+walkTo(acid, 6);
+check("El farol va al inventario de quien lo agarra", acid.inv.lantern);
+walkTo(acid, 20);
+check("…y su luz va con él", lightAt(center(acid), acid.y));
+G.setLevel(0);
+darkbox((g) => { g[16][10] = "⚑"; g[16][14] = "†"; });
+place(fire, 10, 16); place(water, 9, 16); place(acid, 11, 16);
+run(3);
+walkTo(fire, 14);
+tap("KeyR");
+check("Al volver a la bandera, la antorcha encendida después se apaga", !G.torches[0].lit);
+G.setLevel(0);
+
+// --- Nivel 3-1: sin luz ----------------------------------------------------------------------------
+console.log("\nNivel 3-1");
+G.setLevel(12, 1); run(1);
+fire = P("Chispa"); water = P("Gota"); acid = P("Acidito");
+check("El nivel está a oscuras", G.level.dark === true);
+runRightTo(fire, 35);
+check("Chispa recorre la mina y enciende las antorchas de abajo", G.torches.filter((t) => t.r === 16).every((t) => t.lit) && playing(), where());
+for (const p of [water, acid]) runRightTo(p, 35);
+check("Gota y Acidito lo siguen saltando los charcos ajenos", playing() && [water, acid].every((p) => center(p) > 34 * 32), where());
+for (const p of [fire, water, acid]) { ride(p, 37, -1); walkTo(p, G.doors[p.ch.door].c); }
+check("Suben por el ventilador y llegan a sus puertas", G.state === "won", where());
+check("…y Chispa ha encendido también las de arriba", G.torches.every((t) => t.lit));
+
+// --- Nivel 3-2: el farol -------------------------------------------------------------------------
+console.log("\nNivel 3-2");
+G.setLevel(13, 1); run(1);
+fire = P("Chispa"); water = P("Gota"); acid = P("Acidito");
+ride(fire, 1, 1);
+check("Chispa sube por el ventilador al camino de arriba", feetRow(fire) === 10, where());
+runRightTo(fire, 34);
+run(60);
+check("Esquiva las púas, cruza los tablones frágiles y acciona la palanca del puente", M("h").leverOn && playing(), where());
+runRightTo(acid, 6);
+check("Acidito agarra el farol", acid.inv.lantern);
+for (const p of [acid, water]) runRightTo(p, 25);
+check("Gota y Acidito cruzan los charcos del túnel", playing() && center(acid) > 24 * 32 && center(water) > 24 * 32, where());
+for (const p of [acid, water]) runRightTo(p, 34);
+check("…y el puente del foso de agua", playing() && center(acid) > 33 * 32, where());
+walkTo(fire, 37); run(30); // Chispa baja por el hueco del final
+for (const p of [fire, water, acid]) walkTo(p, G.doors[p.ch.door].c);
+check("Llegan a sus puertas", G.state === "won", where());
+
 // --- Teclas de Acidito: I J K L y también el teclado numérico ----------------------------------
 console.log("\nTeclas de Acidito");
 sandbox(() => {});
