@@ -275,6 +275,7 @@
   // ---------------------------------------------------------------------------
   const panel = document.createElement("div");
   panel.id = "online-panel";
+  panel.className = "overlay-panel";
   panel.hidden = true;
   panel.innerHTML = `
     <div class="box" role="dialog" aria-label="Jugar online">
@@ -335,7 +336,7 @@
   addEventListener("keydown", (e) => {
     if (panel.hidden) {
       // Durante una partida online, O abre el panel (para salir de la sala).
-      if (e.code === "KeyO" && room.playing && !e.target.closest?.("input")) open();
+      if (e.code === "KeyO" && room.playing && !e.target.closest?.("input, textarea")) open();
       return;
     }
     if (e.key === "Escape") close();

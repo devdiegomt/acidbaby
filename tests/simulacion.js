@@ -2287,5 +2287,47 @@ G.setLevel(0);
 
 G.setLevel(0);
 
+// --- Código de progreso --------------------------------------------------------
+console.log("\nCódigo de progreso");
+{
+  const PR = Juego.progress;
+  const levels = G.save.levels;
+  const backup = JSON.parse(JSON.stringify(levels));
+  const clear = () => Object.keys(levels).forEach((k) => delete levels[k]);
+  const keyOf = (s, lv) => (s.id === "t1" ? lv.name : `${s.id}:${lv.name}`);
+  const all = G.SEASONS.flatMap((s) => s.levels.map((lv) => keyOf(s, lv)));
+  clear();
+  check("Sin progreso, el código es corto y válido", /^ACID-[0-9A-Z-]+$/.test(PR.code()) && PR.code().length < 20, PR.code());
+  // Cada nivel con valores distintos: si dos niveles compartieran resumen (hash), no volverían bien.
+  all.forEach((k, i) => (levels[k] = { done: true, bestFrames: 1500 + i * 997, bestGems: i % 40, clean: i % 3 === 0 }));
+  const want = JSON.stringify(levels);
+  const code = PR.code();
+  check("El código solo usa letras y números que no se confunden", /^ACID(-[0-9A-HJKMNP-TV-Z]{1,4})+$/.test(code), `${code.length} caracteres`);
+  clear();
+  let res = PR.load(code);
+  check("Cargar el código devuelve todo el progreso, nivel por nivel", res.ok && res.levels === all.length && JSON.stringify(levels) === want, JSON.stringify(res));
+  check("…y queda guardado en el navegador", JSON.parse(storage.get("fireboy-watergirl-acidbaby-v1")).levels[all[5]]?.bestFrames === levels[all[5]].bestFrames);
+  check("Las temporadas se abren al cargar el progreso", G.isSeasonUnlocked(1));
+  // Combinar: de cada nivel se queda lo mejor de los dos.
+  levels[all[0]] = { done: true, bestFrames: 100, bestGems: 0, clean: false }; // mejor tiempo aquí
+  levels[all[1]] = { done: true, bestFrames: 99999, bestGems: 0, clean: false }; // peor aquí
+  delete levels[all[2]];
+  res = PR.load(code);
+  check("Al cargar, se queda el mejor tiempo de los dos", levels[all[0]].bestFrames === 100 && levels[all[1]].bestFrames === 1500 + 997);
+  check("…las gemas y el «sin perder corazón» del código", levels[all[0]].bestGems === 0 && levels[all[0]].clean === true && levels[all[2]]?.done === true);
+  check("…y cuenta los niveles que mejoraron", res.improved === 3, `${res.improved}`);
+  res = PR.load(code);
+  check("Cargar dos veces el mismo código no cambia nada", res.ok && res.improved === 0);
+  check("Se puede pegar en minúsculas, con espacios o como enlace", PR.load(code.toLowerCase().replace(/-/g, " ")).ok && PR.load(`https://acidito.vercel.app/#progreso=${code}`).ok);
+  const typo = code.slice(0, 12) + (code[12] === "7" ? "8" : "7") + code.slice(13);
+  check("Un código mal copiado se detecta", !PR.load(typo).ok && !PR.load(code.slice(0, -3)).ok && !PR.load("").ok && !PR.load("hola").ok);
+  const before = JSON.stringify(levels);
+  PR.load(typo);
+  check("…y no toca el progreso", JSON.stringify(levels) === before);
+  check("El resumen cuenta niveles y estrellas", PR.summary().levels === all.length && PR.summary().stars > all.length);
+  clear();
+  Object.assign(levels, backup);
+}
+
 process.exitCode = failures ? 1 : 0;
 console.log(failures ? `\n${failures} fallos` : "\nTodo bien");
