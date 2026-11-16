@@ -265,6 +265,7 @@
       ["Ψ", "Hidra del aljibe (jefe; necesita marea)", "#3b5a52"],
       ["†", "Antorcha apagada (la enciende Chispa)", "#6b4a2b"], ["‡", "Antorcha encendida", "#ff8a1a"],
       ["¤", "Farol (lleva luz consigo)", "#ffd166"],
+      ["☾", "La Sombra (jefe; mejor en un nivel a oscuras)", "#2c1f3d"],
     ]],
   ];
   const LABELS = Object.fromEntries(PALETTE.flatMap(([, tiles]) => tiles.map(([ch, label]) => [ch, label])));
