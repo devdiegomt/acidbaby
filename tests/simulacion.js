@@ -2372,7 +2372,7 @@ function crossAt(p, gc, c) {
 // Sube con su géiser (el de la columna c) y sale andando hacia dir.
 function rideGeyser(p, c, dir) {
   const k = keysOf(p);
-  waitCalm(GZ(c), 60);
+  if (!GZ(c).steady) waitCalm(GZ(c), 60);
   walkTo(p, c);
   const startRow = feetRow(p);
   for (let i = 0; i < 600 && !(feetRow(p) <= startRow - 6); i++) run(1);
@@ -2456,6 +2456,119 @@ check("Gota sube con el de agua y agarra el zafiro", G.gems.every((g) => g.taken
 walkTo(water, 31); run(30);
 for (const p of [fire, water, acid]) walkTo(p, G.doors[p.ch.door].c);
 check("La compuerta está abierta y llegan a sus puertas", G.state === "won", where());
+
+// --- Nivel 4-3: tres muros ------------------------------------------------------------------------
+console.log("\nNivel 4-3");
+G.setLevel(20, 1); run(1);
+fire = P("Chispa"); water = P("Gota"); acid = P("Acidito");
+const barrelX = (fill) => G.boxes.find((b) => b.fill === fill)?.x;
+const barrels0 = { fire: barrelX("fire"), water: barrelX("water") };
+check("Los tres géiseres no paran nunca", G.geysers.every((g) => g.steady));
+// Salta primero y luego avanza (para no rozar lo que tiene delante).
+function jumpOver(p, dir, frames = 16) {
+  const k = keysOf(p);
+  down(k.j); run(5); down(dir > 0 ? k.r : k.l); run(frames - 5); up(k.j);
+  for (let i = 0; i < 60 && !p.onGround; i++) run(1);
+  up(k.r); up(k.l);
+  run(10);
+}
+walkTo(fire, 4); jumpOver(fire, 1);
+check("Chispa salta los barriles sin moverlos", barrelX("fire") === barrels0.fire && barrelX("water") === barrels0.water && playing(), where());
+for (let i = 0; i < 200 && feetRow(fire) > 10; i++) { if (center(fire) < 10 * 32 + 10) down("KeyD"); else up("KeyD"); run(1); }
+up("KeyD");
+hold(["KeyA"], 30, () => fire.onGround);
+walkTo(fire, 8);
+check("Sube por su muro de lava y agarra el rubí", G.gems.find((g) => g.type === "fire").taken && playing(), where());
+walkTo(fire, 13); run(20);
+check("…y baja por el otro lado", feetRow(fire) === 16 && playing(), where());
+walkTo(water, 4); hopTo(water, 6);
+check("Gota se mete entre los dos barriles", center(water) > 5 * 32 + 16 && center(water) < 7 * 32 && barrelX("water") - barrels0.water < 8, where());
+hold([keysOf(water).r], 200, () => GZ(10).plugged);
+run(20);
+check("…y empuja el de agua hasta el muro de lava: queda sellado", GZ(10).plugged && playing(), where());
+rideGeyser(water, 18, 1); walkTo(water, 20);
+check("Gota sube por su muro de agua y agarra el zafiro", G.gems.find((g) => g.type === "water").taken && playing(), where());
+walkTo(water, 21); run(20);
+hold([keysOf(acid).r], 400, () => GZ(18).plugged || !playing());
+run(20);
+check("Acidito empuja el barril de lava hasta el muro de agua y lo sella", GZ(18).plugged && playing(), where());
+walkTo(acid, 20); leap(acid, 1, 14);
+check("Acidito salta la caja", G.boxes.find((b) => !b.fill).x < 23 * 32 && playing(), where());
+rideGeyser(acid, 26, 1); walkTo(acid, 28);
+check("…sube por su muro de ácido y agarra la esmeralda", G.gems.every((g) => g.taken) && playing(), where());
+walkTo(acid, 30); run(20);
+const box43 = () => G.boxes.find((b) => !b.fill);
+walkTo(water, 20);
+hold([keysOf(water).r], 200, () => box43().x + box43().w / 2 >= 26 * 32 + 12);
+run(20);
+check("Gota tapa el muro de ácido con la caja", GZ(26).h === 0 && playing(), where());
+for (const p of [water, fire]) { walkTo(p, 24); leap(p, 1); }
+for (const p of [fire, water, acid]) walkTo(p, G.doors[p.ch.door].c);
+check("Pasan por encima de la caja y llegan a sus puertas con las tres gemas", G.state === "won", where());
+
+// --- Nivel 4-4: fuentes a oscuras ------------------------------------------------------------------
+console.log("\nNivel 4-4");
+G.setLevel(21, 1); run(1);
+fire = P("Chispa"); water = P("Gota"); acid = P("Acidito");
+check("Está a oscuras y tiene seis géiseres en dos pisos", G.level.dark && G.geysers.length === 6);
+check("Los géiseres de agua dan un poco de luz cuando salen", (() => { const g = GZ(16); for (let i = 0; i < 600 && !g.h; i++) run(1); return G.lightSources(0).some((l) => Math.abs(l.x - (16 * 32 + 16)) < 2); })());
+crossAt(fire, 16, 18); crossAt(fire, 24, 26); walkTo(fire, 36);
+check("Chispa cruza los géiseres de abajo a por el rubí", G.gems.find((g) => g.type === "fire").taken && playing(), where());
+crossAt(fire, 24, 22); crossAt(fire, 16, 14);
+rideGeyser(fire, 8, 1);
+check("Sube al piso del medio con el géiser de lava", feetRow(fire) === 10 && playing(), where());
+rideGeyser(fire, 12, 1);
+check("…y al de arriba con el otro", feetRow(fire) === 4 && playing(), where());
+crossAt(water, 8, 10);
+rideGeyser(water, 16, 1);
+hopGap(water, 24, 1); crossAt(water, 28, 30); walkTo(water, 35);
+check("Gota sube y cruza el piso del medio a por el zafiro", G.gems.find((g) => g.type === "water").taken && feetRow(water) === 10 && playing(), where());
+crossAt(water, 28, 26); hopGap(water, 24, -1);
+rideGeyser(water, 20, 1);
+check("…y sube al piso de arriba", feetRow(water) === 4 && playing(), where());
+crossAt(acid, 8, 10); crossAt(acid, 16, 18);
+rideGeyser(acid, 24, 1); rideGeyser(acid, 28, -1);
+hopGap(acid, 20, -1); hopGap(acid, 12, -1); walkTo(acid, 6);
+check("Acidito sube y va arriba a la izquierda por la esmeralda", G.gems.every((g) => g.taken) && playing(), where());
+hopGap(acid, 12, 1); hopGap(acid, 20, 1);
+hopGap(fire, 20, 1); hopGap(fire, 28, 1); hopGap(water, 28, 1); hopGap(acid, 28, 1);
+for (const p of [fire, water, acid]) walkTo(p, G.doors[p.ch.door].c);
+check("Saltan los huecos de los chorros ajenos y llegan a sus puertas", G.state === "won", where());
+
+// --- Nivel 4-5: relevos -----------------------------------------------------------------------------
+console.log("\nNivel 4-5");
+G.setLevel(22, 1); run(1);
+fire = P("Chispa"); water = P("Gota"); acid = P("Acidito");
+rideGeyser(fire, 8, -1); walkTo(fire, 6);
+check("Chispa sube con el géiser de lava y agarra el rubí", G.gems.find((g) => g.type === "fire").taken && playing(), where());
+hopGap(fire, 8, 1); walkTo(fire, 10);
+check("…y pisa el botón de la repisa: la compuerta se abre", M("q").active && playing(), where());
+for (const p of [water, acid]) crossAt(p, 8, 10);
+walkTo(water, 16); walkTo(acid, 19);
+check("Gota y Acidito pasan la compuerta y Gota pisa el botón de este lado", M("q").active && center(acid) > 15 * 32 && playing(), where());
+walkTo(fire, 12); run(20); walkTo(fire, 19);
+check("Chispa baja y pasa gracias a Gota", center(fire) > 15 * 32 && playing(), where());
+walkTo(water, 18);
+check("Encienden la bandera los tres juntos", G.flags[0].on, where());
+crossAt(acid, 20, 22);
+rideGeyser(acid, 24, 1); walkTo(acid, 28);
+check("Acidito sube por el muro de ácido y agarra la esmeralda", G.gems.find((g) => g.type === "acid").taken && playing(), where());
+walkTo(acid, 30); run(20);
+rideGeyser(water, 20, 1);
+hold([keysOf(water).r], 120, () => G.boxes[0].x >= 23 * 32);
+run(30);
+check("Gota sube con el géiser de agua y tira la caja de la repisa", G.boxes[0].y > 12 * 32 && feetRow(water) === 10 && playing(), where());
+hopGap(water, 20, -1); walkTo(water, 18);
+check("…agarra el zafiro", G.gems.every((g) => g.taken) && playing(), where());
+walkTo(water, 17); run(20);
+walkTo(water, 21);
+hold([keysOf(water).r], 200, () => G.boxes[0].x + G.boxes[0].w / 2 >= 24 * 32 + 12);
+run(20);
+check("…y tapa el muro de ácido con ella", GZ(24).h === 0 && playing(), where());
+crossAt(fire, 20, 22);
+for (const p of [water, fire]) { walkTo(p, 22); leap(p, 1); }
+for (const p of [fire, water, acid]) walkTo(p, G.doors[p.ch.door].c);
+check("Pasan por encima de la caja y llegan a sus puertas", G.state === "won", where());
 
 // --- Código de progreso --------------------------------------------------------
 console.log("\nCódigo de progreso");
