@@ -2733,10 +2733,10 @@ console.log("\nNivel 5-2");
 G.setLevel(25, 1); run(1);
 fire = P("Chispa"); water = P("Gota"); acid = P("Acidito");
 // Espera a que la prensa acabe de subir y pasa por debajo hasta la columna c.
-function passCrusher(p, id, c) {
+function passCrusher(p, id, c, waitAt) {
   const m = M(id);
   const left = Math.min(...m.cells.map((x) => x.c));
-  walkTo(p, left - 2);
+  walkTo(p, waitAt ?? left - 2);
   for (let i = 0; i < 600 && !(m.phase === "rest" && m.t < 5); i++) run(1);
   walkTo(p, c);
 }
@@ -2758,6 +2758,108 @@ for (let i = 0; i < 600 && M("p").phase !== "warn"; i++) run(1);
 walkTo(water, 7);
 for (let i = 0; i < 120 && playing(); i++) run(1);
 check("Quedarse debajo cuando tiembla es mala idea", G.state === "dead" && /prensa/.test(G.deathMessage), G.deathMessage);
+
+// Sube con una prensa-ascensor: espera a que esté abajo, se sube encima y sale arriba hacia dir.
+function rideCrusher(p, id, dir) {
+  const m = M(id);
+  const cols = m.cells.map((x) => x.c);
+  const left = Math.min(...cols), right = Math.max(...cols);
+  const side = center(p) < left * 32 ? -1 : 1;
+  walkTo(p, side < 0 ? left - 2 : right + 2);
+  for (let i = 0; i < 900 && m.phase !== "hold"; i++) run(1);
+  hopTo(p, side < 0 ? left : right);
+  for (let i = 0; i < 400 && m.phase !== "rest"; i++) run(1);
+  run(5);
+  const k = keysOf(p);
+  hold([dir > 0 ? k.r : k.l], 25);
+  run(20);
+}
+// Baja con una prensa: se pone encima cuando está arriba y se baja hacia la columna c al llegar al suelo.
+function rideDown(p, id, c) {
+  const m = M(id);
+  for (let i = 0; i < 900 && !(m.phase === "rest" && m.t < 20); i++) run(1);
+  walkTo(p, Math.min(...m.cells.map((x) => x.c)));
+  for (let i = 0; i < 900 && m.phase !== "hold"; i++) run(1);
+  run(8);
+  walkTo(p, c);
+}
+
+// --- Nivel 5-3: ascensores de hierro -----------------------------------------------------------------
+console.log("\nNivel 5-3");
+G.setLevel(26, 1); run(1);
+fire = P("Chispa"); water = P("Gota"); acid = P("Acidito");
+rideCrusher(water, "p", -1);
+check("Gota sube con la prensa como si fuera un ascensor", playing() && feetRow(water) === 10, where());
+jumpAt(water, 5);
+check("…agarra el zafiro de arriba a la izquierda", G.gems.find((g) => g.type === "water").taken && playing(), where());
+rideDown(water, "p", 13);
+check("…y baja otra vez con la prensa", playing() && feetRow(water) === 16 && center(water) > 12 * 32, where());
+runRightTo(fire, 22); jumpAt(fire, 23);
+check("Chispa se mete en la lava a por el rubí", G.gems.find((g) => g.type === "fire").taken && playing(), where());
+runRightTo(acid, 18); jumpAt(acid, 19);
+check("Acidito agarra la esmeralda del ácido", G.gems.every((g) => g.taken) && playing(), where());
+for (const p of [fire, water, acid]) runRightTo(p, 26);
+for (const p of [fire, water, acid]) rideCrusher(p, "q", 1);
+check("Los tres suben con la segunda prensa al piso de las puertas", playing() && G.players.every((p) => feetRow(p) === 10), where());
+for (const p of [fire, water, acid]) walkTo(p, G.doors[p.ch.door].c);
+check("Llegan a sus puertas", G.state === "won", where());
+G.setLevel(26, 1); run(1);
+fire = P("Chispa"); water = P("Gota"); acid = P("Acidito");
+walkTo(acid, 8);
+for (let i = 0; i < 900 && M("p").phase !== "warn"; i++) run(1);
+walkTo(acid, 10);
+for (let i = 0; i < 120 && playing(); i++) run(1);
+check("Esperar debajo del ascensor cuando baja aplasta", G.state === "dead" && /prensa/.test(G.deathMessage), G.deathMessage);
+
+// --- Nivel 5-4: cadena de montaje ----------------------------------------------------------------
+console.log("\nNivel 5-4");
+G.setLevel(27, 1); run(1);
+fire = P("Chispa"); water = P("Gota"); acid = P("Acidito");
+const box54 = () => G.boxes[0];
+run(300);
+check("La primera cinta lleva la caja hasta la prensa (que se atasca encima si la pilla)", box54().x > 12 * 32 && box54().x < 15 * 32 && playing(), `${box54().x}`);
+passCrusher(fire, "p", 15, 4);
+check("Chispa pasa bajo la prensa, agarra el rubí y la palanca invierte la segunda cinta", G.gems.find((g) => g.type === "fire").taken && M("d").active && playing(), where());
+walkTo(water, 4); // fuera de la cinta: si se queda quieta encima, la lleva bajo la prensa
+for (let i = 0; i < 900 && !(M("p").phase === "rest" && M("p").t < 5); i++) run(1);
+hold([keysOf(water).r], 300, () => box54().x + box54().w / 2 >= 16 * 32 + 10);
+walkTo(water, 17); // ya en la segunda cinta, lejos de la prensa
+check("Gota empuja la caja bajo la prensa hasta la segunda cinta", playing() && box54().x + box54().w > 16 * 32 && center(water) > 14 * 32 + 20, where() + ` caja ${box54().x}`);
+run(250);
+check("La cinta la lleva al botón y la compuerta se abre", M("g").active && playing(), `caja ${box54().x}`);
+jumpAtCol(water, 21);
+check("Gota agarra el zafiro sobre la cinta", G.gems.find((g) => g.type === "water").taken && playing(), where());
+passCrusher(acid, "p", 15, 4); // espera fuera de la cinta, que lo llevaría bajo la prensa
+for (const p of [fire, water]) { runRightTo(p, 30); runRightTo(p, 34); }
+runRightTo(acid, 30); walkTo(acid, 32); jumpHere(acid);
+check("Acidito pasa la prensa y la compuerta, y agarra la esmeralda", G.gems.every((g) => g.taken) && playing(), where());
+for (const p of [fire, water, acid]) walkTo(p, G.doors[p.ch.door].c);
+check("Llegan a sus puertas", G.state === "won", where());
+
+// --- Nivel 5-5: la fundición ---------------------------------------------------------------------
+console.log("\nNivel 5-5");
+G.setLevel(28, 1); run(1);
+fire = P("Chispa"); water = P("Gota"); acid = P("Acidito");
+for (const p of [fire, water, acid]) passCrusher(p, "p", 14);
+check("Los tres pasan la prensa de la cinta y Chispa agarra el rubí", playing() && G.players.every((p) => center(p) > 12 * 32) && G.gems.find((g) => g.type === "fire").taken, where());
+allWalk(all3(15));
+check("Encienden la bandera", G.flags[0].on, where());
+for (const p of [fire, water]) crossAt(p, 18, 20);
+walkTo(acid, 18);
+for (let i = 0; i < 600 && !G.gems.find((g) => g.type === "acid").taken; i++) run(1);
+run(150);
+walkTo(acid, 20);
+check("Chispa y Gota cruzan el géiser; Acidito sube con él a por la esmeralda", playing() && G.gems.find((g) => g.type === "acid").taken && G.players.every((p) => center(p) > 19 * 32), where());
+for (const p of [fire, water, acid]) rideCrusher(p, "q", -1);
+check("Suben con la prensa-ascensor", playing() && G.players.every((p) => feetRow(p) === 10), where());
+// Cruzan el hueco del ascensor solo cuando la prensa está arriba (si no, se caen al piso de abajo).
+const waitTop = () => { for (let i = 0; i < 600 && !(M("q").phase === "rest" && M("q").t < 30); i++) run(1); };
+for (const p of [fire, acid]) { waitTop(); runRightTo(p, 33); }
+waitTop(); walkTo(water, 31); jumpHere(water);
+check("La cinta de arriba los lleva al agua: Chispa y Acidito la saltan, Gota agarra el zafiro", G.gems.every((g) => g.taken) && playing(), where());
+walkTo(water, 33);
+for (const p of [fire, water, acid]) walkTo(p, G.doors[p.ch.door].c);
+check("Llegan a sus puertas", G.state === "won", where());
 
 // --- Código de progreso --------------------------------------------------------
 console.log("\nCódigo de progreso");
