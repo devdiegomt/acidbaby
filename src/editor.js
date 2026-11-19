@@ -95,6 +95,7 @@
     if (data.shade && typeof data.shade === "object") clean.shade = { ...data.shade }; // la Sombra
     if (data.geyser && typeof data.geyser === "object") clean.geyser = { ...data.geyser }; // los géiseres
     if (data.crab && typeof data.crab === "object") clean.crab = { ...data.crab }; // el Cangrejo
+    if (data.automaton && typeof data.automaton === "object") clean.automaton = { ...data.automaton }; // el Autómata
     if (data.dark) clean.dark = true; // nivel a oscuras
     return clean;
   }
@@ -113,7 +114,7 @@
       }
       lines.push("  },");
     }
-    for (const cfg of ["boss", "golem", "tide", "hydra", "shade", "geyser", "crab"]) {
+    for (const cfg of ["boss", "golem", "tide", "hydra", "shade", "geyser", "crab", "automaton"]) {
       if (!data[cfg]) continue;
       const fields = Object.entries(data[cfg]).map(([k, v]) => `${k}: ${q(v)}`);
       lines.push(`  ${cfg}: { ${fields.join(", ")} },`);
@@ -272,6 +273,7 @@
       ["¤", "Farol (lleva luz consigo)", "#ffd166"],
       ["☾", "La Sombra (jefe; mejor en un nivel a oscuras)", "#2c1f3d"],
       ["Ж", "Cangrejo hirviente (jefe; necesita géiseres de los tres)", "#7a4636"],
+      ["Ф", "Autómata de la forja (jefe; necesita prensas)", "#4a4a55"],
     ]],
   ];
   const LABELS = Object.fromEntries(PALETTE.flatMap(([, tiles]) => tiles.map(([ch, label]) => [ch, label])));
@@ -321,6 +323,7 @@
     if (clean.shade) data.shade = clean.shade;
     if (clean.geyser) data.geyser = clean.geyser;
     if (clean.crab) data.crab = clean.crab;
+    if (clean.automaton) data.automaton = clean.automaton;
     if (clean.dark) data.dark = true;
   }
 
@@ -467,7 +470,7 @@
           <select data-f="kind">${kinds.map(([v, label]) => `<option value="${v}"${v === kind ? " selected" : ""}>${label}</option>`).join("")}</select>
           ${fan || drain || belt || crusher ? "" : `<label>mueve x <input data-f="dx" type="number" value="${dx}"></label><label>y <input data-f="dy" type="number" value="${dy}"></label>`}
           ${belt ? `<select data-f="dir"><option value="1"${def.dir !== -1 ? " selected" : ""}>→ hacia la derecha</option><option value="-1"${def.dir === -1 ? " selected" : ""}>← hacia la izquierda</option></select>` : ""}
-          ${crusher ? `<label>espera <input data-f="wait" type="number" min="1" value="${def.wait ?? 100}"></label><label>desfase <input data-f="offset" type="number" min="0" value="${def.offset || 0}"></label>` : ""}
+          ${crusher ? `<label>espera <input data-f="wait" type="number" min="1" value="${def.wait ?? 100}"></label><label>desfase <input data-f="offset" type="number" min="0" value="${def.offset || 0}"></label><label><input data-f="manual" type="checkbox"${def.manual ? " checked" : ""}> cae solo con su botón</label>` : ""}
           ${def.trigger === "lever" ? "" : `<label>botones a la vez <input data-f="need" type="number" min="1" value="${def.need || 1}"></label>`}
           <button data-act="del-mech" title="Quitar el mecanismo y sus casillas">✕</button>
         </div>`;
@@ -579,6 +582,8 @@
       if (wait && wait !== 100) def.wait = wait;
       const offset = Number(get("offset") ?? old.offset ?? 0);
       if (offset) def.offset = offset;
+      const manual = row.querySelector('[data-f="manual"]');
+      if (manual ? manual.checked : old.manual) def.manual = true;
     } else def.move = get("dx") === undefined ? old.move || [0, -3] : [Number(get("dx")) || 0, Number(get("dy")) || 0];
     const need = Number(get("need"));
     if (def.trigger === "button" && need > 1) def.need = need;

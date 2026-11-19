@@ -55,6 +55,10 @@
 //   kind: "crusher"  prensa: sus casillas descansan arriba; tiembla, cae de golpe hasta el suelo y
 //                    vuelve a subir. Aplasta a quien quede debajo; una caja debajo la atasca. wait:
 //                    frames arriba (100), offset: retraso inicial. Con botón o palanca activo, se para arriba.
+//                    manual: true → no cae sola: espera arriba y cae cada vez que se pisa su botón.
+//   Ф      el Autómata de la forja (jefe del Mundo 5): persigue por el suelo al más cercano, levanta
+//          los martillos y golpea; lanza remaches en arco. Solo le hace daño una prensa que le cae
+//          encima (aguanta 6). automaton: { name, left, right }. Al caer se rompen los sellos /
 //
 // Estrellas de cada nivel: completarlo, recoger todas sus gemas y pasarlo sin perder un corazón
 // (ni volver a una bandera). Se pueden ganar en partidas distintas.
@@ -868,6 +872,36 @@ const SEASON_2 = {
             "#                                      #",
             "#fwb     r     ⚑                       #",
             "####kkkkkkkkkk####⇞#####################",
+          ],
+        },
+        {
+          name: "El Autómata de la forja",
+          hint: "Su blindaje solo cede bajo una prensa. Uno lo atrae debajo (¡y se quita!) y otro la deja caer desde el balcón.",
+          automaton: { name: "El Autómata de la forja", left: 7, right: 32 },
+          mechanisms: {
+            h: { kind: "crusher", manual: true, trigger: "button" },
+            j: { kind: "crusher", manual: true, trigger: "button" },
+            k: { kind: "crusher", manual: true, trigger: "button" },
+          },
+          map: [
+            "########################################",
+            "########################################",
+            "########################################",
+            "########################################",
+            "########################################",
+            "########################################",
+            "#        hh        jj        kk        #",
+            "#                                      #",
+            "#                                      #",
+            "#                                      #",
+            "#rH J                              J Kz#",
+            "######                            ######",
+            "#                                 /    #",
+            "#                                 /    #",
+            "#                                 /    #",
+            "#                        e        /    #",
+            "#fwb  ;             Ф            ;/123 #",
+            "########################################",
           ],
         },
       ],
