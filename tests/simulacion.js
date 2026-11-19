@@ -2635,6 +2635,130 @@ run(5);
 for (const p of [fire, water, acid]) walkTo(p, G.doors[p.ch.door].c);
 check("Llegan a sus puertas", G.state === "won", where());
 
+// --- Cintas y prensas (Mundo 5) -------------------------------------------------------------------
+console.log("\nCintas y prensas");
+function mechbox(mechanisms, edit) {
+  const lv = E.blankLevel();
+  const g = E.toGrid(lv.map);
+  edit(g);
+  const problems = J.test({ ...lv, mechanisms, map: E.fromGrid(g) });
+  if (problems.length) console.log("   problemas:", problems.join("; "));
+  run(1);
+  fire = P("Chispa"); water = P("Gota"); acid = P("Acidito");
+}
+const beltFloor = (g, c0, c1, ch) => { for (let c = c0; c <= c1; c++) g[17][c] = ch; };
+mechbox({ c: { kind: "belt", dir: 1 } }, (g) => beltFloor(g, 6, 20, "c"));
+check("Una cinta funciona sin botón ni palanca", G.mechs[0].cells.length === 15);
+place(water, 8, 16); run(5);
+let bx0 = water.x; run(60);
+check("Arrastra a quien está encima (sin tocar nada)", water.x - bx0 > 85 && water.x - bx0 < 110, `${(water.x - bx0).toFixed(0)} px`);
+mechbox({ c: { kind: "belt", dir: -1 } }, (g) => beltFloor(g, 4, 24, "c"));
+place(water, 8, 16); run(5); bx0 = water.x;
+hold(["ArrowRight"], 60);
+const against = water.x - bx0;
+mechbox({ c: { kind: "belt", dir: 1 } }, (g) => beltFloor(g, 4, 24, "c"));
+place(water, 8, 16); run(5); bx0 = water.x;
+hold(["ArrowRight"], 60);
+check("Andar a favor es más rápido que en contra", water.x - bx0 > against * 2 && against > 40, `${against.toFixed(0)} / ${(water.x - bx0).toFixed(0)} px`);
+mechbox({ c: { kind: "belt", dir: 1 } }, (g) => { beltFloor(g, 6, 20, "c"); g[16][8] = "x"; });
+bx0 = G.boxes[0].x; run(60);
+check("…y también a las cajas", G.boxes[0].x - bx0 > 85);
+mechbox({ c: { kind: "belt", dir: 1, trigger: "button" } }, (g) => { beltFloor(g, 6, 16, "c"); g[16][24] = "C"; g[16][24 - 0] = "C"; g[16][23] = " "; });
+G.boxes.length; place(acid, 24, 16); place(water, 10, 16); run(5); bx0 = water.x; run(40);
+check("Con su botón pisado, la cinta cambia de sentido", water.x < bx0 - 40 && G.mechs[0].active, `${(water.x - bx0).toFixed(0)}`);
+
+mechbox({ p: { kind: "crusher", wait: 30 } }, (g) => { g[12][12] = "p"; g[12][13] = "p"; });
+place(acid, 20, 16); place(fire, 21, 16);
+let maxOy = 0, warned2 = false;
+for (let i = 0; i < 120; i++) { place(water, 2, 16); run(1); maxOy = Math.max(maxOy, G.mechs[0].oy); warned2 ||= G.mechs[0].phase === "warn"; }
+check("La prensa tiembla, cae hasta el suelo…", warned2 && maxOy === 4 * 32, `${maxOy}`);
+for (let i = 0; i < 300 && G.mechs[0].phase !== "rise"; i++) run(1);
+for (let i = 0; i < 300 && G.mechs[0].phase !== "rest"; i++) run(1);
+check("…y vuelve a subir", G.mechs[0].oy === 0 && G.mechs[0].phase === "rest");
+mechbox({ p: { kind: "crusher", wait: 30 } }, (g) => { g[12][12] = "p"; g[12][13] = "p"; });
+place(water, 12, 16); run(100);
+check("Aplasta a quien esté debajo", G.state === "dead" && G.deathMessage === "Gota quedó bajo una prensa", G.deathMessage);
+mechbox({ p: { kind: "crusher", wait: 30 } }, (g) => { g[12][12] = "p"; g[12][13] = "p"; g[16][12] = "x"; });
+for (let i = 0; i < 300 && G.mechs[0].phase !== "hold"; i++) run(1);
+check("Una caja debajo la atasca (y la caja aguanta)", G.mechs[0].oy === 4 * 32 - 28 && G.boxes.length === 1 && playing(), `${G.mechs[0].oy}`);
+mechbox({ p: { kind: "crusher", wait: 30, trigger: "button" } }, (g) => { g[12][12] = "p"; g[12][13] = "p"; g[16][20] = "P"; g[16][20] = "P"; });
+place(acid, 20, 16);
+let moved = 0;
+for (let i = 0; i < 300; i++) { place(acid, 20, 16); run(1); moved = Math.max(moved, G.mechs[0].oy); }
+check("Con su botón pisado, la prensa se queda arriba", moved === 0 && playing());
+mechbox({ p: { kind: "crusher", wait: 30 } }, (g) => { g[14][12] = "p"; g[14][13] = "p"; });
+place(water, 12, 13);
+for (let i = 0; i < 100 && G.mechs[0].phase !== "rise"; i++) run(1);
+for (let i = 0; i < 100 && G.mechs[0].phase !== "rest"; i++) run(1);
+check("Quien va encima sube con ella", playing() && feetRow(water) === 13, tile(water));
+mechbox({ p: { kind: "crusher", wait: 30, offset: 50 }, q: { kind: "crusher", wait: 30 } }, (g) => { g[12][8] = "p"; g[12][16] = "q"; });
+run(80);
+check("«offset» desfasa una prensa de otra", G.mechs[0].oy === 0 && G.mechs[1].oy > 0, `${G.mechs[0].oy} ${G.mechs[1].oy}`);
+G.setLevel(0);
+
+// --- Nivel 5-1: cintas -----------------------------------------------------------------------------
+console.log("\nNivel 5-1");
+G.setLevel(24, 1); run(1);
+fire = P("Chispa"); water = P("Gota"); acid = P("Acidito");
+const jumpHere = (p) => { hold([keysOf(p).j], 18); run(30); };
+place(acid, 3, 16);
+const ax = acid.x; run(1);
+walkTo(fire, 7);
+const fx = fire.x; run(40);
+check("La primera cinta arrastra a Chispa hacia la lava sin tocar nada", fire.x - fx > 50, `${(fire.x - fx).toFixed(0)}`);
+walkTo(fire, 14); jumpHere(fire);
+check("Chispa se mete en la lava (a ella no le hace nada) y agarra el rubí", G.gems.find((g) => g.type === "fire").taken && playing(), where());
+walkTo(fire, 19);
+check("Al pasar sobre la palanca, la segunda cinta cambia de sentido", M("d").active, where());
+for (const p of [water, acid]) runRightTo(p, 19);
+check("Gota y Acidito saltan la lava al final de la primera cinta", playing() && center(water) > 17 * 32 && center(acid) > 17 * 32, where());
+// Va hasta la columna c y salta en cuanto llega (sin pararse: la cinta lo movería).
+function jumpAtCol(p, c) {
+  const k = keysOf(p), target = c * 32 + 16, dir = target > center(p) ? 1 : -1;
+  hold([dir > 0 ? k.r : k.l], 400, () => (target - center(p)) * dir <= 3 || !playing());
+  hold([k.j], 18);
+  run(40);
+}
+jumpAtCol(water, 22);
+check("Gota agarra el zafiro desde la cinta", G.gems.find((g) => g.type === "water").taken && playing(), where());
+for (const p of [fire, water]) runRightTo(p, 34);
+runRightTo(acid, 27); walkTo(acid, 30); jumpHere(acid);
+check("Acidito agarra la esmeralda en el ácido", G.gems.every((g) => g.taken) && playing(), where());
+walkTo(acid, 34);
+for (const p of [fire, water, acid]) { ride(p, 36, -1); walkTo(p, G.doors[p.ch.door].c); }
+check("Suben con el ventilador y llegan a sus puertas", G.state === "won", where());
+
+// --- Nivel 5-2: prensas -----------------------------------------------------------------------------
+console.log("\nNivel 5-2");
+G.setLevel(25, 1); run(1);
+fire = P("Chispa"); water = P("Gota"); acid = P("Acidito");
+// Espera a que la prensa acabe de subir y pasa por debajo hasta la columna c.
+function passCrusher(p, id, c) {
+  const m = M(id);
+  const left = Math.min(...m.cells.map((x) => x.c));
+  walkTo(p, left - 2);
+  for (let i = 0; i < 600 && !(m.phase === "rest" && m.t < 5); i++) run(1);
+  walkTo(p, c);
+}
+for (const p of [fire, water, acid]) { passCrusher(p, "p", 10); passCrusher(p, "q", 15); }
+check("Los tres pasan las dos primeras prensas cuando acaban de subir", playing() && G.players.every((p) => center(p) > 14 * 32), where());
+check("…y Chispa y Gota agarran las gemas de debajo", G.gems.filter((g) => g.type !== "acid").every((g) => g.taken));
+for (const p of [fire, water, acid]) passCrusher(p, "s", 24);
+check("Pasan la prensa de la cinta, que los arrastra hacia atrás", playing() && G.players.every((p) => center(p) > 22 * 32), where());
+allWalk(all3(26));
+check("Encienden la bandera", G.flags[0].on, where());
+for (const p of [fire, water, acid]) passCrusher(p, "t", 32);
+check("Pasan la última prensa y Acidito agarra la esmeralda", playing() && G.gems.every((g) => g.taken), where());
+for (const p of [fire, water, acid]) walkTo(p, G.doors[p.ch.door].c);
+check("Llegan a sus puertas", G.state === "won", where());
+G.setLevel(25, 1); run(1);
+fire = P("Chispa"); water = P("Gota"); acid = P("Acidito");
+walkTo(water, 5);
+for (let i = 0; i < 600 && M("p").phase !== "warn"; i++) run(1);
+walkTo(water, 7);
+for (let i = 0; i < 120 && playing(); i++) run(1);
+check("Quedarse debajo cuando tiembla es mala idea", G.state === "dead" && /prensa/.test(G.deathMessage), G.deathMessage);
+
 // --- Código de progreso --------------------------------------------------------
 console.log("\nCódigo de progreso");
 {

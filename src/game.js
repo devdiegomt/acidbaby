@@ -19,6 +19,13 @@
   const POOL_MARGIN = 5; // píxeles de cortesía al pisar el borde de un charco
   const RESTART_DELAY = 150; // frames antes de reiniciar tras una muerte
   const PLATFORM_SPEED = 2; // píxeles por frame
+  // Mundo 5 (Temporada 2): cintas transportadoras y prensas (mecanismos con kind "belt" y "crusher").
+  const BELT_SPEED = 1.6; // píxeles por frame que arrastra una cinta a lo que lleva encima
+  const CRUSHER_WAIT = 100; // frames arriba, quieta (se cambia con "wait")
+  const CRUSHER_WARN = 40; // frames temblando antes de caer
+  const CRUSHER_SLAM = 12; // píxeles por frame al caer
+  const CRUSHER_HOLD = 30; // frames abajo
+  const CRUSHER_RISE = 2; // píxeles por frame al subir
   const DISSOLVE_DELAY = 18; // frames hasta que se rompe el primer bloque tocado
   const DISSOLVE_SPREAD = 6; // frames extra por cada bloque de distancia
   const FAN_RANGE = 6; // casillas de alto que alcanza la corriente de un ventilador
@@ -106,7 +113,7 @@
 
   // Avisos de novedades: salen en la portada, en el menú de niveles y en la pausa.
   // Para cambiarlos (o quitarlos), basta con editar esta lista.
-  const NEWS = ["¡Nuevo! Jueguen online, cada uno desde su PC (tecla O)", "Mundo 4 completo: Las fuentes hirvientes"];
+  const NEWS = ["¡Nuevo! Jueguen online, cada uno desde su PC (tecla O)", "Mundo 5: La forja abandonada"];
 
   // Jefe del Mundo 3 (Temporada 2): la Sombra de la mina. Flota hacia Gota o Acidito atravesando
   // las paredes; si se queda un rato a la luz de una antorcha encendida se quema (un golpe), apaga
@@ -829,6 +836,8 @@
         leverOn: false,
         active: false,
         pressedCount: 0,
+        phase: "rest", // prensas: rest | warn | slam | hold | rise
+        t: 0,
       };
       mechById.set(id, m);
       return m;
@@ -936,10 +945,17 @@
 
     for (const m of mechs) {
       const drain = m.def.kind === "drain"; // desagüe: solo botón o palanca, sin casillas
+      // Cintas y prensas funcionan solas; con botón o palanca, la cinta cambia de sentido y la prensa se para.
+      const auto = m.def.kind === "belt" || m.def.kind === "crusher";
       if (!drain && !m.cells.length && !fans.some((f) => f.mech === m)) fail(`el mecanismo "${m.id}" no tiene casillas en el mapa`);
-      if (!m.triggers.length) fail(`el mecanismo "${m.id}" no tiene botón/palanca "${m.id.toUpperCase()}"`);
+      if (!m.triggers.length && !auto) fail(`el mecanismo "${m.id}" no tiene botón/palanca "${m.id.toUpperCase()}"`);
       if (drain && !level.tide) fail(`el desagüe "${m.id}" no sirve de nada sin marea ("tide")`);
       if (m.def.kind === "fan" || drain) continue;
+      if (auto) {
+        m.def = { ...m.def, move: [0, 0] };
+        if (m.def.kind === "crusher") m.t = -(m.def.offset || 0); // desfase entre prensas
+        continue;
+      }
       if (!m.def.move) {
         fail(`el mecanismo "${m.id}" necesita "move" (o kind: "fan")`);
         m.def = { ...m.def, move: [0, 0] };
@@ -1286,9 +1302,103 @@
     return ok;
   }
 
+  // ¿Chocaría la prensa con el mapa (o con otra plataforma) al bajar un píxel?
+  function mechHitsTerrain(m, dy) {
+    for (const cell of m.cells) {
+      const x = cell.c * T + m.ox;
+      const y = cell.r * T + m.oy + dy;
+      if (solidTileIn(x, y, T, T)) return true;
+    }
+    return mechs.some((o) => o !== m && o.collidable && m.cells.some((cell) => hitsMech(o, cell.c * T + m.ox, cell.r * T + m.oy + dy, T, T)));
+  }
+
+  function solidTileIn(x, y, w, h) {
+    for (let r = Math.floor(y / T); r <= Math.floor((y + h - 1) / T); r++) {
+      for (let c = Math.floor(x / T); c <= Math.floor((x + w - 1) / T); c++) if (isSolidTile(tileAt(c, r))) return true;
+    }
+    return false;
+  }
+
+  // La prensa baja un píxel: empuja hacia abajo lo que tenga debajo; a un personaje que ya no
+  // puede bajar lo aplasta; una caja (o barril) que no puede bajar la atasca.
+  function crusherStepDown(m) {
+    if (mechHitsTerrain(m, 1)) return false;
+    const all = bodies();
+    m.oy += 1;
+    m.collidable = false;
+    let ok = true;
+    for (const b of all) {
+      if (!hitsMech(m, b.x, b.y, b.w, b.h) || stepBody(b, 0, 1)) continue;
+      if (b.kind === "player") {
+        killPlayer(b, `${b.ch.name} quedó bajo una prensa`, ["#9a9aa6", "#4a4a55", "#ffd166"]);
+        ok = false;
+      } else ok = false;
+    }
+    m.collidable = true;
+    if (!ok) m.oy -= 1;
+    return ok;
+  }
+
+  function updateCrusher(m) {
+    // Con su botón pisado o su palanca a la derecha, la prensa sube y se queda arriba.
+    if (m.triggers.length && m.active) {
+      for (let i = 0; i < CRUSHER_RISE && m.oy > 0; i++) mechStep(m, 0, -1);
+      m.phase = "rest";
+      m.t = 0;
+      return;
+    }
+    m.t++;
+    if (m.phase === "rest") {
+      if (m.t >= (m.def.wait ?? CRUSHER_WAIT)) [m.phase, m.t] = ["warn", 0];
+    } else if (m.phase === "warn") {
+      if (m.t >= CRUSHER_WARN) [m.phase, m.t] = ["slam", 0];
+    } else if (m.phase === "slam") {
+      for (let i = 0; i < CRUSHER_SLAM; i++) {
+        if (!crusherStepDown(m)) {
+          [m.phase, m.t] = ["hold", 0];
+          shake = Math.max(shake, 6);
+          sound.play("boom");
+          const cx = (m.cells.reduce((a, c) => a + c.c, 0) / m.cells.length) * T + T / 2 + m.ox;
+          const bottom = Math.max(...m.cells.map((c) => c.r)) * T + T + m.oy;
+          burst(cx, bottom, ["#8a7a62", "#5a4a33", "#ffd166"], 14);
+          break;
+        }
+      }
+    } else if (m.phase === "hold") {
+      if (m.t >= CRUSHER_HOLD) [m.phase, m.t] = ["rise", 0];
+    } else if (m.phase === "rise") {
+      for (let i = 0; i < CRUSHER_RISE; i++) {
+        if (m.oy <= 0) {
+          m.oy = 0;
+          [m.phase, m.t] = ["rest", 0];
+          break;
+        }
+        if (!mechStep(m, 0, -1)) break;
+      }
+    }
+  }
+
+  // Sentido en que arrastra ahora una cinta (1 derecha, -1 izquierda).
+  const beltDir = (m) => (m.def.dir || 1) * (m.triggers.length && m.active ? -1 : 1);
+
+  // Las cintas arrastran a lo que esté encima (personajes, cajas y barriles).
+  function updateBelts() {
+    for (const m of mechs) {
+      if (m.def.kind !== "belt") continue;
+      const dx = BELT_SPEED * beltDir(m);
+      for (const b of bodies()) {
+        if (!hitsMech(m, b.x, b.y, b.w, b.h) && hitsMech(m, b.x, b.y + 1, b.w, b.h)) moveX(b, dx);
+      }
+    }
+  }
+
   function updateMechs() {
     for (const m of mechs) {
-      if (m.def.kind === "fan" || m.def.kind === "drain") continue;
+      if (m.def.kind === "crusher") {
+        updateCrusher(m);
+        continue;
+      }
+      if (m.def.kind === "fan" || m.def.kind === "drain" || m.def.kind === "belt") continue;
       const tx = m.active ? m.def.move[0] * T : 0;
       const ty = m.active ? m.def.move[1] * T : 0;
       const speed = m.def.speed || PLATFORM_SPEED;
@@ -3388,6 +3498,7 @@
         if (torches.length) updateTorches();
         if (shade && state === "playing") updateShade();
         updateBoxes();
+        if (mechs.length) updateBelts();
         updateCrumbles();
         for (const s of springs) if (s.squash > 0) s.squash--;
         updatePortals();
@@ -3694,6 +3805,11 @@
     caves: {
       sky: ["#1f1c2b", "#0b0a12"], bricks: "rgba(190,170,255,0.03)",
       stone: "#3b3550", joints: "#26213a70", edges: ["#7a6fa0", "#1a1726", "#564c78", "#252036"],
+    },
+    // Mundo 5 de la temporada 2: hierro viejo de la forja.
+    forge: {
+      sky: ["#1d1b1f", "#09080a"], bricks: "rgba(200,200,220,0.03)",
+      stone: "#47444c", joints: "#2c2a3070", edges: ["#8c8894", "#1b1a1f", "#68646f", "#26242a"],
     },
     // Mundo 4 de la temporada 2: roca caliente de las fuentes hirvientes.
     springs: {
@@ -4670,6 +4786,14 @@
         }
       }
 
+      if (m.def.kind === "belt") {
+        drawBelt(m, t);
+        continue;
+      }
+      if (m.def.kind === "crusher") {
+        drawCrusher(m, t);
+        continue;
+      }
       // Plataformas / compuertas
       for (const cell of m.cells) {
         const x = cell.c * T + m.ox;
@@ -4692,6 +4816,99 @@
         ctx.arc(x + T / 2, y + T / 2 + 3, 4, 0, Math.PI * 2);
         ctx.fill();
         ctx.restore();
+      }
+    }
+  }
+
+  // Cinta: banda de goma con flechas que avanzan en su sentido y rodillos en los extremos.
+  function drawBelt(m, t) {
+    const dir = beltDir(m);
+    const cells = new Set(m.cells.map((c) => `${c.c},${c.r}`));
+    for (const cell of m.cells) {
+      const x = cell.c * T;
+      const y = cell.r * T;
+      ctx.fillStyle = "#2b2a30";
+      ctx.fillRect(x, y, T, T);
+      ctx.fillStyle = "#1a191e";
+      ctx.fillRect(x, y + 3, T, 10);
+      // Flechas que se mueven
+      ctx.strokeStyle = m.triggers.length ? m.color : "#d8c27a";
+      ctx.lineWidth = 2.5;
+      const shift = (((t * BELT_SPEED * 60) % 16) + 16) % 16;
+      for (let k = -1; k < 3; k++) {
+        const ax = x + k * 16 + (dir > 0 ? shift : 16 - shift);
+        if (ax < x - 2 || ax > x + T - 4) continue;
+        ctx.beginPath();
+        ctx.moveTo(ax - dir * 3, y + 4);
+        ctx.lineTo(ax + dir * 3, y + 8);
+        ctx.lineTo(ax - dir * 3, y + 12);
+        ctx.stroke();
+      }
+      ctx.fillStyle = "#4a4852";
+      ctx.fillRect(x, y, T, 3);
+      // Rodillos
+      ctx.fillStyle = "#56545e";
+      for (const rx of [x + 8, x + 24]) {
+        ctx.beginPath();
+        ctx.arc(rx, y + 22, 5, 0, Math.PI * 2);
+        ctx.fill();
+      }
+      ctx.fillStyle = "#2b2a30";
+      for (const rx of [x + 8, x + 24]) ctx.fillRect(rx - 1 + Math.cos(t * 6 * dir) * 2, y + 21 + Math.sin(t * 6 * dir) * 2, 2, 2);
+      if (!cells.has(`${cell.c - 1},${cell.r}`)) {
+        ctx.fillStyle = "#111014";
+        ctx.fillRect(x, y, 2, T);
+      }
+      if (!cells.has(`${cell.c + 1},${cell.r}`)) {
+        ctx.fillStyle = "#111014";
+        ctx.fillRect(x + T - 2, y, 2, T);
+      }
+    }
+  }
+
+  // Prensa: bloque de hierro con franjas de peligro abajo, colgado de un vástago. Tiembla antes de caer.
+  function drawCrusher(m, t) {
+    const jitter = m.phase === "warn" ? Math.sin(t * 70) * 1.5 : 0;
+    const top = Math.min(...m.cells.map((c) => c.r)) * T;
+    const cols = [...new Set(m.cells.map((c) => c.c))];
+    // Vástagos desde donde descansa
+    for (const c of cols) {
+      if (m.oy <= 0) break;
+      ctx.fillStyle = "#6b6b76";
+      ctx.fillRect(c * T + T / 2 - 4 + jitter, top, 8, m.oy);
+      ctx.fillStyle = "#9a9aa6";
+      ctx.fillRect(c * T + T / 2 - 4 + jitter, top, 2, m.oy);
+    }
+    for (const cell of m.cells) {
+      const x = cell.c * T + m.ox + jitter;
+      const y = cell.r * T + m.oy;
+      ctx.fillStyle = "#4a4a55";
+      ctx.fillRect(x, y, T, T);
+      ctx.fillStyle = "#6b6b76";
+      ctx.fillRect(x, y, T, 4);
+      // Franjas de peligro
+      ctx.save();
+      ctx.beginPath();
+      ctx.rect(x, y + T - 9, T, 9);
+      ctx.clip();
+      ctx.fillStyle = "#1a150f";
+      ctx.fillRect(x, y + T - 9, T, 9);
+      ctx.fillStyle = m.phase === "warn" && m.t % 10 < 5 ? "#ff6b4d" : "#ffd166";
+      for (let k = -2; k < 4; k++) {
+        ctx.beginPath();
+        ctx.moveTo(x + k * 12, y + T);
+        ctx.lineTo(x + k * 12 + 6, y + T);
+        ctx.lineTo(x + k * 12 + 15, y + T - 9);
+        ctx.lineTo(x + k * 12 + 9, y + T - 9);
+        ctx.fill();
+      }
+      ctx.restore();
+      // Remaches
+      ctx.fillStyle = "#8a8a96";
+      for (const [bx, by] of [[5, 8], [T - 7, 8], [5, T - 14], [T - 7, T - 14]]) ctx.fillRect(x + bx, y + by, 3, 3);
+      if (m.triggers.length) {
+        ctx.fillStyle = m.color;
+        ctx.fillRect(x + T / 2 - 3, y + 8, 6, 6);
       }
     }
   }

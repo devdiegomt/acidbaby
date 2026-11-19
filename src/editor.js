@@ -277,6 +277,7 @@
   const LABELS = Object.fromEntries(PALETTE.flatMap(([, tiles]) => tiles.map(([ch, label]) => [ch, label])));
   const COLORS = Object.fromEntries(PALETTE.flatMap(([, tiles]) => tiles.map(([ch, , color]) => [ch, color])));
   const MECH_COLORS = ["#f2c14e", "#c86bff", "#ff6fa8", "#4fd6c8", "#f0f0f0"]; // los mismos que el juego
+  const KIND_NAMES = { fan: "ventilador", drain: "desagüe", belt: "cinta", crusher: "prensa" };
 
   let data = null; // nivel que se edita (sin el mapa: el mapa vive en grid)
   let grid = null;
@@ -441,7 +442,8 @@
       const trigger = [id.toUpperCase(), `${id.toUpperCase()}: ${def.trigger === "lever" ? "palanca" : "botón"}`, color];
       // Un desagüe no tiene casillas propias: solo su botón o palanca.
       if (def.kind === "drain") return [trigger];
-      return [[id, `${id}: ${def.kind === "fan" ? "ventilador" : "plataforma"}`, color], trigger];
+      // Cintas y prensas funcionan solas: su botón o palanca es opcional.
+      return [[id, `${id}: ${KIND_NAMES[def.kind] || "plataforma"}`, color], trigger];
     });
     const groups = [...PALETTE, ...(mechTiles.length ? [["Tus mecanismos", mechTiles]] : [])];
     $("#ed-palette").innerHTML = groups
@@ -454,14 +456,18 @@
       .map(([id, def]) => {
         const fan = def.kind === "fan";
         const drain = def.kind === "drain";
-        const kinds = [["platform", "Plataforma"], ["fan", "Ventilador"], ["drain", "Desagüe (marea)"]];
+        const belt = def.kind === "belt";
+        const crusher = def.kind === "crusher";
+        const kinds = [["platform", "Plataforma"], ["fan", "Ventilador"], ["drain", "Desagüe (marea)"], ["belt", "Cinta transportadora"], ["crusher", "Prensa"]];
         const kind = def.kind || "platform";
         const [dx, dy] = def.move || [0, 0];
         return `<div class="mech" data-id="${id}">
           <b>${id} / ${id.toUpperCase()}</b>
           <select data-f="trigger"><option value="button"${def.trigger !== "lever" ? " selected" : ""}>Botón</option><option value="lever"${def.trigger === "lever" ? " selected" : ""}>Palanca</option></select>
           <select data-f="kind">${kinds.map(([v, label]) => `<option value="${v}"${v === kind ? " selected" : ""}>${label}</option>`).join("")}</select>
-          ${fan || drain ? "" : `<label>mueve x <input data-f="dx" type="number" value="${dx}"></label><label>y <input data-f="dy" type="number" value="${dy}"></label>`}
+          ${fan || drain || belt || crusher ? "" : `<label>mueve x <input data-f="dx" type="number" value="${dx}"></label><label>y <input data-f="dy" type="number" value="${dy}"></label>`}
+          ${belt ? `<select data-f="dir"><option value="1"${def.dir !== -1 ? " selected" : ""}>→ hacia la derecha</option><option value="-1"${def.dir === -1 ? " selected" : ""}>← hacia la izquierda</option></select>` : ""}
+          ${crusher ? `<label>espera <input data-f="wait" type="number" min="1" value="${def.wait ?? 100}"></label><label>desfase <input data-f="offset" type="number" min="0" value="${def.offset || 0}"></label>` : ""}
           ${def.trigger === "lever" ? "" : `<label>botones a la vez <input data-f="need" type="number" min="1" value="${def.need || 1}"></label>`}
           <button data-act="del-mech" title="Quitar el mecanismo y sus casillas">✕</button>
         </div>`;
@@ -566,7 +572,14 @@
     history.push(snapshot());
     const def = { trigger: get("trigger") };
     if (get("kind") === "fan" || get("kind") === "drain") def.kind = get("kind");
-    else def.move = get("dx") === undefined ? old.move || [0, -3] : [Number(get("dx")) || 0, Number(get("dy")) || 0];
+    else if (get("kind") === "belt") Object.assign(def, { kind: "belt", dir: Number(get("dir") ?? old.dir ?? 1) === -1 ? -1 : 1 });
+    else if (get("kind") === "crusher") {
+      def.kind = "crusher";
+      const wait = Number(get("wait") ?? old.wait ?? 100);
+      if (wait && wait !== 100) def.wait = wait;
+      const offset = Number(get("offset") ?? old.offset ?? 0);
+      if (offset) def.offset = offset;
+    } else def.move = get("dx") === undefined ? old.move || [0, -3] : [Number(get("dx")) || 0, Number(get("dy")) || 0];
     const need = Number(get("need"));
     if (def.trigger === "button" && need > 1) def.need = need;
     if (old.color) def.color = old.color;
@@ -653,7 +666,7 @@
     const id = ch.toLowerCase();
     const def = data.mechanisms[id];
     if (!def) return `"${ch}" (desconocido)`;
-    if (ch === id) return `mecanismo ${id} (${def.kind === "fan" ? "ventilador" : "plataforma"})`;
+    if (ch === id) return `mecanismo ${id} (${KIND_NAMES[def.kind] || "plataforma"})`;
     return `${def.trigger === "lever" ? "palanca" : "botón"} de ${id}${def.kind === "drain" ? " (desagüe)" : ""}`;
   }
 
