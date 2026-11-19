@@ -48,6 +48,14 @@
 //          lava, ácido; dos golpes cada una). crab: { name, left, right } (columnas por las que anda).
 //          Al caer se rompen los sellos /
 //
+// La forja (Mundo 5): dos mecanismos nuevos, que funcionan solos (sin botón ni palanca):
+//   kind: "belt"     cinta transportadora: sus casillas son suelo y arrastran a lo que está encima
+//                    (personajes, cajas y barriles). dir: 1 (derecha) o -1 (izquierda). Con botón o
+//                    palanca, mientras está activo arrastra hacia el otro lado.
+//   kind: "crusher"  prensa: sus casillas descansan arriba; tiembla, cae de golpe hasta el suelo y
+//                    vuelve a subir. Aplasta a quien quede debajo; una caja debajo la atasca. wait:
+//                    frames arriba (100), offset: retraso inicial. Con botón o palanca activo, se para arriba.
+//
 // Estrellas de cada nivel: completarlo, recoger todas sus gemas y pasarlo sin perder un corazón
 // (ni volver a una bandera). Se pueden ganar en partidas distintas.
 //
@@ -706,6 +714,71 @@ const SEASON_2 = {
             "#                                /     #",
             "#fwb;       ;         Ж;         /1 2 3#",
             "#########↟##########↥#########⇞#########",
+          ],
+        },
+      ],
+    },
+    {
+      name: "La forja abandonada",
+      theme: "forge",
+      levels: [
+        {
+          name: "Cintas",
+          hint: "Las cintas arrastran lo que llevan encima. Al final de la primera, ¡salten! La palanca cambia el sentido de la segunda.",
+          mechanisms: {
+            c: { kind: "belt", dir: 1 },
+            d: { kind: "belt", dir: -1, trigger: "lever" },
+          },
+          map: [
+            "########################################",
+            "########################################",
+            "########################################",
+            "########################################",
+            "##  ####  ##  ###  ####  ##  ####  ### #",
+            "#    ##        #    ##        #     #  #",
+            "#                                      #",
+            "#                                      #",
+            "#                                      #",
+            "#                                      #",
+            "#                            1 2 3     #",
+            "#                           ######## ###",
+            "#                                      #",
+            "#                                      #",
+            "#                     z                #",
+            "#             r               e        #",
+            "#fwb             D      x           ^  #",
+            "######ccccccccLL##dddddddddd##AA########",
+          ],
+        },
+        {
+          name: "Prensas",
+          hint: "Las prensas tiemblan antes de caer. Pasen por debajo cuando acaben de subir… y ojo con la cinta, que los lleva de vuelta.",
+          mechanisms: {
+            p: { kind: "crusher", wait: 80 },
+            q: { kind: "crusher", wait: 80, offset: 70 },
+            s: { kind: "crusher", wait: 70, offset: 30 },
+            t: { kind: "crusher", wait: 60, offset: 110 },
+            k: { kind: "belt", dir: -1 },
+          },
+          map: [
+            "########################################",
+            "########################################",
+            "########################################",
+            "########################################",
+            "########################################",
+            "########################################",
+            "########################################",
+            "########################################",
+            "########################################",
+            "########################################",
+            "########################################",
+            "########################################",
+            "#      pp   qq     ss        tt        #",
+            "#                                      #",
+            "#                                      #",
+            "#                                      #",
+            "#fwb    r    z            ⚑   e  1 2 3 #",
+            "################kkkkkkkk################",
           ],
         },
       ],
