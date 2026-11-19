@@ -126,6 +126,12 @@ latency = 3;
 step(30);
 settle();
 check("Con más retraso, sigue sincronizado", sameWorld());
+// Los botones táctiles (Juego.input) también valen online: el de Gota aprieta la flecha de Chispa
+// (la que mandan los botones con el personaje por defecto) y se mueve Gota, en los tres PCs.
+const gx = host.G.players[1].x;
+g1.J.input.down("KeyD"); step(12); g1.J.input.up("KeyD");
+settle();
+check("Online, los botones táctiles mueven al personaje propio", games.every((g) => g.G.players[1].x > gx) && sameWorld(), games.map((g) => g.G.players[1].x).join(", "));
 // Una desincronización (por ejemplo, un navegador que redondea distinto) se corrige sola.
 g2.G.players[0].x += 40;
 check("(Se desincroniza un invitado)", pos(g2) !== pos(host));

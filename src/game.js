@@ -255,32 +255,37 @@
   }
 
   const overlayOpen = () => !!(globalThis.Online?.isOpen || globalThis.Progreso?.isOpen);
+  // Una tecla que se aprieta: del teclado o de los botones táctiles (tactil.js, con Juego.input).
+  function keyDown(code, repeat = false) {
+    if (!repeat) pressed.add(code);
+    held.add(code);
+    sound.unlock();
+    // En red, las pulsaciones se apuntan para mandarlas con las teclas del siguiente frame.
+    if (net.active && !repeat) {
+      if (ALL_KEYS.jump.includes(code)) net.edges |= BIT.jumpPressed;
+      if (ALL_KEYS.fire.includes(code)) net.edges |= BIT.firePressed;
+      if (code === "KeyR") net.edges |= BIT.retry;
+    }
+  }
   addEventListener("keydown", (e) => {
     if (e.target?.closest?.("input, textarea, select")) return; // escribiendo en el editor
     if (overlayOpen()) return; // con el panel online o el de progreso abierto, las teclas son suyas
     if (GAME_KEYS.has(e.code)) e.preventDefault();
-    if (!e.repeat) pressed.add(e.code);
-    held.add(e.code);
-    sound.unlock();
-    // En red, las pulsaciones se apuntan para mandarlas con las teclas del siguiente frame.
-    if (net.active && !e.repeat) {
-      if (ALL_KEYS.jump.includes(e.code)) net.edges |= BIT.jumpPressed;
-      if (ALL_KEYS.fire.includes(e.code)) net.edges |= BIT.firePressed;
-      if (e.code === "KeyR") net.edges |= BIT.retry;
-    }
+    keyDown(e.code, e.repeat);
   });
   addEventListener("keyup", (e) => held.delete(e.code));
   addEventListener("blur", () => {
     held.clear();
     if (state === "playing" && !net.active) pauseGame();
   });
+  const onTouchPad = (e) => !!e.target?.closest?.("#touch-pad");
   addEventListener("pointermove", (e) => {
-    if (overlayOpen()) return;
+    if (overlayOpen() || onTouchPad(e)) return;
     pointer = toCanvas(e);
     pointerMoved = true;
   });
   addEventListener("pointerdown", (e) => {
-    if (overlayOpen()) return; // un clic en un panel no es un clic en el juego
+    if (overlayOpen() || onTouchPad(e)) return; // un clic en un panel (o en los botones táctiles) no es un clic en el juego
     pointer = toCanvas(e);
     pointerMoved = true;
     clicked = true;
@@ -3007,8 +3012,8 @@
     const items = net.active
       ? [["play", "Elegir nivel para los tres"], ["online", "Sala online"], ["help", "Cómo se juega"], ["sound"]]
       : [
-          ["play", "Jugar en este PC"],
-          ...(globalThis.Online ? [["online", "Jugar online (cada uno en su PC)"]] : []),
+          ["play", touchScreen() ? "Jugar en este celular" : "Jugar en este PC"],
+          ...(globalThis.Online ? [["online", touchScreen() ? "Jugar online (cada uno en su celular o PC)" : "Jugar online (cada uno en su PC)"]] : []),
           ...(globalThis.Progreso ? [["progress", "Guardar o cargar progreso"]] : []),
           ["help", "Cómo se juega"],
           ["sound"],
@@ -3017,6 +3022,8 @@
         ];
     return items;
   }
+  // En celulares y tabletas (tactil.js marca la página) los textos hablan de celular, no de PC.
+  const touchScreen = () => !!globalThis.document?.documentElement?.classList?.contains("touch");
   function mainLabel([id, label]) {
     if (id === "sound") return `Sonido: ${save.muted ? "no" : "sí"}`;
     if (id === "fullscreen") return `Pantalla completa: ${globalThis.document?.fullscreenElement ? "sí" : "no"}`;
@@ -3536,7 +3543,7 @@
       if (anyRetry() || deadTimer > RESTART_DELAY) retry();
     } else if (state === "won" && net.active) {
       // En red, solo el anfitrión decide: siguiente nivel (para todos) o volver a elegir.
-      if (net.host && menuKey("ok")) {
+      if (net.host && (menuKey("ok") || clicked)) {
         sound.play("select");
         if (levelIndex + 1 < seasonLevels().length) {
           net.send?.({ t: "start", season: seasonIndex, level: levelIndex + 1 });
@@ -3554,7 +3561,7 @@
     } else if (state === "won") {
       if (testLevel) {
         if (menuKey("ok") || menuKey("back")) backToEditor();
-      } else if (menuKey("ok")) {
+      } else if (menuKey("ok") || clicked) {
         sound.play("select");
         if (levelIndex + 1 < seasonLevels().length) {
           levelIndex++;
@@ -3626,6 +3633,11 @@
         return net.active;
       },
       names: net.names,
+    },
+    // Botones táctiles (tactil.js): aprietan y sueltan teclas como el teclado.
+    input: {
+      down: (code) => keyDown(code),
+      up: (code) => held.delete(code),
     },
     // Código de progreso (progreso.js lo enseña y lo carga)
     progress: { code: progressCode, load: loadProgressCode, summary: progressSummary },
