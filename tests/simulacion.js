@@ -28,7 +28,7 @@ game = game.replace(
      get grid(){return grid}, get fans(){return fans}, get doors(){return doors}, get enemies(){return enemies}, get items(){return items}, get shots(){return shots},
      get save(){return save}, isUnlocked, get levelIndex(){return levelIndex}, get lastResult(){return lastResult},
      get menuIndex(){return menuIndex}, get levelFrames(){return levelFrames}, setLevel(i, si = 0){ testLevel = null; seasonIndex = si; levelIndex = i; loadLevel(i); state = "playing"; }, get darts(){return darts}, get crumbles(){return crumbles}, get boss(){return boss}, solidAt,
-     SEASONS, get seasonIndex(){return seasonIndex}, get titleIndex(){return titleIndex}, isSeasonUnlocked, levelNumber, get flags(){return flags}, get checkpoint(){return checkpoint}, get retries(){return retries}, get toast(){return toast}, get level(){return level}, worldRange, get spikes(){return spikes}, get obsidian(){return obsidian}, get liquids(){return liquids}, starsOf, starCount, get golem(){return golem}, get rocks(){return rocks}, get waves(){return waves}, get tide(){return tide}, get hydra(){return hydra}, get torches(){return torches}, lightSources, get shade(){return shade}, get geysers(){return geysers}, get mainIndex(){return mainIndex}, mainItems, get crab(){return crab} };\n})();`,
+     SEASONS, get seasonIndex(){return seasonIndex}, get titleIndex(){return titleIndex}, isSeasonUnlocked, levelNumber, get flags(){return flags}, get checkpoint(){return checkpoint}, get retries(){return retries}, get toast(){return toast}, get level(){return level}, worldRange, get spikes(){return spikes}, get obsidian(){return obsidian}, get liquids(){return liquids}, starsOf, starCount, get golem(){return golem}, get rocks(){return rocks}, get waves(){return waves}, get tide(){return tide}, get hydra(){return hydra}, get torches(){return torches}, lightSources, get shade(){return shade}, get geysers(){return geysers}, get mainIndex(){return mainIndex}, mainItems, get crab(){return crab}, get automaton(){return automaton}, get rocks2(){return rocks} };\n})();`,
 );
 // editor.js va antes que game.js (como en index.html); sin DOM solo define EditorCore.
 eval(fs.readFileSync(ROOT + "levels.js", "utf8") + "\nglobalThis.LEVELS = LEVELS;\n" + fs.readFileSync(ROOT + "levels2.js", "utf8") + "\nglobalThis.SEASON_2 = SEASON_2;\n" + fs.readFileSync(ROOT + "editor.js", "utf8") + "\n" + game);
@@ -2879,6 +2879,90 @@ handlers.pointerdown?.({ clientX: 10, clientY: 10, target: { closest: () => null
 run(2);
 check("En la pantalla de victoria, tocar la pantalla pasa al siguiente nivel", G.state === "playing" && G.levelIndex === 1, G.state);
 G.setLevel(0);
+
+// --- Nivel 5-6: el Autómata de la forja -------------------------------------------------------------
+console.log("\nNivel 5-6");
+const autoLevel = () => { G.setLevel(29, 1); run(1); fire = P("Chispa"); water = P("Gota"); acid = P("Acidito"); };
+const AU = () => G.automaton;
+const auCenter = () => AU().x + 40;
+autoLevel();
+run(130);
+check("El Autómata se presenta y avisa de cómo se usan las prensas", AU().state !== "intro" && /botón de su color/.test(G.toast?.text || ""), G.toast?.text);
+autoLevel();
+for (let i = 0; i < 400; i++) { place(fire, 1, 10); place(water, 3, 10); place(acid, 36, 10); run(1); }
+check("Las prensas de la arena no caen solas", ["h", "j", "k"].every((id) => M(id).oy === 0) && playing());
+place(fire, 2, 10); run(20);
+let hmax = 0; for (let i = 0; i < 60; i++) { hmax = Math.max(hmax, M("h").oy); run(1); }
+check("Pisar su botón la hace caer", hmax > 200, `${hmax}`);
+autoLevel(); run(130);
+const parkAU = () => { place(water, 3, 10); place(acid, 36, 10); };
+for (let i = 0; i < 60; i++) { parkAU(); place(fire, 1, 10); AU().x = 9 * 32 + 32 - 40; AU().state = "walk"; run(1); }
+place(fire, 2, 10);
+for (let i = 0; i < 60 && AU().hits === 0; i++) { parkAU(); AU().x = 9 * 32 + 32 - 40; if (AU().state !== "stunned") AU().state = "windup", AU().timer = 80; run(1); }
+check("Una prensa que le cae encima le da un golpe y lo aturde", AU().hits === 1 && AU().state === "stunned", `${AU().hits} ${AU().state}`);
+check("…y la prensa se queda encima de él, no lo atraviesa", M("h").oy < 260, `${M("h").oy} (hasta el suelo serían 320)`);
+check("(cada prensa aguanta dos golpes: tras uno sigue entera)", !M("h").broken && M("h").bossHits === 1);
+
+// La pelea: Acidito, en el suelo, lo atrae hasta debajo de una prensa (se pone a un lado para que
+// el Autómata se pare justo debajo); Gota (balcón izquierdo, botones H y J) o Chispa (balcón
+// derecho, botones J y K) pisa el botón en cuanto levanta los martillos.
+const CRUSHERS = [
+  { id: "h", c: 9.5, button: ["Gota", 2], rest: ["Gota", 3] },
+  { id: "j", c: 19.5, button: ["Gota", 4], rest: ["Gota", 3] },
+  { id: "k", c: 29.5, button: ["Chispa", 37], rest: ["Chispa", 36] },
+];
+function autoHit(maxFrames = 2500) {
+  const start = AU().hits;
+  for (let i = 0; i < maxFrames && AU().hits === start && playing(); i++) {
+    if (AU().state === "intro") { run(1); continue; }
+    // Una prensa entera que quede entre Acidito y el Autómata (la más cercana a Acidito); si no hay,
+    // la más cercana al Autómata, y Acidito pasa al otro lado aprovechando que está aturdido.
+    const ok = CRUSHERS.filter((c) => !M(c.id).broken);
+    const between = ok.filter((c) => (c.c * 32 - center(acid)) * (auCenter() - c.c * 32) > 0);
+    const nearest = (list, x) => list.reduce((a, b) => (Math.abs(b.c * 32 - x) < Math.abs(a.c * 32 - x) ? b : a));
+    const cr = between.length ? nearest(between, center(acid)) : nearest(ok, auCenter());
+    const side = auCenter() < cr.c * 32 ? 1 : -1;
+    const spot = cr.c * 32 + side * 60;
+    // Los que esperan en los balcones: junto a sus botones (sin pisarlos).
+    for (const c of CRUSHERS) if (c !== cr) { const [name, col] = c.rest; if (name !== cr.button[0]) place(P(name), col, 10); }
+    const presser = P(cr.button[0]);
+    const bcol = cr.button[1];
+    const [, rcol] = cr.rest;
+    // Acidito va a su sitio (sin teletransportarse: andando) y salta los remaches que le caen cerca.
+    const k = keysOf(acid);
+    const dx = spot - center(acid);
+    const under = Math.abs(auCenter() - cr.c * 32) < 20;
+    up(k.l); up(k.r);
+    // Un remache que le va a caer encima: se aparta.
+    const rivet = G.rocks2.find((r) => r.rivet && r.vy > -3 && r.y < acid.y && Math.abs(r.x + r.w / 2 - center(acid)) < 44);
+    if (rivet && !(AU().state === "windup" && under)) {
+      const away = Math.sign(center(acid) - (rivet.x + rivet.w / 2)) || 1;
+      down(away > 0 ? k.r : k.l);
+    } else if ((AU().state === "windup" && !under) || AU().state === "rest") {
+      // Martillos arriba fuera de una prensa: se aleja para que no lo alcance el golpe.
+      const away = Math.sign(center(acid) - auCenter()) || 1;
+      const blocked = (away > 0 && center(acid) > 31 * 32) || (away < 0 && center(acid) < 8 * 32);
+      if (Math.abs(center(acid) - auCenter()) < 140) down((blocked ? -away : away) > 0 ? k.r : k.l);
+    } else if (Math.abs(dx) > 4 && (AU().state === "walk" || AU().state === "stunned")) down(dx > 0 ? k.r : k.l); // aturdido no hace daño: se le puede pasar por al lado
+    // Con los martillos arriba y el Autómata bajo la prensa, el del balcón pisa el botón.
+    if (AU().state === "windup" && under) place(presser, bcol, 10);
+    else place(presser, rcol, 10);
+    run(1);
+  }
+  up(keysOf(acid).l); up(keysOf(acid).r);
+  return AU().hits > start;
+}
+autoLevel();
+let auHits = 0;
+for (let n = 0; n < 6 && playing(); n++) { if (autoHit()) auHits++; else break; }
+check("Acidito lo atrae bajo las prensas y desde los balcones las dejan caer: seis golpes", auHits === 6 && ["h", "j"].every((id) => M(id).broken), `${auHits} · ${where()} · vidas ${G.players.map((p) => p.hearts).join("/")}`);
+run(220);
+check("Queda hecho chatarra y se rompe el sello", AU().state === "dead" && G.grid[14][34] === " ", AU().state);
+check("…y las prensas suben y se quedan quietas", ["h", "j", "k"].every((id) => M(id).broken) && (run(200), ["h", "j", "k"].every((id) => M(id).oy === 0)));
+for (const p of G.players) place(p, 31, 16);
+run(5);
+for (const p of [fire, water, acid]) walkTo(p, G.doors[p.ch.door].c);
+check("Llegan a sus puertas", G.state === "won", where());
 
 // --- Código de progreso --------------------------------------------------------
 console.log("\nCódigo de progreso");

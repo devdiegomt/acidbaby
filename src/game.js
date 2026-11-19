@@ -113,7 +113,7 @@
 
   // Avisos de novedades: salen en la portada, en el menú de niveles y en la pausa.
   // Para cambiarlos (o quitarlos), basta con editar esta lista.
-  const NEWS = ["¡Nuevo! Jueguen online, cada uno desde su PC (tecla O)", "Mundo 5: La forja abandonada"];
+  const NEWS = ["¡Nuevo! Jueguen online, cada uno desde su PC (tecla O)", "Mundo 5 completo: La forja abandonada"];
 
   // Jefe del Mundo 3 (Temporada 2): la Sombra de la mina. Flota hacia Gota o Acidito atravesando
   // las paredes; si se queda un rato a la luz de una antorcha encendida se quema (un golpe), apaga
@@ -141,6 +141,22 @@
   const CRAB_REST = 45; // frames quieto después del pellizco
   const CRAB_HURT = 100; // frames huyendo tras un golpe (sin recibir más)
   const CRAB_JUMP_RATE = [520, 470, 420, 380, 340, 300]; // salto con ondas
+
+  // Jefe del Mundo 5 (Temporada 2): el Autómata de la forja. Persigue por el suelo al más cercano,
+  // levanta los martillos y golpea. Su blindaje solo cede bajo una prensa: las de su arena son
+  // "manual" (caen solo cuando alguien pisa su botón, en los balcones).
+  const AUTO_TILE = "Ф";
+  const AUTO_W = 80;
+  const AUTO_H = 76;
+  const AUTO_HP = 6;
+  const AUTO_SPEED = [1, 1.1, 1.2, 1.35, 1.5, 1.7]; // según los golpes que lleva
+  const AUTO_REACH = 64; // a esta distancia (de centro a centro) se para a golpear
+  const AUTO_WINDUP = 80; // frames con los martillos arriba antes del golpe
+  const AUTO_REST = 40;
+  const AUTO_STUN = 110; // frames aturdido tras un prensazo
+  const AUTO_RIVET_RATE = [210, 190, 170, 150, 130, 110]; // remaches que lanza en arco
+  const CRUSHER_WARN_MANUAL = 12; // aviso de una prensa manual antes de caer
+  const CRUSHER_BOSS_HITS = 2; // golpes al Autómata que aguanta una prensa antes de romperse
 
   const FONT = '"Segoe UI", system-ui, sans-serif';
   const MECH_COLORS = ["#f2c14e", "#c86bff", "#ff6fa8", "#4fd6c8", "#f0f0f0"];
@@ -729,6 +745,7 @@
   let boss = null; // jefe final (si el nivel tiene)
   let golem = null; // Gólem de magma (jefe del Mundo 1 de la temporada 2)
   let crab = null; // el Cangrejo hirviente (jefe del Mundo 4 de la temporada 2)
+  let automaton = null; // el Autómata de la forja (jefe del Mundo 5 de la temporada 2)
   let torches = []; // antorchas: { c, r, lit }
   let shade = null; // la Sombra de la mina (jefe del Mundo 3 de la temporada 2)
   let hydra = null; // la Hidra del aljibe (jefe del Mundo 2 de la temporada 2)
@@ -815,6 +832,7 @@
     boss = null;
     golem = null;
     crab = null;
+    automaton = null;
     hydra = null;
     torches = [];
     shade = null;
@@ -907,6 +925,10 @@
         }
         if (t === CRAB_TILE) {
           crab = { c, r }; // se completa al final, cuando ya hay géiseres
+          continue;
+        }
+        if (t === AUTO_TILE) {
+          automaton = makeAutomaton(c, r);
           continue;
         }
         if (t === HYDRA_TILE) {
@@ -1034,6 +1056,7 @@
       });
     } else if (level.geyser) fail("hay \"geyser\" pero el mapa no tiene géiseres (↥ ↟ ⇞)");
 
+    if (automaton && !mechs.some((m) => m.def.kind === "crusher")) fail("el Autómata necesita al menos una prensa (kind: \"crusher\")");
     if (crab) {
       for (const el of CRAB_PHASES) {
         if (!geysers.some((g) => g.type === el)) fail(`el Cangrejo necesita al menos un géiser de ${ELEMENTS[el].label}`);
@@ -1087,7 +1110,7 @@
   function liveState() {
     return {
       grid, liquids, breakables, dissolving, barriers, fans, doors, boxes, gems, mechs, portals,
-      enemies, items, springs, crumbles, spikes, flags, obsidian, boss, bossDefeatedAt, golem, crab, dispensers, tide, hydra, torches, shade, geysers,
+      enemies, items, springs, crumbles, spikes, flags, obsidian, boss, bossDefeatedAt, golem, crab, automaton, dispensers, tide, hydra, torches, shade, geysers,
       players: players.map((p) => ({
         ...p,
         ch: CHARACTERS.indexOf(p.ch),
@@ -1110,7 +1133,7 @@
   function backToCheckpoint() {
     const s = structuredClone(checkpoint);
     ({ grid, liquids, breakables, dissolving, barriers, fans, doors, boxes, gems, mechs, portals } = s);
-    ({ enemies, items, springs, crumbles, spikes, flags, obsidian, boss, bossDefeatedAt, golem, crab, dispensers, tide, hydra, torches, shade, geysers } = s);
+    ({ enemies, items, springs, crumbles, spikes, flags, obsidian, boss, bossDefeatedAt, golem, crab, automaton, dispensers, tide, hydra, torches, shade, geysers } = s);
     players = s.players.map((p) =>
       Object.assign(p, {
         ch: CHARACTERS[p.ch],
@@ -1328,6 +1351,22 @@
   // puede bajar lo aplasta; una caja (o barril) que no puede bajar la atasca.
   function crusherStepDown(m) {
     if (mechHitsTerrain(m, 1)) return false;
+    // El Autómata para la prensa con la cabeza… y se lleva un golpe (si no está ya aturdido).
+    if (automaton && automaton.state !== "dead") {
+      const body = autoBody(automaton);
+      if (m.cells.some((cell) => intersects(cell.c * T + m.ox, cell.r * T + m.oy + 1, T, T, body))) {
+        if (automaton.state !== "stunned" && automaton.state !== "dying") {
+          hitAutomaton(automaton);
+          // Cada prensa aguanta pocos golpes contra su blindaje: luego queda rota (hay que usar otra).
+          m.bossHits = (m.bossHits || 0) + 1;
+          if (m.bossHits >= CRUSHER_BOSS_HITS && automaton.state !== "dying") {
+            m.broken = true;
+            toast = { text: "¡Esa prensa quedó rota! Atráiganlo bajo otra.", frames: TOAST_FRAMES };
+          }
+        }
+        return false;
+      }
+    }
     const all = bodies();
     m.oy += 1;
     m.collidable = false;
@@ -1345,8 +1384,27 @@
   }
 
   function updateCrusher(m) {
+    if (m.broken) {
+      // Rota: sube y se queda arriba para siempre.
+      if (m.phase !== "rest") for (let i = 0; i < CRUSHER_RISE && m.oy > 0; i++) mechStep(m, 0, -1);
+      if (m.oy <= 0) m.phase = "rest";
+      return;
+    }
+    // Prensa manual: espera arriba hasta que alguien pisa su botón (o mueve su palanca); entonces
+    // avisa un instante y cae. Si el botón sigue pisado cuando vuelve arriba, cae otra vez.
+    if (m.def.manual) {
+      if (m.phase === "rest") {
+        m.t = 0;
+        if (m.active) m.phase = "warn";
+        return;
+      }
+      if (m.phase === "warn") {
+        if (++m.t >= CRUSHER_WARN_MANUAL) [m.phase, m.t] = ["slam", 0];
+        return;
+      }
+    }
     // Con su botón pisado o su palanca a la derecha, la prensa sube y se queda arriba.
-    if (m.triggers.length && m.active) {
+    if (m.triggers.length && m.active && !m.def.manual) {
       for (let i = 0; i < CRUSHER_RISE && m.oy > 0; i++) mechStep(m, 0, -1);
       m.phase = "rest";
       m.t = 0;
@@ -1372,7 +1430,8 @@
     } else if (m.phase === "hold") {
       if (m.t >= CRUSHER_HOLD) [m.phase, m.t] = ["rise", 0];
     } else if (m.phase === "rise") {
-      for (let i = 0; i < CRUSHER_RISE; i++) {
+      // Las manuales suben el doble de rápido (para poder volver a usarlas enseguida).
+      for (let i = 0; i < CRUSHER_RISE * (m.def.manual ? 2 : 1); i++) {
         if (m.oy <= 0) {
           m.oy = 0;
           [m.phase, m.t] = ["rest", 0];
@@ -2590,6 +2649,151 @@
     breakSeals();
   }
 
+  // ---------------------------------------------------------------------------
+  // Autómata de la forja
+  // ---------------------------------------------------------------------------
+  function makeAutomaton(c, r) {
+    const cfg = level.automaton || {};
+    return {
+      name: cfg.name || "El Autómata de la forja",
+      x: c * T + T / 2 - AUTO_W / 2,
+      y: (r + 1) * T - AUTO_H,
+      minX: (cfg.left ?? 2) * T,
+      maxX: ((cfg.right ?? grid[0].length - 3) + 1) * T - AUTO_W,
+      dir: -1,
+      hits: 0,
+      state: "intro", // intro | walk | windup | rest | stunned | dying | dead
+      timer: 120,
+      rivetTimer: AUTO_RIVET_RATE[0],
+      flash: 0,
+      anim: 0,
+    };
+  }
+
+  const autoBody = (a) => ({ x: a.x + 8, y: a.y + 6, w: AUTO_W - 16, h: AUTO_H - 6 });
+
+  function updateAutomaton() {
+    const a = automaton;
+    if (a.flash > 0) a.flash--;
+    a.anim++;
+    updateRocksAndWaves();
+    if (a.state === "dead" || state !== "playing") return;
+    if (a.state === "dying") {
+      shake = Math.max(shake, 3);
+      if (a.timer % 6 === 0) {
+        burst(a.x + Math.random() * AUTO_W, a.y + Math.random() * AUTO_H, ["#ffd166", "#ff8a3d", "#9a9aa6", "#ffffff"], 10);
+        sound.play("boom");
+      }
+      if (--a.timer <= 0) defeatAutomaton(a);
+      return;
+    }
+    if (a.state === "intro") {
+      if (--a.timer <= 0) {
+        a.state = "walk";
+        toast = { text: "Cada prensa cae con el botón de su color, en los balcones. Cada una aguanta dos golpes.", frames: TOAST_FRAMES };
+      }
+      return;
+    }
+
+    const lvl = Math.min(a.hits, AUTO_SPEED.length - 1);
+    const cx = a.x + AUTO_W / 2;
+    const floorY = a.y + AUTO_H;
+    const onFloor = (p) => Math.abs(p.y + p.h - floorY) < T;
+    const alive = players.filter((p) => p.alive);
+    const pool = alive.some(onFloor) ? alive.filter(onFloor) : alive;
+    const target = pool.reduce((best, p) => {
+      const d = Math.abs(p.x + p.w / 2 - cx);
+      return !best || d < best.d ? { p, d } : best;
+    }, null)?.p;
+
+    // Remaches en arco hacia quien persigue, solo de lejos (de cerca usa los martillos); también
+    // a los de los balcones cuando no hay nadie en el suelo.
+    const far = target && Math.abs(target.x + target.w / 2 - cx) > 180;
+    if (a.state !== "stunned" && far && --a.rivetTimer <= 0) {
+      a.rivetTimer = AUTO_RIVET_RATE[lvl];
+      const tx = target.x + target.w / 2;
+      const vx = Math.max(-6, Math.min(6, (tx - cx) / 50));
+      rocks.push({ x: cx - 6, y: a.y + 4, w: 12, h: 12, vx, vy: -7.5, rivet: true, cause: "recibió un remache del Autómata" });
+      sound.play("shot");
+    }
+
+    if (a.state === "stunned") {
+      if (--a.timer <= 0) a.state = "walk";
+    } else if (a.state === "walk") {
+      if (target) {
+        const dx = target.x + target.w / 2 - cx;
+        a.dir = Math.sign(dx) || a.dir;
+        if (Math.abs(dx) <= AUTO_REACH && onFloor(target)) {
+          a.state = "windup";
+          a.timer = AUTO_WINDUP;
+          sound.play("move");
+        } else if (Math.abs(dx) > 8) a.x = Math.max(a.minX, Math.min(a.maxX, a.x + a.dir * AUTO_SPEED[lvl]));
+      }
+    } else if (a.state === "windup") {
+      if (--a.timer <= 0) {
+        // Martillazo: daña a quien siga al alcance y hace temblar el suelo.
+        const reach = { x: a.x - 30, y: a.y - 10, w: AUTO_W + 60, h: AUTO_H + 10 };
+        for (const p of players) {
+          if (p.alive && p.hurt === 0 && intersects(reach.x, reach.y, reach.w, reach.h, p)) {
+            hurtPlayer(p, { x: a.x, w: AUTO_W }, "recibió un martillazo del Autómata");
+            if (state !== "playing") return;
+          }
+        }
+        shake = Math.max(shake, 10);
+        burst(cx + a.dir * (AUTO_W / 2 + 6), floorY, ["#ffd166", "#9a9aa6", "#5a4a33"], 18);
+        sound.play("boom");
+        a.state = "rest";
+        a.timer = AUTO_REST;
+      }
+    } else if (a.state === "rest") {
+      if (--a.timer <= 0) a.state = "walk";
+    }
+
+    // Tocarlo duele (menos aturdido).
+    if (a.state !== "stunned") {
+      const body = autoBody(a);
+      for (const p of players) {
+        if (p.alive && p.hurt === 0 && intersects(body.x, body.y, body.w, body.h, p)) {
+          hurtPlayer(p, { x: a.x, w: AUTO_W }, "chocó con el Autómata de la forja");
+          if (state !== "playing") return;
+        }
+      }
+    }
+  }
+
+  function hitAutomaton(a) {
+    a.hits++;
+    a.flash = 30;
+    shake = Math.max(shake, 12);
+    burst(a.x + AUTO_W / 2, a.y + 10, ["#ffd166", "#ffffff", "#9a9aa6", "#ff8a3d"], 40);
+    sound.play("bossHit");
+    if (a.hits >= AUTO_HP) {
+      a.state = "dying";
+      a.timer = 100;
+      sound.play("roar");
+      return;
+    }
+    a.state = "stunned";
+    a.timer = AUTO_STUN;
+    a.rivetTimer = Math.max(a.rivetTimer, 60);
+    toast = { text: `¡Prensazo! Le quedan ${AUTO_HP - a.hits}`, frames: TOAST_FRAMES / 2 };
+  }
+
+  function defeatAutomaton(a) {
+    a.state = "dead";
+    // Las prensas de su arena suben y se quedan quietas (ya no hacen falta).
+    for (const m of mechs) if (m.def.kind === "crusher" && m.def.manual) m.broken = true;
+    bossDefeatedAt = levelFrames;
+    shake = 30;
+    burst(a.x + AUTO_W / 2, a.y + AUTO_H / 2, ["#ffd166", "#ff8a3d", "#9a9aa6", "#ffffff"], 90);
+    sound.play("boom");
+    sound.play("win");
+    for (const e of enemies) if (e.alive) defeatEnemy(e);
+    rocks = [];
+    waves = [];
+    breakSeals();
+  }
+
   // La marea espera un rato y luego sube; un desagüe activo la hace bajar. Quien no es de su
   // elemento y se queda con la cabeza por debajo de la superficie se hunde.
   function updateTide() {
@@ -3325,7 +3529,7 @@
     for (const m of mechs) [m.ox, m.oy].forEach(add);
     for (const g of geysers) [g.h, g.plugged ? 1 : 0].forEach(add);
     [levelFrames, STATE_CODE[state] || 0, tide ? tide.y : 0, gems.filter((g) => g.taken).length].forEach(add);
-    for (const b of [boss, golem, hydra, shade, crab]) if (b) [b.x || 0, b.y || 0, b.hits || b.hp || 0].forEach(add);
+    for (const b of [boss, golem, hydra, shade, crab, automaton]) if (b) [b.x || 0, b.y || 0, b.hits || b.hp || 0].forEach(add);
     return h;
   }
 
@@ -3457,7 +3661,7 @@
     }
     const w = unpackWorld(s.world);
     ({ grid, liquids, breakables, dissolving, barriers, fans, doors, boxes, gems, mechs, portals } = w);
-    ({ enemies, items, springs, crumbles, spikes, flags, obsidian, boss, bossDefeatedAt, golem, crab, dispensers, tide, hydra, torches, shade, geysers } = w);
+    ({ enemies, items, springs, crumbles, spikes, flags, obsidian, boss, bossDefeatedAt, golem, crab, automaton, dispensers, tide, hydra, torches, shade, geysers } = w);
     players = w.players.map((p) => Object.assign(p, { ch: CHARACTERS[p.ch], controls: CHARACTERS[p.controls].keys }));
     checkpoint = s.checkpoint ? unpackWorld(s.checkpoint) : null;
     shots = s.shots.map((x) => ({ ...x, owner: players[x.owner] }));
@@ -3515,6 +3719,7 @@
         if (boss && state === "playing") updateBoss();
         if (golem && state === "playing") updateGolem();
         if (crab && state === "playing") updateCrab();
+        if (automaton && state === "playing") updateAutomaton();
         if (hydra && state === "playing") updateHydra();
         updateDispensers();
         updateBreakables();
@@ -4918,6 +5123,20 @@
       // Remaches
       ctx.fillStyle = "#8a8a96";
       for (const [bx, by] of [[5, 8], [T - 7, 8], [5, T - 14], [T - 7, T - 14]]) ctx.fillRect(x + bx, y + by, 3, 3);
+      if (m.broken) {
+        // Rota: grietas y sin color.
+        ctx.fillStyle = "rgba(20,18,24,0.55)";
+        ctx.fillRect(x, y, T, T);
+        ctx.strokeStyle = "#1a191e";
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.moveTo(x + 6, y + 4);
+        ctx.lineTo(x + 14, y + 14);
+        ctx.lineTo(x + 10, y + 24);
+        ctx.moveTo(x + 22, y + 6);
+        ctx.lineTo(x + 18, y + 16);
+        ctx.stroke();
+      }
       if (m.triggers.length) {
         ctx.fillStyle = m.color;
         ctx.fillRect(x + T / 2 - 3, y + 8, 6, 6);
@@ -6089,6 +6308,117 @@
     }
   }
 
+  // Autómata: cuerpo de hierro remachado con un horno en el pecho, piernas cortas y dos martillos
+  // que levanta antes de golpear. Aturdido, echa chispas y los ojos se le apagan.
+  function drawAutomaton(t) {
+    const a = automaton;
+    if (!a) return;
+    const ground = a.y + AUTO_H;
+    if (a.state === "dead") {
+      // Queda la chatarra, con el horno apagado.
+      ctx.fillStyle = "#3b3a42";
+      roundRectPath(ctx, a.x + 4, ground - 26, AUTO_W - 8, 26, 6);
+      ctx.fill();
+      ctx.fillStyle = "#1b1a1f";
+      ctx.fillRect(a.x + AUTO_W / 2 - 10, ground - 20, 20, 12);
+      return;
+    }
+    const x = a.x + (a.state === "dying" ? Math.sin(t * 60) * 3 : 0);
+    const y = a.y;
+    const cx = x + AUTO_W / 2;
+    const step = a.state === "walk" ? Math.sin(a.anim * 0.2) * 3 : 0;
+    const lift = a.state === "windup" ? Math.min(1, (AUTO_WINDUP - a.timer) / 25) : 0;
+    ctx.save();
+    if (a.state === "stunned" && a.timer % 10 < 5) ctx.globalAlpha = 0.8;
+    // Piernas
+    ctx.fillStyle = "#3b3a42";
+    ctx.fillRect(x + 14, ground - 16 + Math.max(0, step), 18, 16 - Math.max(0, step));
+    ctx.fillRect(x + AUTO_W - 32, ground - 16 + Math.max(0, -step), 18, 16 - Math.max(0, -step));
+    // Brazos con martillos (arriba durante el aviso)
+    for (const side of [-1, 1]) {
+      const sx = cx + side * (AUTO_W / 2 - 2);
+      const sy = y + 26;
+      const angle = side * (0.4 + lift * 2.2);
+      const hx = sx + Math.sin(angle) * 26;
+      const hy = sy + Math.cos(angle) * 26;
+      ctx.strokeStyle = "#5a5862";
+      ctx.lineWidth = 7;
+      ctx.lineCap = "round";
+      ctx.beginPath();
+      ctx.moveTo(sx, sy);
+      ctx.lineTo(hx, hy);
+      ctx.stroke();
+      ctx.fillStyle = a.state === "windup" && a.timer % 12 < 6 ? "#ff6b4d" : "#6b6b76";
+      ctx.save();
+      ctx.translate(hx, hy);
+      ctx.rotate(-angle);
+      ctx.fillRect(-13, -6, 26, 14);
+      ctx.restore();
+    }
+    ctx.lineCap = "butt";
+    // Cuerpo
+    ctx.fillStyle = "#4a4a55";
+    roundRectPath(ctx, x + 8, y + 12, AUTO_W - 16, AUTO_H - 28, 10);
+    ctx.fill();
+    ctx.fillStyle = "#6b6b76";
+    ctx.fillRect(x + 8, y + 12, AUTO_W - 16, 5);
+    // Remaches
+    ctx.fillStyle = "#9a9aa6";
+    for (const [rx, ry] of [[14, 22], [AUTO_W - 18, 22], [14, AUTO_H - 24], [AUTO_W - 18, AUTO_H - 24]]) ctx.fillRect(x + rx, y + ry, 4, 4);
+    // Horno del pecho
+    const glow = a.state === "stunned" ? 0.3 : 0.75 + Math.sin(t * 6) * 0.2;
+    ctx.fillStyle = "#1b1a1f";
+    roundRectPath(ctx, cx - 14, y + 30, 28, 20, 4);
+    ctx.fill();
+    ctx.fillStyle = `rgba(255,${120 + Math.round(60 * glow)},40,${glow})`;
+    ctx.fillRect(cx - 10, y + 34, 20, 12);
+    // Cabeza con ojos
+    ctx.fillStyle = "#3b3a42";
+    roundRectPath(ctx, cx - 18, y, 36, 16, 5);
+    ctx.fill();
+    ctx.fillStyle = a.state === "stunned" ? "#5a5862" : "#ffd166";
+    ctx.fillRect(cx - 11 + a.dir * 2, y + 5, 7, 5);
+    ctx.fillRect(cx + 4 + a.dir * 2, y + 5, 7, 5);
+    ctx.restore();
+    if (a.state === "stunned" && a.timer % 8 === 0) burst(cx, y, ["#ffd166", "#ffffff"], 3); // chispas
+    if (a.flash > 0) {
+      ctx.fillStyle = `rgba(255,255,255,${a.flash / 45})`;
+      roundRectPath(ctx, x, y, AUTO_W, AUTO_H, 12);
+      ctx.fill();
+    }
+  }
+
+  function drawAutomatonBar() {
+    const a = automaton;
+    if (a.state === "dead") {
+      const since = levelFrames - bossDefeatedAt;
+      if (since < 240) {
+        ctx.save();
+        ctx.globalAlpha = Math.min(1, since / 20, (240 - since) / 40);
+        ctx.fillStyle = "rgba(10,8,5,0.75)";
+        ctx.fillRect(0, H / 2 - 50, W, 100);
+        text(`¡${a.name} quedó hecho chatarra!`, W / 2, H / 2 - 12, 34, "#ffe08a");
+        text("El sello de las puertas se rompe…", W / 2, H / 2 + 26, 18, "#d9c9a6", "center", "normal");
+        ctx.restore();
+      }
+      return;
+    }
+    const w = Math.min(420, W - 120);
+    const x = W / 2 - w / 2;
+    const y = T + 12;
+    text(a.name, W / 2, y, 15, "#ffe9b8");
+    const seg = w / AUTO_HP;
+    for (let i = 0; i < AUTO_HP; i++) {
+      const sx = x + i * seg;
+      ctx.fillStyle = "rgba(0,0,0,0.6)";
+      ctx.fillRect(sx + 2, y + 12, seg - 4, 10);
+      if (i >= a.hits) {
+        ctx.fillStyle = mix("#ffd166", "#ff8a3d", i / AUTO_HP);
+        ctx.fillRect(sx + 2, y + 12, seg - 4, 10);
+      }
+    }
+  }
+
   // Marea: una capa translúcida del líquido que lo cubre todo por debajo de la superficie.
   function drawTide(t) {
     if (!tide || tide.y >= tide.bottom) return;
@@ -6518,6 +6848,7 @@
     drawBoss(t);
     drawGolem(t);
     drawCrab(t);
+    drawAutomaton(t);
     drawHydra(t);
     drawShade(t);
     drawGeyserJets(t);
@@ -6554,6 +6885,9 @@
       else if (golem && levelFrames > HINT_FRAMES / 2) drawGolemBar();
       else if (crab && levelFrames > HINT_FRAMES / 2) {
         drawCrabBar();
+        drawToast(true);
+      } else if (automaton && levelFrames > HINT_FRAMES / 2) {
+        drawAutomatonBar();
         drawToast(true);
       }
       else if (shade && levelFrames > HINT_FRAMES / 2) {
