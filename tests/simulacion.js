@@ -11,7 +11,7 @@ const ctxStub = new Proxy({}, {
   },
   set: () => true,
 });
-const canvasStub = () => ({ getContext: () => ctxStub, style: {}, width: 0, height: 0 });
+const canvasStub = () => ({ getContext: () => ctxStub, style: {}, width: 0, height: 0, getBoundingClientRect: () => ({ left: 0, top: 0, width: 1, height: 1 }) });
 globalThis.document = { getElementById: canvasStub, createElement: canvasStub };
 globalThis.addEventListener = (n, f) => (handlers[n] = f);
 globalThis.innerWidth = 1024;
@@ -2860,6 +2860,25 @@ check("La cinta de arriba los lleva al agua: Chispa y Acidito la saltan, Gota ag
 walkTo(water, 33);
 for (const p of [fire, water, acid]) walkTo(p, G.doors[p.ch.door].c);
 check("Llegan a sus puertas", G.state === "won", where());
+
+// --- Botones táctiles ------------------------------------------------------------------------------
+console.log("\nBotones táctiles");
+level(0);
+let tx = fire.x;
+J.input.down("KeyD"); run(30); J.input.up("KeyD"); run(20);
+check("Los botones táctiles aprietan teclas como el teclado", fire.x > tx + 40, `${(fire.x - tx).toFixed(0)}`);
+tx = fire.x; run(30);
+check("…y al soltarlos se para", fire.x === tx);
+const ty = water.y;
+J.input.down("ArrowUp"); run(8); J.input.up("ArrowUp");
+check("Saltar con el botón", water.y < ty);
+for (const p of G.players) { const d = G.doors[p.ch.door]; place(p, d.c, d.r); }
+run(3);
+check("(gana el nivel)", G.state === "won");
+handlers.pointerdown?.({ clientX: 10, clientY: 10, target: { closest: () => null } });
+run(2);
+check("En la pantalla de victoria, tocar la pantalla pasa al siguiente nivel", G.state === "playing" && G.levelIndex === 1, G.state);
+G.setLevel(0);
 
 // --- Código de progreso --------------------------------------------------------
 console.log("\nCódigo de progreso");
