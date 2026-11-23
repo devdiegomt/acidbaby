@@ -262,6 +262,7 @@
       ["≈", "Barril de agua", "#1f7bff"], ["♨", "Barril de lava", "#ff5a1f"], ["■", "Obsidiana", "#1b1726"],
       ["↥", "Géiser de lava (en la fila del suelo)", "#ff5a1f"], ["↟", "Géiser de agua (en la fila del suelo)", "#1f7bff"],
       ["⇞", "Géiser de ácido (en la fila del suelo)", "#46c22a"],
+      ["_", "Suelo de hielo (resbala; a Chispa no)", "#9fd8f0"], ["◇", "Agua congelada (Chispa la derrite)", "#bfe9ff"],
     ]],
     ["Bichos", [
       ["@", "Escarabajo", "#9b4dca"], ["&", "Murciélago", "#8a63c4"], ["!", "Erizo (no se pisa)", "#8a5a2b"],

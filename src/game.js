@@ -28,6 +28,14 @@
   const CRUSHER_RISE = 2; // píxeles por frame al subir
   const DISSOLVE_DELAY = 18; // frames hasta que se rompe el primer bloque tocado
   const DISSOLVE_SPREAD = 6; // frames extra por cada bloque de distancia
+  // Temporada 3, Mundo 1 (la montaña helada): suelo de hielo que resbala y charcos congelados.
+  const ICE_FLOOR_TILE = "_"; // suelo de hielo: resbala (a Chispa no: su calor derrite la capa de encima)
+  const FROZEN_TILE = "◇"; // agua congelada: suelo para todos; Chispa la derrite y vuelve a ser agua
+  const ICE_GRIP = 0.08; // cuánto agarra el hielo al acelerar (en suelo normal, 0.35)
+  const ICE_COAST = 0.04; // y al soltar las teclas: se sigue deslizando unas 3 casillas
+  const ICE_SPEED = 1.25; // en hielo se llega a correr un poco más
+  const FROZEN_MELT_DELAY = 45; // frames que aguanta el hielo de un charco bajo Chispa
+  const FROZEN_MELT_SPREAD = 8;
   const FAN_RANGE = 6; // casillas de alto que alcanza la corriente de un ventilador
   const FAN_LIFT = 1.25; // empuje hacia arriba por frame dentro de la corriente
   const FAN_MAX_RISE = 5; // velocidad máxima de subida en la corriente
@@ -113,7 +121,7 @@
 
   // Avisos de novedades: salen en la portada, en el menú de niveles y en la pausa.
   // Para cambiarlos (o quitarlos), basta con editar esta lista.
-  const NEWS = ["¡Nuevo! Jueguen online, cada uno desde su PC (tecla O)", "Mundo 5 completo: La forja abandonada"];
+  const NEWS = ["¡Nuevo! Temporada 3: Las alturas", "Mundo 1: La montaña helada"];
 
   // Jefe del Mundo 3 (Temporada 2): la Sombra de la mina. Flota hacia Gota o Acidito atravesando
   // las paredes; si se queda un rato a la luz de una antorcha encendida se quema (un golpe), apaga
@@ -183,6 +191,7 @@
     "|": { by: null, burst: ["#ffd76a", "#b8862b", "#fff3c4"] }, // cerradura: se abre con una llave
     "[": { by: null, burst: ["#8a7a62", "#5a4a33", "#ffb347"] }, // muro agrietado: lo abre una bomba
     "/": { by: null, burst: ["#c86bff", "#ffe08a", "#ffffff"] }, // sello del Guardián: se rompe al vencerlo
+    "◇": { by: "fire", burst: ["#e8fbff", "#9fd8ff", "#1f7bff"], into: "~" }, // agua congelada: vuelve a ser agua
   };
   const LOCK_TILE = "|";
   const CRACKED_TILE = "[";
@@ -363,6 +372,7 @@
       worlds: [{ name: "El templo", levels: LEVELS }],
     },
     ...(typeof SEASON_2 !== "undefined" ? [SEASON_2] : []),
+    ...(typeof SEASON_3 !== "undefined" ? [SEASON_3] : []),
   ].map((s) => {
     // Lista plana de niveles y, para cada uno, su mundo y su número dentro del mundo.
     const levels = [];
@@ -772,7 +782,7 @@
   }
 
   function isSolidTile(t) {
-    return t === "#" || t === OBSIDIAN_TILE || t === CRUMBLE_TILE || t in BREAKABLE || t in LIQUID_BY_TILE || t in BARRIER_BY_TILE || t in GEYSER_BY_TILE;
+    return t === "#" || t === OBSIDIAN_TILE || t === CRUMBLE_TILE || t === ICE_FLOOR_TILE || t in BREAKABLE || t in LIQUID_BY_TILE || t in BARRIER_BY_TILE || t in GEYSER_BY_TILE;
   }
 
   // Como isSolidTile, pero cada personaje atraviesa la barrera de su elemento.
@@ -869,7 +879,7 @@
     for (let r = 0; r < grid.length; r++) {
       for (let c = 0; c < grid[r].length; c++) {
         const t = grid[r][c];
-        if (t === "#" || t === " ") continue;
+        if (t === "#" || t === " " || t === ICE_FLOOR_TILE) continue;
         if (t in LIQUID_BY_TILE) {
           liquids.push({ c, r, type: LIQUID_BY_TILE[t] });
           continue;
@@ -1584,7 +1594,8 @@
     while (queue.length) {
       const [c, r, d] = queue.shift();
       if (!dissolving.has(key(c, r))) {
-        const t = DISSOLVE_DELAY + d * DISSOLVE_SPREAD;
+        const frozen = type === FROZEN_TILE;
+        const t = (frozen ? FROZEN_MELT_DELAY : DISSOLVE_DELAY) + d * (frozen ? FROZEN_MELT_SPREAD : DISSOLVE_SPREAD);
         dissolving.set(key(c, r), { c, r, t, max: t, type });
       }
       for (const [nc, nr] of [[c + 1, r], [c - 1, r], [c, r + 1], [c, r - 1]]) {
@@ -1621,23 +1632,38 @@
     }
     for (const [k, d] of dissolving) {
       if (--d.t > 0) continue;
-      grid[d.r][d.c] = " ";
+      const into = BREAKABLE[d.type].into;
+      grid[d.r][d.c] = into || " ";
+      if (into) liquids.push({ c: d.c, r: d.r, type: LIQUID_BY_TILE[into] }); // el hielo del charco se derrite
       dissolving.delete(k);
       burst(d.c * T + T / 2, d.r * T + T / 2, BREAKABLE[d.type].burst, 14);
-      sound.play(d.type);
+      sound.play(into ? "+" : d.type);
     }
   }
 
   // ---------------------------------------------------------------------------
   // Jugadores
   // ---------------------------------------------------------------------------
+  // ¿Pisa hielo (suelo de hielo o agua congelada)?
+  function onIce(p) {
+    const r = Math.floor((p.y + p.h) / T);
+    for (let c = Math.floor(p.x / T); c <= Math.floor((p.x + p.w - 1) / T); c++) {
+      const t = tileAt(c, r);
+      if (t === ICE_FLOOR_TILE || t === FROZEN_TILE) return true;
+    }
+    return false;
+  }
+
   function updatePlayer(p) {
     const k = inputOf(p); // las teclas son del jugador; el personaje (p.ch) puede cambiar con un amuleto
     const dir = (k.right ? 1 : 0) - (k.left ? 1 : 0);
     if (dir) p.facing = dir;
 
-    const speed = p.pushing ? MOVE_SPEED * PUSH_SPEED_FACTOR : MOVE_SPEED;
-    p.vx += (dir * speed - p.vx) * (p.onGround ? 0.35 : 0.2);
+    // En hielo se resbala (menos Chispa): cuesta arrancar, se corre un poco más y se sigue
+    // deslizando al soltar.
+    const slippery = p.onGround && p.ch.immune !== "fire" && onIce(p);
+    const speed = (p.pushing ? MOVE_SPEED * PUSH_SPEED_FACTOR : MOVE_SPEED) * (slippery ? ICE_SPEED : 1);
+    p.vx += (dir * speed - p.vx) * (slippery ? (dir ? ICE_GRIP : ICE_COAST) : p.onGround ? 0.35 : 0.2);
     if (Math.abs(p.vx) < 0.05) p.vx = 0;
 
     if (k.jumpPressed) p.jumpBuffer = JUMP_BUFFER_FRAMES;
@@ -4023,6 +4049,11 @@
       sky: ["#1f1c2b", "#0b0a12"], bricks: "rgba(190,170,255,0.03)",
       stone: "#3b3550", joints: "#26213a70", edges: ["#7a6fa0", "#1a1726", "#564c78", "#252036"],
     },
+    // Temporada 3, Mundo 1: roca y nieve de la montaña helada, con cielo azul de invierno.
+    ice: {
+      sky: ["#3d5f80", "#16243a"], bricks: "rgba(220,240,255,0.04)",
+      stone: "#6f8597", joints: "#4f647570", edges: ["#e6f6ff", "#2e3e4c", "#a7c2d2", "#3a4c5a"],
+    },
     // Mundo 5 de la temporada 2: hierro viejo de la forja.
     forge: {
       sky: ["#1d1b1f", "#09080a"], bricks: "rgba(200,200,220,0.03)",
@@ -4085,7 +4116,7 @@
 
     // Los bloques oxidados se dibujan aparte porque pueden desaparecer. Fuera del nivel (el relleno
     // de la vista) todo es pared: tileAt devuelve "#".
-    const isWall = (t) => t === "#" || t in LIQUID_BY_TILE || t in GEYSER_BY_TILE;
+    const isWall = (t) => t === "#" || t === ICE_FLOOR_TILE || t === FROZEN_TILE || t in LIQUID_BY_TILE || t in GEYSER_BY_TILE;
     g.translate(OX, OY);
     const c0 = -Math.ceil(OX / T);
     const r0 = -Math.ceil(OY / T);
@@ -4095,6 +4126,20 @@
         const x = c * T;
         const y = r * T;
         drawStone(g, x, y, r, theme);
+        if (tileAt(c, r) === ICE_FLOOR_TILE) {
+          // Suelo de hielo: capa azul clara con brillo encima de la roca.
+          const ice = g.createLinearGradient(0, y, 0, y + T);
+          ice.addColorStop(0, "#e6f8ff");
+          ice.addColorStop(0.35, "#9fd8f0");
+          ice.addColorStop(1, "#5f9fc0");
+          g.fillStyle = ice;
+          g.fillRect(x, y, T, T);
+          g.fillStyle = "rgba(255,255,255,0.55)";
+          g.fillRect(x + 4 + ((c * 7) % 12), y + 4, 8, 2);
+          g.fillStyle = "#ffffff";
+          g.fillRect(x, y, T, 2);
+          continue;
+        }
         const [top, bottom, left, right] = theme.edges;
         if (!isWall(tileAt(c, r - 1))) {
           g.fillStyle = top;
@@ -4287,7 +4332,40 @@
     ctx.restore();
   }
 
-  const BLOCK_DRAW = { "%": drawRust, "+": drawIce, "=": drawSalt, "|": drawLock, "[": drawCracked, "/": drawSeal };
+  // Agua congelada: placa de hielo translúcida con el agua azul debajo; se agrieta al derretirse.
+  function drawFrozen(x, y, active, progress) {
+    ctx.fillStyle = "#1f7bff";
+    ctx.fillRect(x, y + 6, T, T - 6);
+    // Placa gruesa de hielo (se nota que se puede pisar) con el agua azul asomando por debajo.
+    const ice = ctx.createLinearGradient(0, y, 0, y + 22);
+    ice.addColorStop(0, `rgba(240,252,255,${0.95 - progress * 0.5})`);
+    ice.addColorStop(1, `rgba(170,225,250,${0.75 - progress * 0.5})`);
+    ctx.fillStyle = ice;
+    ctx.fillRect(x, y, T, 22);
+    ctx.fillStyle = "rgba(255,255,255,0.85)";
+    ctx.fillRect(x, y, T, 2);
+    ctx.fillRect(x + 6 + ((x / T) % 3) * 6, y + 5, 9, 2);
+    ctx.strokeStyle = "rgba(120,180,215,0.6)";
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(x + 3, y + 14);
+    ctx.lineTo(x + 11, y + 10);
+    ctx.lineTo(x + 17, y + 16);
+    ctx.stroke();
+    if (active) {
+      ctx.strokeStyle = "#ffffff";
+      ctx.lineWidth = 1.2;
+      ctx.beginPath();
+      ctx.moveTo(x + 4, y + 2);
+      ctx.lineTo(x + 12 + progress * 6, y + 8);
+      ctx.lineTo(x + 22, y + 3);
+      ctx.moveTo(x + 14, y + 6);
+      ctx.lineTo(x + 18, y + 10);
+      ctx.stroke();
+    }
+  }
+
+  const BLOCK_DRAW = { "%": drawRust, "+": drawIce, "=": drawSalt, "|": drawLock, "[": drawCracked, "/": drawSeal, "◇": drawFrozen };
 
   function heartPath(cx, cy, s) {
     ctx.beginPath();
