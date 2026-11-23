@@ -31,7 +31,7 @@ game = game.replace(
      SEASONS, get seasonIndex(){return seasonIndex}, get titleIndex(){return titleIndex}, isSeasonUnlocked, levelNumber, get flags(){return flags}, get checkpoint(){return checkpoint}, get retries(){return retries}, get toast(){return toast}, get level(){return level}, worldRange, get spikes(){return spikes}, get obsidian(){return obsidian}, get liquids(){return liquids}, starsOf, starCount, get golem(){return golem}, get rocks(){return rocks}, get waves(){return waves}, get tide(){return tide}, get hydra(){return hydra}, get torches(){return torches}, lightSources, get shade(){return shade}, get geysers(){return geysers}, get mainIndex(){return mainIndex}, mainItems, get crab(){return crab}, get automaton(){return automaton}, get rocks2(){return rocks} };\n})();`,
 );
 // editor.js va antes que game.js (como en index.html); sin DOM solo define EditorCore.
-eval(fs.readFileSync(ROOT + "levels.js", "utf8") + "\nglobalThis.LEVELS = LEVELS;\n" + fs.readFileSync(ROOT + "levels2.js", "utf8") + "\nglobalThis.SEASON_2 = SEASON_2;\n" + fs.readFileSync(ROOT + "editor.js", "utf8") + "\n" + game);
+eval(fs.readFileSync(ROOT + "levels.js", "utf8") + "\nglobalThis.LEVELS = LEVELS;\n" + fs.readFileSync(ROOT + "levels2.js", "utf8") + "\nglobalThis.SEASON_2 = SEASON_2;\n" + fs.readFileSync(ROOT + "levels3.js", "utf8") + "\nglobalThis.SEASON_3 = SEASON_3;\n" + fs.readFileSync(ROOT + "editor.js", "utf8") + "\n" + game);
 
 const down = (code) => handlers.keydown({ code, repeat: false, preventDefault() {} });
 const up = (code) => handlers.keyup({ code });
@@ -1356,14 +1356,14 @@ G.setLevel(0);
 // --- Temporada 2: temporadas, guardado y banderas de control ---------------------------------
 console.log("\nTemporada 2");
 const T2 = G.SEASONS[1];
-check("Hay dos temporadas y la segunda va por mundos", G.SEASONS.length === 2 && T2.worlds.length >= 1 && T2.levels.length >= 1);
+check("Hay tres temporadas y la segunda y la tercera van por mundos", G.SEASONS.length === 3 && T2.worlds.length >= 1 && T2.levels.length >= 1 && G.SEASONS[2].worlds.length >= 1);
 T2.levels.forEach((lv, i) => {
   try { G.setLevel(i, 1); check(`Nivel ${G.levelNumber(i)} "${lv.name}" carga`, true); }
   catch (e) { check(`Nivel T2 ${i + 1} carga`, false, e.message); }
 });
 check("Los niveles de la temporada 2 se numeran por mundo", G.levelNumber(0) === "1-1");
 check("Exportar e importar devuelve el mismo nivel (temporada 2)", T2.levels.every((lv) => JSON.stringify(E.parse(E.toText(lv))) === JSON.stringify(E.normalize(lv))));
-check("El editor ofrece los niveles de las dos temporadas", J.levels.length === LEVELS.length + T2.levels.length && J.levels.some((l) => l.label.startsWith("T2 1-1. ")));
+check("El editor ofrece los niveles de todas las temporadas", J.levels.length === LEVELS.length + T2.levels.length + G.SEASONS[2].levels.length && J.levels.some((l) => l.label.startsWith("T2 1-1. ")) && J.levels.some((l) => l.label.startsWith("T3 1-1. ")));
 const withEmoji = { ...E.blankLevel(), map: E.blankLevel().map.map((row, r) => (r === 5 ? "#🚩" + row.slice(3) : row)) };
 check("Un emoji en el mapa se avisa con un mensaje claro", J.preview(withEmoji).some((p) => p.includes("emoji")));
 
@@ -2961,6 +2961,99 @@ check("Queda hecho chatarra y se rompe el sello", AU().state === "dead" && G.gri
 check("…y las prensas suben y se quedan quietas", ["h", "j", "k"].every((id) => M(id).broken) && (run(200), ["h", "j", "k"].every((id) => M(id).oy === 0)));
 for (const p of G.players) place(p, 31, 16);
 run(5);
+for (const p of [fire, water, acid]) walkTo(p, G.doors[p.ch.door].c);
+check("Llegan a sus puertas", G.state === "won", where());
+
+// --- Hielo (Temporada 3, Mundo 1) --------------------------------------------------------------------
+console.log("\nHielo");
+const iceFloor = (g, c0, c1, ch = "_") => { for (let c = c0; c <= c1; c++) g[17][c] = ch; };
+// Distancia que se desliza tras correr 40 frames y soltar.
+function slide(p) {
+  const k = keysOf(p);
+  hold([k.r], 40);
+  const x0 = p.x; run(80);
+  return p.x - x0;
+}
+sandbox((g) => {});
+place(water, 4, 16); run(5);
+const stoneSlide = slide(water);
+sandbox((g) => iceFloor(g, 2, 29));
+place(water, 4, 16); run(5);
+const iceSlide = slide(water);
+check("En el hielo se sigue deslizando al soltar las teclas", iceSlide > 64 && iceSlide < 150 && stoneSlide < 20, `${stoneSlide.toFixed(0)} en roca / ${iceSlide.toFixed(0)} en hielo`);
+sandbox((g) => iceFloor(g, 2, 29));
+place(water, 4, 16); run(5);
+let ix = water.x; hold(["ArrowRight"], 10);
+const iceStart = water.x - ix;
+sandbox((g) => {});
+place(water, 4, 16); run(5);
+ix = water.x; hold(["ArrowRight"], 10);
+check("…y cuesta arrancar", iceStart < (water.x - ix) * 0.7, `${iceStart.toFixed(0)} / ${(water.x - ix).toFixed(0)} px en 10 frames`);
+sandbox((g) => iceFloor(g, 2, 29));
+place(fire, 4, 16); run(5);
+check("A Chispa no la hace resbalar", slide(fire) < 20);
+sandbox((g) => iceFloor(g, 8, 13, "◇"));
+for (const p of [water, acid]) place(p, 10, 16);
+run(120);
+check("El agua congelada es suelo para Gota y Acidito", playing() && feetRow(acid) === 16 && G.grid[17][10] === "◇");
+place(fire, 8, 16); run(30);
+check("Chispa la empieza a derretir al pisarla…", G.grid[17][10] === "◇" && playing());
+for (let i = 0; i < 200 && playing(); i++) { place(fire, 15, 16); run(1); }
+check("…y al rato vuelve a ser agua entera (Acidito se hunde)", G.state === "dead" && /Acidito/.test(G.deathMessage) && G.liquids.filter((l) => l.r === 17 && l.c >= 8 && l.c <= 13).length >= 1, G.deathMessage);
+G.setLevel(0);
+
+// Corre hacia la derecha y salta en la columna "from" sin pararse (en el hielo, pararse es resbalar);
+// sigue en el aire hasta aterrizar cerca de "to".
+function runJump(p, from, to) {
+  const k = keysOf(p);
+  down(k.r);
+  for (let i = 0; i < 400 && center(p) < from * 32 + 16 && playing(); i++) run(1);
+  down(k.j); run(14); up(k.j);
+  for (let i = 0; i < 80 && !(p.onGround && center(p) >= to * 32) && playing(); i++) run(1);
+  up(k.r);
+}
+
+// --- Temporada 3, nivel 1-1: hielo fino -----------------------------------------------------------
+console.log("\nTemporada 3, nivel 1-1");
+G.setLevel(0, 2); run(1);
+fire = P("Chispa"); water = P("Gota"); acid = P("Acidito");
+check("Es la temporada 3 y el nivel tiene hielo y agua congelada", G.SEASONS[2].id === "t3" && G.grid[17].includes("_") && G.grid[17].includes("◇"));
+runJump(water, 16, 20);
+check("Gota cruza el hielo y salta el ácido del final", playing() && center(water) > 19 * 32 + 16 && feetRow(water) === 16, where());
+runJump(water, 23, 24);
+check("…y salta sobre el agua congelada a por el zafiro", G.gems.find((g) => g.type === "water").taken && playing(), where());
+runRightTo(water, 33); run(60);
+walkTo(acid, 6); runJump(acid, 17, 18);
+check("Acidito se desliza hasta su ácido y salta a por la esmeralda", G.gems.find((g) => g.type === "acid").taken && playing(), where());
+runRightTo(acid, 33); run(60);
+check("Gota y Acidito cruzan el agua congelada (sigue congelada)", playing() && [water, acid].every((p) => center(p) > 27 * 32) && G.grid[17][24] === "◇", where());
+runRightTo(fire, 20); runRightTo(fire, 29);
+check("Chispa cruza el hielo sin resbalar y el agua congelada antes de que se derrita", playing() && center(fire) > 28 * 32, where());
+run(150);
+check("…y detrás de ella se derrite", G.grid[17][24] === "~" && playing());
+walkTo(fire, 30); jumpHere(fire);
+check("Chispa agarra el rubí en la lava", G.gems.every((g) => g.taken) && playing(), where());
+walkTo(fire, 34);
+for (const p of [fire, water, acid]) { ride(p, 36, -1); walkTo(p, G.doors[p.ch.door].c); }
+check("Suben con el ventilador y llegan a sus puertas", G.state === "won", where());
+
+// --- Temporada 3, nivel 1-2: cornisas heladas -------------------------------------------------------
+console.log("\nTemporada 3, nivel 1-2");
+G.setLevel(1, 2); run(1);
+fire = P("Chispa"); water = P("Gota"); acid = P("Acidito");
+// Sube al escalón y a la primera cornisa; luego cornisa a cornisa sin pararse. Las gemas están en
+// el aire, encima de los huecos: se agarran en pleno salto.
+function ledges(p) {
+  walkTo(p, 3); hopTo(p, 4); hopTo(p, 6);
+  for (const [from, to] of [[8, 11], [14, 17], [20, 23], [26, 29], [32, 34]]) runJump(p, from, to);
+  run(40);
+}
+ledges(acid);
+check("Acidito salta de cornisa helada en cornisa y agarra la esmeralda", playing() && center(acid) > 33 * 32 && G.gems.find((g) => g.type === "acid").taken, where());
+ledges(water);
+check("Gota también (la cornisa de agua congelada aguanta)", playing() && center(water) > 33 * 32 && G.gems.find((g) => g.type === "water").taken && G.grid[14][18] === "◇", where());
+ledges(fire);
+check("Chispa, de última, agarra el rubí y cruza la cornisa congelada antes de que se derrita", playing() && center(fire) > 33 * 32 && G.gems.every((g) => g.taken), where());
 for (const p of [fire, water, acid]) walkTo(p, G.doors[p.ch.door].c);
 check("Llegan a sus puertas", G.state === "won", where());
 
