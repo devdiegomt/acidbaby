@@ -28,7 +28,7 @@ game = game.replace(
      get grid(){return grid}, get fans(){return fans}, get doors(){return doors}, get enemies(){return enemies}, get items(){return items}, get shots(){return shots},
      get save(){return save}, isUnlocked, get levelIndex(){return levelIndex}, get lastResult(){return lastResult},
      get menuIndex(){return menuIndex}, get levelFrames(){return levelFrames}, setLevel(i, si = 0){ testLevel = null; seasonIndex = si; levelIndex = i; loadLevel(i); state = "playing"; }, get darts(){return darts}, get crumbles(){return crumbles}, get boss(){return boss}, solidAt,
-     SEASONS, get seasonIndex(){return seasonIndex}, get titleIndex(){return titleIndex}, isSeasonUnlocked, levelNumber, get flags(){return flags}, get checkpoint(){return checkpoint}, get retries(){return retries}, get toast(){return toast}, get level(){return level}, worldRange, get spikes(){return spikes}, get obsidian(){return obsidian}, get liquids(){return liquids}, starsOf, starCount, get golem(){return golem}, get rocks(){return rocks}, get waves(){return waves}, get tide(){return tide}, get hydra(){return hydra}, get torches(){return torches}, lightSources, get shade(){return shade}, get geysers(){return geysers}, get mainIndex(){return mainIndex}, mainItems, get crab(){return crab}, get automaton(){return automaton}, get rocks2(){return rocks} };\n})();`,
+     SEASONS, get seasonIndex(){return seasonIndex}, get titleIndex(){return titleIndex}, isSeasonUnlocked, levelNumber, get flags(){return flags}, get checkpoint(){return checkpoint}, get retries(){return retries}, get toast(){return toast}, get level(){return level}, worldRange, get spikes(){return spikes}, get obsidian(){return obsidian}, get liquids(){return liquids}, starsOf, starCount, get golem(){return golem}, get rocks(){return rocks}, get waves(){return waves}, get tide(){return tide}, get hydra(){return hydra}, get torches(){return torches}, lightSources, get shade(){return shade}, get geysers(){return geysers}, get mainIndex(){return mainIndex}, mainItems, get crab(){return crab}, get automaton(){return automaton}, get yeti(){return yeti}, get rocks2(){return rocks} };\n})();`,
 );
 // editor.js va antes que game.js (como en index.html); sin DOM solo define EditorCore.
 eval(fs.readFileSync(ROOT + "levels.js", "utf8") + "\nglobalThis.LEVELS = LEVELS;\n" + fs.readFileSync(ROOT + "levels2.js", "utf8") + "\nglobalThis.SEASON_2 = SEASON_2;\n" + fs.readFileSync(ROOT + "levels3.js", "utf8") + "\nglobalThis.SEASON_3 = SEASON_3;\n" + fs.readFileSync(ROOT + "editor.js", "utf8") + "\n" + game);
@@ -3054,6 +3054,133 @@ ledges(water);
 check("Gota también (la cornisa de agua congelada aguanta)", playing() && center(water) > 33 * 32 && G.gems.find((g) => g.type === "water").taken && G.grid[14][18] === "◇", where());
 ledges(fire);
 check("Chispa, de última, agarra el rubí y cruza la cornisa congelada antes de que se derrita", playing() && center(fire) > 33 * 32 && G.gems.every((g) => g.taken), where());
+for (const p of [fire, water, acid]) walkTo(p, G.doors[p.ch.door].c);
+check("Llegan a sus puertas", G.state === "won", where());
+
+// Cajas que patinan en el hielo
+sandbox((g) => { iceFloor(g, 4, 25); g[16][8] = "x"; g[16][26] = "#"; });
+place(water, 6, 16); run(5);
+hold(["ArrowRight"], 12);
+run(250);
+check("En el hielo, una caja empujada sale patinando hasta chocar", Math.floor((G.boxes[0].x + 14) / 32) === 25, `${G.boxes[0].x}`);
+G.setLevel(0);
+
+// --- Temporada 3, nivel 1-3: cajas que patinan ------------------------------------------------------
+console.log("\nTemporada 3, nivel 1-3");
+G.setLevel(2, 2); run(1);
+fire = P("Chispa"); water = P("Gota"); acid = P("Acidito");
+walkTo(fire, 8); hold(["KeyD"], 8); run(10);
+check("Chispa empuja la caja y sale patinando", Math.abs(G.boxes[0].vx) > 0, `${G.boxes[0].vx}`);
+run(200);
+check("Patina por encima de los charcos hasta el botón y la compuerta se abre", Math.floor((G.boxes[0].x + 14) / 32) === 28 && M("g").active, `${G.boxes[0].x}`);
+walkTo(fire, 13); jumpHere(fire);
+check("Chispa agarra el rubí en la lava (sin resbalar)", G.gems.find((g) => g.type === "fire").taken && playing(), where());
+runJump(acid, 11, 13); walkTo(acid, 21); jumpHere(acid);
+check("Acidito salta la lava y agarra la esmeralda del ácido", G.gems.find((g) => g.type === "acid").taken && playing(), where());
+runJump(water, 11, 16); runJump(water, 19, 24); jumpAtCol(water, 26);
+check("Gota resbala, salta los charcos y agarra el zafiro", G.gems.every((g) => g.taken) && playing(), where());
+for (const p of [fire, water, acid]) { runRightTo(p, 32); walkTo(p, G.doors[p.ch.door].c); }
+check("Pasan la compuerta y llegan a sus puertas", G.state === "won", where());
+
+// --- Temporada 3, nivel 1-4: el muro de hielo ---------------------------------------------------
+console.log("\nTemporada 3, nivel 1-4");
+G.setLevel(3, 2); run(1);
+fire = P("Chispa"); water = P("Gota"); acid = P("Acidito");
+ride(acid, 5, 1); walkTo(acid, 15);
+check("Acidito sube por el ventilador y agarra la esmeralda de arriba", G.gems.find((g) => g.type === "acid").taken && playing(), where());
+walkTo(acid, 23); run(30);
+check("…y baja al otro lado del lago, frente al muro de hielo", playing() && feetRow(acid) === 16 && center(acid) > 22 * 32, where());
+runRightTo(water, 13); jumpAtCol(water, 14); runRightTo(water, 22);
+check("Gota cruza el lago congelado y agarra el zafiro", G.gems.find((g) => g.type === "water").taken && center(water) > 21 * 32 && playing(), where());
+runRightTo(fire, 23);
+run(150);
+check("Chispa cruza la última: el lago se derrite detrás de ella y el muro de hielo también", playing() && G.grid[17][14] === "~" && G.grid[14][24] === " ", where());
+walkTo(fire, 30); jumpHere(fire);
+check("Chispa agarra el rubí en la lava", G.gems.every((g) => g.taken) && playing(), where());
+for (const p of [water, acid]) runRightTo(p, 33);
+for (const p of [fire, water, acid]) walkTo(p, G.doors[p.ch.door].c);
+check("Llegan a sus puertas", G.state === "won", where());
+
+// --- Temporada 3, nivel 1-5: la cumbre helada ---------------------------------------------------
+console.log("\nTemporada 3, nivel 1-5");
+G.setLevel(4, 2); run(1);
+fire = P("Chispa"); water = P("Gota"); acid = P("Acidito");
+walkTo(fire, 8); jumpHere(fire); runRightTo(fire, 15);
+runJump(acid, 6, 10); walkTo(acid, 12); jumpHere(acid); runRightTo(acid, 15);
+runJump(water, 6, 10); runJump(water, 10, 15);
+check("Cruzan el hielo con charcos; Chispa y Acidito agarran sus gemas", playing() && G.players.every((p) => center(p) > 14 * 32) && G.gems.filter((g) => g.type !== "water").every((g) => g.taken), where());
+allWalk(all3(16));
+check("Encienden la bandera", G.flags[0].on, where());
+walkTo(acid, 19); hold(["KeyL"], 8); run(120);
+check("La caja patina hasta el botón y se abre la compuerta", M("g").active, `${G.boxes[0].x}`);
+for (const p of [water, acid]) runRightTo(p, 28);
+runRightTo(water, 30); jumpAtCol(water, 31);
+check("Gota agarra el zafiro sobre el agua congelada", G.gems.every((g) => g.taken) && playing(), where());
+for (const p of [water, acid]) runRightTo(p, 34);
+runRightTo(fire, 28); runRightTo(fire, 34);
+check("Chispa cruza la última el agua congelada", playing() && center(fire) > 33 * 32, where());
+for (const p of [fire, water, acid]) walkTo(p, G.doors[p.ch.door].c);
+check("Llegan a sus puertas", G.state === "won", where());
+
+// --- Temporada 3, nivel 1-6: el Yeti de la cumbre --------------------------------------------------
+console.log("\nTemporada 3, nivel 1-6");
+const yetiLevel = () => { G.setLevel(5, 2); run(1); fire = P("Chispa"); water = P("Gota"); acid = P("Acidito"); };
+const YE = () => G.yeti;
+const yeCenter = () => YE().x + 36;
+yetiLevel();
+run(130);
+check("El Yeti se presenta y da un consejo", YE().state !== "intro" && /Acidito/.test(G.toast?.text || ""), G.toast?.text);
+check("El lago está congelado", G.grid[17][12] === "◇" && YE().lake.length === 24);
+// Prueba directa: si el agua se derrite debajo de él, se hunde; luego vuelve a congelar el lago.
+yetiLevel(); run(130);
+for (let i = 0; i < 30; i++) { place(acid, 2, 10); place(water, 2, 10); place(fire, 2, 10); YE().x = 12 * 32 + 16 - 36; YE().state = "walk"; run(1); }
+G.grid[17][12] = "~"; G.liquids.push({ c: 12, r: 17, type: "water" });
+run(2);
+check("Si el lago se derrite bajo el Yeti, se hunde (un golpe)", YE().hits === 1 && YE().state === "dunk", `${YE().hits} ${YE().state}`);
+for (let i = 0; i < 400 && YE().state !== "walk"; i++) { place(acid, 2, 10); place(water, 2, 10); place(fire, 2, 10); run(1); }
+check("…sale a la orilla y vuelve a congelar el lago con su aliento", YE().state === "walk" && G.grid[17][12] === "◇" && !G.liquids.some((l) => l.c === 12 && l.r === 17));
+// A Chispa una bola de nieve no le hace nada.
+yetiLevel(); run(130);
+G.rocks2.push({ x: fire.x, y: fire.y - 20, w: 14, h: 14, vx: 0, vy: 2, snow: true, cause: "x" });
+run(20);
+check("A Chispa las bolas de nieve no le hacen nada (las derrite)", fire.hearts === 3 && playing());
+
+// La pelea: Acidito espera en la repisa; Gota hace de carnada en medio del lago; Chispa espera en
+// la orilla y, cuando el Yeti pisa el lago, toca el hielo para derretirlo.
+function yetiHit(maxFrames = 2500) {
+  const start = YE().hits;
+  let touched = false;
+  for (let i = 0; i < maxFrames && YE().hits === start && playing(); i++) {
+    place(acid, 2, 10);
+    const lakeFrozen = G.grid[17][12] === "◇";
+    const k = keysOf(fire), kw = keysOf(water);
+    up(k.l); up(k.r); up(kw.l); up(kw.r);
+    // Gota: al centro del lago de la izquierda.
+    const gdx = 12 * 32 + 16 - center(water);
+    if (Math.abs(gdx) > 6) down(gdx > 0 ? kw.r : kw.l);
+    // Chispa: en la orilla (columna 5); con el Yeti ya sobre el lago, pisa el borde del hielo.
+    const yetiOnLake = yeCenter() > 7 * 32 && yeCenter() < 19 * 32 && YE().state !== "climb" && YE().state !== "breath";
+    if (YE().state === "climb" || YE().state === "breath") touched = false;
+    const want = yetiOnLake && lakeFrozen && !touched ? 7 : 5;
+    if (want === 7 && center(fire) > 7 * 32 + 4) touched = true; // pisa el borde del lago y se devuelve
+    const fdx = want * 32 + 16 - center(fire);
+    // Si el Yeti se le acerca demasiado en la orilla, sube por el muelle a la repisa.
+    if (Math.abs(yeCenter() - center(fire)) < 110 && YE().state !== "dunk") place(fire, 2, 10);
+    else if (feetRow(fire) !== 16 && Math.abs(yeCenter() - 5 * 32) > 200) place(fire, 5, 16);
+    else if (Math.abs(fdx) > 4) down(fdx > 0 ? k.r : k.l);
+    run(1);
+  }
+  for (const p of [fire, water]) { up(keysOf(p).l); up(keysOf(p).r); }
+  return YE().hits > start;
+}
+yetiLevel();
+let yHits = 0;
+for (let n = 0; n < 4 && playing(); n++) { if (yetiHit()) yHits++; else break; }
+check("Gota lo atrae al lago, Chispa lo derrite: cuatro chapuzones", yHits === 4, `${yHits} · ${where()} · vidas ${G.players.map((p) => p.hearts).join("/")}`);
+run(220);
+check("Se va montaña abajo, el lago queda congelado y se rompe el sello", YE().state === "dead" && G.grid[17][12] === "◇" && G.grid[14][34] === " ", YE().state);
+for (const p of G.players) place(p, 33, 16);
+run(5);
 for (const p of [fire, water, acid]) walkTo(p, G.doors[p.ch.door].c);
 check("Llegan a sus puertas", G.state === "won", where());
 

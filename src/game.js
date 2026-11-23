@@ -34,6 +34,7 @@
   const ICE_GRIP = 0.08; // cuánto agarra el hielo al acelerar (en suelo normal, 0.35)
   const ICE_COAST = 0.04; // y al soltar las teclas: se sigue deslizando unas 3 casillas
   const ICE_SPEED = 1.25; // en hielo se llega a correr un poco más
+  const BOX_ICE_SPEED = 3.2; // una caja (o barril) empujada en el hielo sale patinando a esta velocidad
   const FROZEN_MELT_DELAY = 45; // frames que aguanta el hielo de un charco bajo Chispa
   const FROZEN_MELT_SPREAD = 8;
   const FAN_RANGE = 6; // casillas de alto que alcanza la corriente de un ventilador
@@ -121,7 +122,7 @@
 
   // Avisos de novedades: salen en la portada, en el menú de niveles y en la pausa.
   // Para cambiarlos (o quitarlos), basta con editar esta lista.
-  const NEWS = ["¡Nuevo! Temporada 3: Las alturas", "Mundo 1: La montaña helada"];
+  const NEWS = ["¡Nuevo! Temporada 3: Las alturas", "Mundo 1 completo: La montaña helada"];
 
   // Jefe del Mundo 3 (Temporada 2): la Sombra de la mina. Flota hacia Gota o Acidito atravesando
   // las paredes; si se queda un rato a la luz de una antorcha encendida se quema (un golpe), apaga
@@ -165,6 +166,22 @@
   const AUTO_RIVET_RATE = [210, 190, 170, 150, 130, 110]; // remaches que lanza en arco
   const CRUSHER_WARN_MANUAL = 12; // aviso de una prensa manual antes de caer
   const CRUSHER_BOSS_HITS = 2; // golpes al Autómata que aguanta una prensa antes de romperse
+
+  // Jefe del Mundo 1 de la temporada 3: el Yeti de la cumbre. Persigue por el suelo al más cercano
+  // (también sobre el lago congelado), da zarpazos y, de lejos, lanza bolas de nieve (a Chispa no
+  // le hacen nada: las derrite). Si el agua congelada se derrite bajo él, se hunde (un golpe), sale
+  // a la orilla y la vuelve a congelar con su aliento.
+  const YETI_TILE = "Ш";
+  const YETI_W = 72;
+  const YETI_H = 80;
+  const YETI_HP = 4;
+  const YETI_SPEED = [0.9, 1.05, 1.2, 1.4];
+  const YETI_REACH = 60;
+  const YETI_WINDUP = 75;
+  const YETI_REST = 40;
+  const YETI_DUNK = 70; // frames hundido en el agua tras un golpe
+  const YETI_BREATH = 80; // frames soplando en la orilla antes de que el lago se vuelva a congelar
+  const YETI_SNOW_RATE = [220, 190, 160, 130];
 
   const FONT = '"Segoe UI", system-ui, sans-serif';
   const MECH_COLORS = ["#f2c14e", "#c86bff", "#ff6fa8", "#4fd6c8", "#f0f0f0"];
@@ -756,6 +773,7 @@
   let golem = null; // Gólem de magma (jefe del Mundo 1 de la temporada 2)
   let crab = null; // el Cangrejo hirviente (jefe del Mundo 4 de la temporada 2)
   let automaton = null; // el Autómata de la forja (jefe del Mundo 5 de la temporada 2)
+  let yeti = null; // el Yeti de la cumbre (jefe del Mundo 1 de la temporada 3)
   let torches = []; // antorchas: { c, r, lit }
   let shade = null; // la Sombra de la mina (jefe del Mundo 3 de la temporada 2)
   let hydra = null; // la Hidra del aljibe (jefe del Mundo 2 de la temporada 2)
@@ -843,6 +861,7 @@
     golem = null;
     crab = null;
     automaton = null;
+    yeti = null;
     hydra = null;
     torches = [];
     shade = null;
@@ -939,6 +958,10 @@
         }
         if (t === AUTO_TILE) {
           automaton = makeAutomaton(c, r);
+          continue;
+        }
+        if (t === YETI_TILE) {
+          yeti = { c, r }; // se completa al final, cuando ya se conoce el lago
           continue;
         }
         if (t === HYDRA_TILE) {
@@ -1066,6 +1089,10 @@
       });
     } else if (level.geyser) fail("hay \"geyser\" pero el mapa no tiene géiseres (↥ ↟ ⇞)");
 
+    if (yeti) {
+      if (!breakables.some((b) => b.type === FROZEN_TILE)) fail("el Yeti necesita un lago de agua congelada (◇)");
+      yeti = makeYeti(yeti.c, yeti.r);
+    }
     if (automaton && !mechs.some((m) => m.def.kind === "crusher")) fail("el Autómata necesita al menos una prensa (kind: \"crusher\")");
     if (crab) {
       for (const el of CRAB_PHASES) {
@@ -1120,7 +1147,7 @@
   function liveState() {
     return {
       grid, liquids, breakables, dissolving, barriers, fans, doors, boxes, gems, mechs, portals,
-      enemies, items, springs, crumbles, spikes, flags, obsidian, boss, bossDefeatedAt, golem, crab, automaton, dispensers, tide, hydra, torches, shade, geysers,
+      enemies, items, springs, crumbles, spikes, flags, obsidian, boss, bossDefeatedAt, golem, crab, automaton, yeti, dispensers, tide, hydra, torches, shade, geysers,
       players: players.map((p) => ({
         ...p,
         ch: CHARACTERS.indexOf(p.ch),
@@ -1143,7 +1170,7 @@
   function backToCheckpoint() {
     const s = structuredClone(checkpoint);
     ({ grid, liquids, breakables, dissolving, barriers, fans, doors, boxes, gems, mechs, portals } = s);
-    ({ enemies, items, springs, crumbles, spikes, flags, obsidian, boss, bossDefeatedAt, golem, crab, automaton, dispensers, tide, hydra, torches, shade, geysers } = s);
+    ({ enemies, items, springs, crumbles, spikes, flags, obsidian, boss, bossDefeatedAt, golem, crab, automaton, yeti, dispensers, tide, hydra, torches, shade, geysers } = s);
     players = s.players.map((p) =>
       Object.assign(p, {
         ch: CHARACTERS[p.ch],
@@ -1239,6 +1266,8 @@
         );
         if (box && stepBody(box, s, 0)) {
           body.pushing = true;
+          // En el hielo, la caja sale patinando hasta que choca con algo.
+          if (onIce(box)) box.vx = s * BOX_ICE_SPEED;
           if (stepBody(body, s, 0)) {
             move -= s;
             continue;
@@ -1644,7 +1673,13 @@
   // ---------------------------------------------------------------------------
   // Jugadores
   // ---------------------------------------------------------------------------
-  // ¿Pisa hielo (suelo de hielo o agua congelada)?
+  function onLiquid(b) {
+    const r = Math.floor((b.y + b.h) / T);
+    for (let c = Math.floor(b.x / T); c <= Math.floor((b.x + b.w - 1) / T); c++) if (tileAt(c, r) in LIQUID_BY_TILE) return true;
+    return false;
+  }
+
+  // ¿Pisa hielo (suelo de hielo o agua congelada)? Vale para personajes y cajas.
   function onIce(p) {
     const r = Math.floor((p.y + p.h) / T);
     for (let c = Math.floor(p.x / T); c <= Math.floor((p.x + p.w - 1) / T); c++) {
@@ -1750,6 +1785,12 @@
       }
       b.vy = Math.min(b.vy + GRAVITY, MAX_FALL);
       if (!moveY(b, b.vy)) b.vy = 0;
+      // Caja patinando: sigue hasta chocar; al salir del hielo (sobre suelo normal) se para.
+      if (b.vx) {
+        const grounded = isOnGround(b);
+        if (grounded && !onIce(b) && !onLiquid(b)) b.vx = 0; // por encima de un charco también sigue
+        else if (!moveX(b, b.vx)) b.vx = 0;
+      }
     }
     // Un barril encima de un charco del elemento contrario lo solidifica.
     for (const b of boxes) {
@@ -2324,7 +2365,9 @@
       r.y += r.vy;
       const hit = players.find((p) => p.alive && intersects(r.x, r.y, r.w, r.h, p));
       if (hit) {
-        if (hit.hurt === 0) hurtPlayer(hit, r, r.cause || "fue golpeado por una roca");
+        // A Chispa una bola de nieve no le hace nada: se derrite al tocarla.
+        if (r.snow && hit.ch.immune === "fire") burst(r.x + r.w / 2, r.y + r.h / 2, ["#e8f6ff", "#bfe9ff"], 8);
+        else if (hit.hurt === 0) hurtPlayer(hit, r, r.cause || "fue golpeado por una roca");
         r.dead = true;
       } else if (solidAt(r.x, r.y, r.w, r.h, null)) {
         burst(r.x + r.w / 2, r.y + r.h, ["#8a7a62", "#5a4a33"], 6);
@@ -2817,6 +2860,194 @@
     for (const e of enemies) if (e.alive) defeatEnemy(e);
     rocks = [];
     waves = [];
+    breakSeals();
+  }
+
+  // ---------------------------------------------------------------------------
+  // Yeti de la cumbre
+  // ---------------------------------------------------------------------------
+  function makeYeti(c, r) {
+    const cfg = level.yeti || {};
+    return {
+      name: cfg.name || "El Yeti de la cumbre",
+      x: c * T + T / 2 - YETI_W / 2,
+      y: (r + 1) * T - YETI_H,
+      floorY: (r + 1) * T - YETI_H,
+      minX: (cfg.left ?? 1) * T,
+      maxX: ((cfg.right ?? grid[0].length - 2) + 1) * T - YETI_W,
+      // El lago: las casillas de agua congelada del nivel (las vuelve a congelar tras cada golpe).
+      lake: breakables.filter((b) => b.type === FROZEN_TILE).map((b) => ({ c: b.c, r: b.r })),
+      dir: -1,
+      hits: 0,
+      state: "intro", // intro | walk | windup | rest | dunk | climb | breath | dying | dead
+      timer: 120,
+      shoreX: 0,
+      snowTimer: YETI_SNOW_RATE[0],
+      flash: 0,
+      anim: 0,
+    };
+  }
+
+  const yetiBody = (y) => ({ x: y.x + 8, y: y.y + 8, w: YETI_W - 16, h: YETI_H - 8 });
+
+  // Vuelve a congelar el lago (lo que se haya derretido).
+  function refreezeLake(y) {
+    for (const { c, r } of y.lake) {
+      if (grid[r][c] !== "~") continue;
+      grid[r][c] = FROZEN_TILE;
+      dissolving.delete(key(c, r));
+      burst(c * T + T / 2, r * T + 4, ["#e8f6ff", "#bfe9ff", "#ffffff"], 4);
+    }
+    liquids = liquids.filter((l) => grid[l.r][l.c] !== FROZEN_TILE);
+    sound.play("+");
+  }
+
+  function updateYeti() {
+    const y = yeti;
+    if (y.flash > 0) y.flash--;
+    y.anim++;
+    updateRocksAndWaves();
+    if (y.state === "dead" || state !== "playing") return;
+    if (y.state === "dying") {
+      shake = Math.max(shake, 3);
+      if (y.timer % 6 === 0) burst(y.x + Math.random() * YETI_W, y.y + Math.random() * YETI_H, ["#ffffff", "#bfe9ff", "#1f7bff"], 10);
+      if (--y.timer <= 0) defeatYeti(y);
+      return;
+    }
+    if (y.state === "intro") {
+      if (--y.timer <= 0) {
+        y.state = "walk";
+        toast = { text: "¡Acidito, fuera del lago cuando se derrita! Las bolas de nieve a Chispa no le hacen nada.", frames: TOAST_FRAMES };
+      }
+      return;
+    }
+    const cx = y.x + YETI_W / 2;
+    const lvl = Math.min(y.hits, YETI_SPEED.length - 1);
+
+    // ¿Se derritió el lago justo debajo? Se hunde: un golpe.
+    if (y.state === "walk" || y.state === "windup" || y.state === "rest") {
+      const c = Math.floor(cx / T);
+      const r = Math.floor((y.floorY + YETI_H) / T);
+      if (grid[r]?.[c] === "~" && y.lake.some((l) => l.c === c && l.r === r)) {
+        hitYeti(y);
+        return;
+      }
+    }
+
+    if (y.state === "dunk") {
+      if (--y.timer <= 0) {
+        // Sale hacia la orilla más cercana (una casilla de suelo que no sea del lago).
+        const row = Math.floor((y.floorY + YETI_H) / T);
+        let best = null;
+        for (let c = 1; c < grid[0].length - 1; c++) {
+          const solid = isSolidTile(tileAt(c, row)) && !y.lake.some((l) => l.c === c && l.r === row) && tileAt(c, row) !== "~";
+          if (!solid) continue;
+          const x = Math.max(y.minX, Math.min(y.maxX, c * T + T / 2 - YETI_W / 2));
+          if (!best || Math.abs(x - y.x) < Math.abs(best - y.x)) best = x;
+        }
+        y.shoreX = best ?? y.x;
+        y.state = "climb";
+      }
+      return;
+    }
+    if (y.state === "climb") {
+      const d = y.shoreX - y.x;
+      y.x += Math.sign(d) * Math.min(Math.abs(d), 3);
+      if (Math.abs(d) < 1) {
+        y.state = "breath";
+        y.timer = YETI_BREATH;
+      }
+      return;
+    }
+    if (y.state === "breath") {
+      if (y.timer % 8 === 0) burst(cx + y.dir * 30, y.y + 26, ["#e8f6ff", "#bfe9ff", "#ffffff"], 6);
+      if (--y.timer <= 0) {
+        refreezeLake(y);
+        y.state = "walk";
+      }
+      return;
+    }
+
+    // Persigue al más cercano de los que pisan su suelo (si no hay, espera debajo del más cercano).
+    const onFloor = (p) => Math.abs(p.y + p.h - (y.floorY + YETI_H)) < T;
+    const alive = players.filter((p) => p.alive);
+    const pool = alive.some(onFloor) ? alive.filter(onFloor) : alive;
+    const target = pool.reduce((best, p) => {
+      const d = Math.abs(p.x + p.w / 2 - cx);
+      return !best || d < best.d ? { p, d } : best;
+    }, null)?.p;
+    // Bolas de nieve en arco, solo de lejos.
+    if (target && Math.abs(target.x + target.w / 2 - cx) > 180 && --y.snowTimer <= 0) {
+      y.snowTimer = YETI_SNOW_RATE[lvl];
+      const vx = Math.max(-6, Math.min(6, (target.x + target.w / 2 - cx) / 50));
+      rocks.push({ x: cx - 7, y: y.y + 6, w: 14, h: 14, vx, vy: -7.5, snow: true, cause: "recibió una bola de nieve del Yeti" });
+      sound.play("shot");
+    }
+    if (y.state === "walk") {
+      if (target) {
+        const dx = target.x + target.w / 2 - cx;
+        y.dir = Math.sign(dx) || y.dir;
+        if (Math.abs(dx) <= YETI_REACH && onFloor(target)) {
+          y.state = "windup";
+          y.timer = YETI_WINDUP;
+          sound.play("move");
+        } else if (Math.abs(dx) > 8) y.x = Math.max(y.minX, Math.min(y.maxX, y.x + y.dir * YETI_SPEED[lvl]));
+      }
+    } else if (y.state === "windup") {
+      if (--y.timer <= 0) {
+        const reach = { x: y.x - 28, y: y.y - 6, w: YETI_W + 56, h: YETI_H + 6 };
+        for (const p of players) {
+          if (p.alive && p.hurt === 0 && intersects(reach.x, reach.y, reach.w, reach.h, p)) {
+            hurtPlayer(p, { x: y.x, w: YETI_W }, "recibió un zarpazo del Yeti");
+            if (state !== "playing") return;
+          }
+        }
+        burst(cx + y.dir * (YETI_W / 2 + 8), y.y + 30, ["#ffffff", "#bfe9ff"], 12);
+        sound.play("hurt");
+        y.state = "rest";
+        y.timer = YETI_REST;
+      }
+    } else if (y.state === "rest") {
+      if (--y.timer <= 0) y.state = "walk";
+    }
+
+    const body = yetiBody(y);
+    for (const p of players) {
+      if (p.alive && p.hurt === 0 && intersects(body.x, body.y, body.w, body.h, p)) {
+        hurtPlayer(p, { x: y.x, w: YETI_W }, "chocó con el Yeti");
+        if (state !== "playing") return;
+      }
+    }
+  }
+
+  function hitYeti(y) {
+    y.hits++;
+    y.flash = 30;
+    shake = Math.max(shake, 8);
+    burst(y.x + YETI_W / 2, y.floorY + YETI_H, ["#1f7bff", "#a8e6ff", "#ffffff"], 40);
+    sound.play("bossHit");
+    if (y.hits >= YETI_HP) {
+      y.state = "dying";
+      y.timer = 100;
+      sound.play("roar");
+      return;
+    }
+    y.state = "dunk";
+    y.timer = YETI_DUNK;
+    toast = { text: `¡Al agua! Le quedan ${YETI_HP - y.hits}`, frames: TOAST_FRAMES / 2 };
+  }
+
+  function defeatYeti(y) {
+    y.state = "dead";
+    bossDefeatedAt = levelFrames;
+    shake = 30;
+    burst(y.x + YETI_W / 2, y.y + YETI_H / 2, ["#ffffff", "#bfe9ff", "#1f7bff"], 90);
+    sound.play("boom");
+    sound.play("win");
+    for (const e of enemies) if (e.alive) defeatEnemy(e);
+    rocks = [];
+    waves = [];
+    refreezeLake(y); // el lago queda congelado para que todos lleguen a las puertas
     breakSeals();
   }
 
@@ -3555,7 +3786,7 @@
     for (const m of mechs) [m.ox, m.oy].forEach(add);
     for (const g of geysers) [g.h, g.plugged ? 1 : 0].forEach(add);
     [levelFrames, STATE_CODE[state] || 0, tide ? tide.y : 0, gems.filter((g) => g.taken).length].forEach(add);
-    for (const b of [boss, golem, hydra, shade, crab, automaton]) if (b) [b.x || 0, b.y || 0, b.hits || b.hp || 0].forEach(add);
+    for (const b of [boss, golem, hydra, shade, crab, automaton, yeti]) if (b) [b.x || 0, b.y || 0, b.hits || b.hp || 0].forEach(add);
     return h;
   }
 
@@ -3687,7 +3918,7 @@
     }
     const w = unpackWorld(s.world);
     ({ grid, liquids, breakables, dissolving, barriers, fans, doors, boxes, gems, mechs, portals } = w);
-    ({ enemies, items, springs, crumbles, spikes, flags, obsidian, boss, bossDefeatedAt, golem, crab, automaton, dispensers, tide, hydra, torches, shade, geysers } = w);
+    ({ enemies, items, springs, crumbles, spikes, flags, obsidian, boss, bossDefeatedAt, golem, crab, automaton, yeti, dispensers, tide, hydra, torches, shade, geysers } = w);
     players = w.players.map((p) => Object.assign(p, { ch: CHARACTERS[p.ch], controls: CHARACTERS[p.controls].keys }));
     checkpoint = s.checkpoint ? unpackWorld(s.checkpoint) : null;
     shots = s.shots.map((x) => ({ ...x, owner: players[x.owner] }));
@@ -3746,6 +3977,7 @@
         if (golem && state === "playing") updateGolem();
         if (crab && state === "playing") updateCrab();
         if (automaton && state === "playing") updateAutomaton();
+        if (yeti && state === "playing") updateYeti();
         if (hydra && state === "playing") updateHydra();
         updateDispensers();
         updateBreakables();
@@ -6497,6 +6729,114 @@
     }
   }
 
+  // Yeti: pelaje blanco, cara azulada con cuernos pequeños; levanta los brazos antes del zarpazo
+  // y se hunde en el agua al recibir un golpe.
+  function drawYeti(t) {
+    const y = yeti;
+    if (!y || y.state === "dead") return;
+    const sink = y.state === "dunk" ? Math.min(34, (YETI_DUNK - y.timer) * 1.2) : 0;
+    const x = y.x + (y.state === "dying" ? Math.sin(t * 60) * 3 : 0);
+    const top = y.y + sink;
+    const cx = x + YETI_W / 2;
+    const arm = y.state === "windup" ? Math.min(1, (YETI_WINDUP - y.timer) / 20) : 0;
+    const step = y.state === "walk" ? Math.sin(y.anim * 0.18) * 3 : 0;
+    ctx.save();
+    if (y.state === "dunk" && y.timer % 10 < 5) ctx.globalAlpha = 0.8;
+    ctx.beginPath();
+    ctx.rect(x - 40, top - 40, YETI_W + 80, y.floorY + YETI_H - top + 40 - (sink ? 2 : 0)); // lo hundido no se ve
+    ctx.clip();
+    // Piernas
+    ctx.fillStyle = "#dfe9f2";
+    ctx.fillRect(x + 12, top + YETI_H - 18 + Math.max(0, step), 18, 18);
+    ctx.fillRect(x + YETI_W - 30, top + YETI_H - 18 + Math.max(0, -step), 18, 18);
+    // Brazos (arriba antes del zarpazo)
+    for (const side of [-1, 1]) {
+      const sx = cx + side * (YETI_W / 2 - 6);
+      const angle = side * (0.3 + arm * 2.4);
+      ctx.strokeStyle = "#e8f0f6";
+      ctx.lineWidth = 14;
+      ctx.lineCap = "round";
+      ctx.beginPath();
+      ctx.moveTo(sx, top + 30);
+      ctx.lineTo(sx + Math.sin(angle) * 26, top + 30 + Math.cos(angle) * 26);
+      ctx.stroke();
+      ctx.fillStyle = y.state === "windup" && y.timer % 12 < 6 ? "#ff8a8a" : "#9fb8cc";
+      ctx.beginPath();
+      ctx.arc(sx + Math.sin(angle) * 30, top + 30 + Math.cos(angle) * 30, 6, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    ctx.lineCap = "butt";
+    // Cuerpo peludo
+    ctx.fillStyle = "#f4f8fb";
+    roundRectPath(ctx, x + 6, top + 14, YETI_W - 12, YETI_H - 26, 22);
+    ctx.fill();
+    ctx.fillStyle = "#dfe9f2";
+    for (let k = 0; k < 6; k++) ctx.fillRect(x + 12 + k * 9, top + 18 + ((k * 7) % 10), 3, 8);
+    // Cara
+    ctx.fillStyle = "#7c9cb8";
+    roundRectPath(ctx, cx - 18, top + 6, 36, 28, 10);
+    ctx.fill();
+    ctx.fillStyle = "#c9d6e0";
+    ctx.beginPath();
+    ctx.moveTo(cx - 16, top + 8);
+    ctx.lineTo(cx - 22, top - 4);
+    ctx.lineTo(cx - 10, top + 6);
+    ctx.moveTo(cx + 16, top + 8);
+    ctx.lineTo(cx + 22, top - 4);
+    ctx.lineTo(cx + 10, top + 6);
+    ctx.fill();
+    ctx.fillStyle = y.state === "dunk" ? "#ffffff" : "#1a2a3a";
+    ctx.fillRect(cx - 10 + y.dir * 2, top + 14, 6, 5);
+    ctx.fillRect(cx + 4 + y.dir * 2, top + 14, 6, 5);
+    ctx.fillStyle = "#3a4c5a";
+    ctx.fillRect(cx - 6, top + 25, 12, 3);
+    ctx.restore();
+    if (y.state === "breath") {
+      // Aliento helado hacia el lago
+      ctx.fillStyle = "rgba(220,245,255,0.5)";
+      ctx.beginPath();
+      ctx.moveTo(cx + y.dir * 18, top + 24);
+      ctx.lineTo(cx + y.dir * 110, top + 4 + Math.sin(t * 8) * 6);
+      ctx.lineTo(cx + y.dir * 110, top + 54 + Math.sin(t * 7) * 6);
+      ctx.fill();
+    }
+    if (y.flash > 0) {
+      ctx.fillStyle = `rgba(255,255,255,${y.flash / 45})`;
+      roundRectPath(ctx, x, top, YETI_W, YETI_H - sink, 16);
+      ctx.fill();
+    }
+  }
+
+  function drawYetiBar() {
+    const y = yeti;
+    if (y.state === "dead") {
+      const since = levelFrames - bossDefeatedAt;
+      if (since < 240) {
+        ctx.save();
+        ctx.globalAlpha = Math.min(1, since / 20, (240 - since) / 40);
+        ctx.fillStyle = "rgba(10,8,5,0.75)";
+        ctx.fillRect(0, H / 2 - 50, W, 100);
+        text(`¡${y.name} se fue montaña abajo!`, W / 2, H / 2 - 12, 34, "#ffe08a");
+        text("El sello de las puertas se rompe…", W / 2, H / 2 + 26, 18, "#d9c9a6", "center", "normal");
+        ctx.restore();
+      }
+      return;
+    }
+    const w = Math.min(420, W - 120);
+    const x = W / 2 - w / 2;
+    const yy = T + 12;
+    text(y.name, W / 2, yy, 15, "#ffe9b8");
+    const seg = w / YETI_HP;
+    for (let i = 0; i < YETI_HP; i++) {
+      ctx.fillStyle = "rgba(0,0,0,0.6)";
+      ctx.fillRect(x + i * seg + 2, yy + 12, seg - 4, 10);
+      if (i >= y.hits) {
+        ctx.fillStyle = mix("#bfe9ff", "#1f7bff", i / YETI_HP);
+        ctx.fillRect(x + i * seg + 2, yy + 12, seg - 4, 10);
+      }
+    }
+  }
+
   // Marea: una capa translúcida del líquido que lo cubre todo por debajo de la superficie.
   function drawTide(t) {
     if (!tide || tide.y >= tide.bottom) return;
@@ -6927,6 +7267,7 @@
     drawGolem(t);
     drawCrab(t);
     drawAutomaton(t);
+    drawYeti(t);
     drawHydra(t);
     drawShade(t);
     drawGeyserJets(t);
@@ -6966,6 +7307,9 @@
         drawToast(true);
       } else if (automaton && levelFrames > HINT_FRAMES / 2) {
         drawAutomatonBar();
+        drawToast(true);
+      } else if (yeti && levelFrames > HINT_FRAMES / 2) {
+        drawYetiBar();
         drawToast(true);
       }
       else if (shade && levelFrames > HINT_FRAMES / 2) {
