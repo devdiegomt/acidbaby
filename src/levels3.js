@@ -13,6 +13,13 @@
 //          nada). Si el lago se derrite bajo él, se hunde (aguanta 4), sale a la orilla y lo vuelve a
 //          congelar. yeti: { name, left, right }. Al caer se rompen los sellos /
 
+// Las islas flotantes (Mundo 2):
+//   ☁      nube: se atraviesa saltando desde abajo (y de lado) y aguanta a quien cae encima.
+//   gust: { dir: 1 | -1 | "alternate", calm, blow, strength, offset }  ráfagas de viento: cada
+//          calm + blow frames sopla de lado durante blow frames (avisa antes), empujando a los tres
+//          strength píxeles por frame. Detrás de una pared (hasta 3 casillas) no empuja.
+//          "alternate" cambia de sentido en cada ráfaga.
+
 const SEASON_3 = {
   id: "t3",
   name: "Temporada 3",
@@ -176,6 +183,61 @@ const SEASON_3 = {
             "#                  r              /    #",
             "#fwb;                     Ш       /123 #",
             "#######◇◇◇◇◇◇◇◇◇◇◇◇##◇◇◇◇◇◇◇◇◇◇◇◇#######",
+          ],
+        },
+      ],
+    },
+    {
+      name: "Las islas flotantes",
+      theme: "sky",
+      levels: [
+        {
+          name: "Entre nubes",
+          hint: "Las nubes se atraviesan saltando desde abajo y aguantan a quien cae encima. ¡Arriba!",
+          map: [
+            "########################################",
+            "#                                      #",
+            "#                              1 2 3   #",
+            "#                          #############",
+            "#             e                        #",
+            "#            ☁☁☁☁    ☁☁☁☁☁             #",
+            "#                                      #",
+            "#                 ☁☁☁☁☁                #",
+            "#                       z              #",
+            "#              ☁☁☁☁☁  ☁☁☁☁             #",
+            "#                                      #",
+            "#           ☁☁☁☁☁                      #",
+            "#  r                                   #",
+            "# ☁☁☁☁   ☁☁☁☁☁                         #",
+            "#                                      #",
+            "#     ☁☁☁☁☁                            #",
+            "#fwb                                   #",
+            "######~~~~AAAALLLL~~~~AAAALLLL~~~~AAAAL#",
+          ],
+        },
+        {
+          name: "Ráfagas",
+          hint: "El viento cambia de lado en cada ráfaga. Detrás de un pilar no empuja: escóndanse ahí y crucen cuando esté en calma.",
+          gust: { dir: "alternate", calm: 240, blow: 100, strength: 1.6 },
+          map: [
+            "########################################",
+            "#                                      #",
+            "#                                      #",
+            "#                                      #",
+            "#                                      #",
+            "#                                      #",
+            "#                                      #",
+            "#                                      #",
+            "#                                      #",
+            "#                                      #",
+            "#             r     z       e          #",
+            "#       #     #    ☁☁☁      #    #     #",
+            "#fwb    #     #             #    #1 2 3#",
+            "#########  #######     ######### #######",
+            "#                                      #",
+            "#                                      #",
+            "#                                      #",
+            "#~~~~AAAALLLL~~~~AAAALLLL~~~~AAAALLLL~~#",
           ],
         },
       ],

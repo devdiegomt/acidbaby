@@ -97,6 +97,7 @@
     if (data.crab && typeof data.crab === "object") clean.crab = { ...data.crab }; // el Cangrejo
     if (data.automaton && typeof data.automaton === "object") clean.automaton = { ...data.automaton }; // el Autómata
     if (data.yeti && typeof data.yeti === "object") clean.yeti = { ...data.yeti }; // el Yeti
+    if (data.gust && typeof data.gust === "object") clean.gust = { ...data.gust }; // las ráfagas
     if (data.dark) clean.dark = true; // nivel a oscuras
     return clean;
   }
@@ -115,7 +116,7 @@
       }
       lines.push("  },");
     }
-    for (const cfg of ["boss", "golem", "tide", "hydra", "shade", "geyser", "crab", "automaton", "yeti"]) {
+    for (const cfg of ["boss", "golem", "tide", "hydra", "shade", "geyser", "crab", "automaton", "yeti", "gust"]) {
       if (!data[cfg]) continue;
       const fields = Object.entries(data[cfg]).map(([k, v]) => `${k}: ${q(v)}`);
       lines.push(`  ${cfg}: { ${fields.join(", ")} },`);
@@ -264,6 +265,7 @@
       ["↥", "Géiser de lava (en la fila del suelo)", "#ff5a1f"], ["↟", "Géiser de agua (en la fila del suelo)", "#1f7bff"],
       ["⇞", "Géiser de ácido (en la fila del suelo)", "#46c22a"],
       ["_", "Suelo de hielo (resbala; a Chispa no)", "#9fd8f0"], ["◇", "Agua congelada (Chispa la derrite)", "#bfe9ff"],
+      ["☁", "Nube (se atraviesa desde abajo)", "#ffffff"],
     ]],
     ["Bichos", [
       ["@", "Escarabajo", "#9b4dca"], ["&", "Murciélago", "#8a63c4"], ["!", "Erizo (no se pisa)", "#8a5a2b"],
@@ -328,6 +330,7 @@
     if (clean.crab) data.crab = clean.crab;
     if (clean.automaton) data.automaton = clean.automaton;
     if (clean.yeti) data.yeti = clean.yeti;
+    if (clean.gust) data.gust = clean.gust;
     if (clean.dark) data.dark = true;
   }
 
