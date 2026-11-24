@@ -19,6 +19,11 @@
 //          calm + blow frames sopla de lado durante blow frames (avisa antes), empujando a los tres
 //          strength píxeles por frame. Detrás de una pared (hasta 3 casillas) no empuja.
 //          "alternate" cambia de sentido en cada ráfaga.
+//   Ѱ      el Ave de la tormenta (jefe): vuela por arriba y, por turnos, se lanza en picada contra
+//          alguien, bate las alas (ráfagas que soplan alejándose de ella; el nivel no lleva "gust") o
+//          lanza un rayo sobre la columna de cada uno (avisa; bajo un techo no llega). Si se estrella
+//          contra el suelo queda mareada: saltarle encima es un golpe (aguanta 4).
+//          storm: { name, left, right }. Al caer se rompen los sellos /.
 
 const SEASON_3 = {
   id: "t3",
@@ -318,6 +323,31 @@ const SEASON_3 = {
             "#                                      #",
             "#                                      #",
             "#~~~AAAALLLL~~~~AAAALLLL~~~~AAAALLLL~~~#",
+          ],
+        },
+        {
+          name: "El Ave de la tormenta",
+          hint: "¡El Ave de la tormenta! Cuando bata las alas, escóndanse detrás de los bloques para que el viento no los tire a los charcos.",
+          storm: { name: "El Ave de la tormenta", left: 1, right: 38 },
+          map: [
+            "########################################",
+            "#                                      #",
+            "#                  Ѱ                   #",
+            "#                                      #",
+            "#                                      #",
+            "#                                      #",
+            "#                                      #",
+            "#                                      #",
+            "#                                      #",
+            "#                                      #",
+            "#                                 ######",
+            "#   ####                     #### /    #",
+            "#                 ☁☁☁☁            /    #",
+            "#fwb     #      #      #      #   /123 #",
+            "###########~~######AA#####LL############",
+            "########################################",
+            "########################################",
+            "########################################",
           ],
         },
       ],

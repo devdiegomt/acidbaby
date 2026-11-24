@@ -127,7 +127,7 @@
 
   // Avisos de novedades: salen en la portada, en el menú de niveles y en la pausa.
   // Para cambiarlos (o quitarlos), basta con editar esta lista.
-  const NEWS = ["¡Nuevo! Temporada 3: Las alturas", "Mundo 2: Las islas flotantes, del 2-1 al 2-5"];
+  const NEWS = ["¡Nuevo! Temporada 3: Las alturas", "Mundo 2 completo: Las islas flotantes"];
 
   // Jefe del Mundo 3 (Temporada 2): la Sombra de la mina. Flota hacia Gota o Acidito atravesando
   // las paredes; si se queda un rato a la luz de una antorcha encendida se quema (un golpe), apaga
@@ -187,6 +187,29 @@
   const YETI_DUNK = 70; // frames hundido en el agua tras un golpe
   const YETI_BREATH = 80; // frames soplando en la orilla antes de que el lago se vuelva a congelar
   const YETI_SNOW_RATE = [220, 190, 160, 130];
+
+  // Jefe del Mundo 2 de la temporada 3: el Ave de la tormenta. Vuela por arriba y, por turnos, bate
+  // las alas (ráfagas que soplan alejándose de ella), lanza rayos sobre la columna de cada uno (bajo
+  // un techo no llegan) o se lanza en picada contra alguien. Si la esquivan, se estrella y queda
+  // mareada: hay que saltarle encima (aguanta 4).
+  const STORM_TILE = "Ѱ";
+  const STORM_W = 64;
+  const STORM_H = 44;
+  const STORM_HP = 4;
+  const STORM_FLY_Y = 4 * T + 4; // altura a la que vuela (por debajo de la barra de vida y los avisos)
+  const STORM_SPEED = [1.6, 1.9, 2.2, 2.5];
+  const STORM_FLY = [150, 130, 115, 100]; // frames volando entre ataque y ataque
+  const STORM_ATTACKS = ["dive", "flap", "dive", "bolt"];
+  const STORM_DIVE_WARN = 60; // frames chillando antes de la picada (los últimos, ya sin apuntar)
+  const STORM_DIVE_LOCK = 18;
+  const STORM_DIVE_SPEED = [7, 7.5, 8, 8.5];
+  const STORM_STUN = [180, 160, 145, 130]; // frames mareada en el suelo
+  const STORM_RISE = 3;
+  const STORM_BOLT_WARN = 75; // aviso del rayo
+  const STORM_BOLT_STRIKE = 16;
+  const STORM_FLAP_WARN = 60;
+  const STORM_FLAP_BLOW = 110;
+  const STORM_GUST = 1.6;
 
   const FONT = '"Segoe UI", system-ui, sans-serif';
   const MECH_COLORS = ["#f2c14e", "#c86bff", "#ff6fa8", "#4fd6c8", "#f0f0f0"];
@@ -779,6 +802,7 @@
   let crab = null; // el Cangrejo hirviente (jefe del Mundo 4 de la temporada 2)
   let automaton = null; // el Autómata de la forja (jefe del Mundo 5 de la temporada 2)
   let yeti = null; // el Yeti de la cumbre (jefe del Mundo 1 de la temporada 3)
+  let storm = null; // el Ave de la tormenta (jefe del Mundo 2 de la temporada 3)
   let torches = []; // antorchas: { c, r, lit }
   let shade = null; // la Sombra de la mina (jefe del Mundo 3 de la temporada 2)
   let hydra = null; // la Hidra del aljibe (jefe del Mundo 2 de la temporada 2)
@@ -869,6 +893,7 @@
     crab = null;
     automaton = null;
     yeti = null;
+    storm = null;
     hydra = null;
     torches = [];
     shade = null;
@@ -974,6 +999,10 @@
         }
         if (t === YETI_TILE) {
           yeti = { c, r }; // se completa al final, cuando ya se conoce el lago
+          continue;
+        }
+        if (t === STORM_TILE) {
+          storm = { c, r }; // se completa al final, junto con sus ráfagas
           continue;
         }
         if (t === HYDRA_TILE) {
@@ -1108,6 +1137,11 @@
       });
     } else if (level.geyser) fail("hay \"geyser\" pero el mapa no tiene géiseres (↥ ↟ ⇞)");
 
+    if (storm) {
+      if (level.gust) fail("el Ave de la tormenta hace sus propias ráfagas: quiten \"gust\" del nivel");
+      storm = makeStorm(storm.c, storm.r);
+      gust = { t: 0, dir: 1, blowing: false, warn: false, boss: true, cfg: { ...GUST_DEFAULTS, strength: STORM_GUST } };
+    }
     if (yeti) {
       if (!breakables.some((b) => b.type === FROZEN_TILE)) fail("el Yeti necesita un lago de agua congelada (◇)");
       yeti = makeYeti(yeti.c, yeti.r);
@@ -1166,7 +1200,7 @@
   function liveState() {
     return {
       grid, liquids, breakables, dissolving, barriers, fans, doors, boxes, gems, mechs, portals,
-      enemies, items, springs, crumbles, spikes, flags, obsidian, boss, bossDefeatedAt, golem, crab, automaton, yeti, dispensers, tide, hydra, torches, shade, geysers, gust,
+      enemies, items, springs, crumbles, spikes, flags, obsidian, boss, bossDefeatedAt, golem, crab, automaton, yeti, storm, dispensers, tide, hydra, torches, shade, geysers, gust,
       players: players.map((p) => ({
         ...p,
         ch: CHARACTERS.indexOf(p.ch),
@@ -1189,7 +1223,7 @@
   function backToCheckpoint() {
     const s = structuredClone(checkpoint);
     ({ grid, liquids, breakables, dissolving, barriers, fans, doors, boxes, gems, mechs, portals } = s);
-    ({ enemies, items, springs, crumbles, spikes, flags, obsidian, boss, bossDefeatedAt, golem, crab, automaton, yeti, dispensers, tide, hydra, torches, shade, geysers, gust } = s);
+    ({ enemies, items, springs, crumbles, spikes, flags, obsidian, boss, bossDefeatedAt, golem, crab, automaton, yeti, storm, dispensers, tide, hydra, torches, shade, geysers, gust } = s);
     players = s.players.map((p) =>
       Object.assign(p, {
         ch: CHARACTERS[p.ch],
@@ -3111,6 +3145,253 @@
     breakSeals();
   }
 
+  // ---------------------------------------------------------------------------
+  // Ave de la tormenta
+  // ---------------------------------------------------------------------------
+  function makeStorm(c) {
+    const cfg = level.storm || {};
+    const minX = (cfg.left ?? 1) * T;
+    const maxX = ((cfg.right ?? grid[0].length - 2) + 1) * T - STORM_W;
+    return {
+      name: cfg.name || "El Ave de la tormenta",
+      x: Math.max(minX, Math.min(maxX, c * T + T / 2 - STORM_W / 2)),
+      y: STORM_FLY_Y,
+      minX,
+      maxX,
+      dir: 1,
+      hits: 0,
+      state: "intro", // intro | fly | divewarn | dive | stunned | rise | flapwarn | flap | cast | dying | dead
+      timer: 120,
+      attack: 0, // cuántos ataques lleva (elige el siguiente y a quién apunta)
+      tx: 0, // a dónde apunta la picada
+      ty: 0,
+      vx: 0,
+      vy: 0,
+      bolts: [], // rayos: { c, t, strike, bottom }
+      flash: 0,
+      anim: 0,
+    };
+  }
+
+  const stormBody = (s) => ({ x: s.x + 6, y: s.y + 6, w: STORM_W - 12, h: STORM_H - 8 });
+  // ¿Hay suelo (o un charco) justo debajo del ave? Las nubes no la paran.
+  function stormGrounded(s) {
+    const r = Math.floor((s.y + STORM_H) / T);
+    for (let c = Math.floor((s.x + 10) / T); c <= Math.floor((s.x + STORM_W - 11) / T); c++) {
+      if (isSolidTile(tileAt(c, r))) return r;
+    }
+    return -1;
+  }
+
+  function updateStorm() {
+    const s = storm;
+    if (s.flash > 0) s.flash--;
+    s.anim++;
+    if (s.state === "dead") return;
+    if (s.state === "dying") {
+      shake = Math.max(shake, 3);
+      if (s.timer % 6 === 0) burst(s.x + Math.random() * STORM_W, s.y + Math.random() * STORM_H, ["#ffe066", "#ffffff", "#6b7fa8"], 10);
+      if (--s.timer <= 0) defeatStorm(s);
+      return;
+    }
+    if (s.state === "intro") {
+      if (--s.timer <= 0) {
+        s.state = "fly";
+        s.timer = STORM_FLY[0];
+        toast = { text: "Cuando chille, apártense: si se estrella, queda mareada. ¡Sáltenle encima! Bajo los techos no caen rayos.", frames: TOAST_FRAMES };
+      }
+      return;
+    }
+    const lvl = Math.min(s.hits, STORM_SPEED.length - 1);
+    const cx = s.x + STORM_W / 2;
+    updateBolts(s);
+    if (state !== "playing") return;
+
+    if (s.state === "fly") {
+      s.x += s.dir * STORM_SPEED[lvl];
+      if (s.x <= s.minX || s.x >= s.maxX) {
+        s.x = Math.max(s.minX, Math.min(s.maxX, s.x));
+        s.dir = -s.dir;
+      }
+      s.y = STORM_FLY_Y + Math.sin(s.anim * 0.06) * 6;
+      if (--s.timer <= 0) startStormAttack(s);
+    } else if (s.state === "divewarn") {
+      // Se acerca por arriba al blanco y, en los últimos frames, deja de apuntar.
+      const target = players[s.target];
+      if (s.timer > STORM_DIVE_LOCK && target?.alive) {
+        s.tx = target.x + target.w / 2;
+        s.ty = target.y + target.h;
+        const dx = s.tx - cx;
+        s.x = Math.max(s.minX, Math.min(s.maxX, s.x + Math.sign(dx) * Math.min(Math.abs(dx), STORM_SPEED[lvl] * 1.5)));
+        s.dir = Math.sign(dx) || s.dir;
+      }
+      if (--s.timer <= 0) {
+        const dx = s.tx - cx;
+        const dy = s.ty - (s.y + STORM_H);
+        const len = Math.hypot(dx, dy) || 1;
+        s.vx = (dx / len) * STORM_DIVE_SPEED[lvl];
+        s.vy = Math.max(2, (dy / len) * STORM_DIVE_SPEED[lvl]);
+        s.state = "dive";
+        sound.play("roar");
+      }
+    } else if (s.state === "dive") {
+      for (let k = 0; k < 4; k++) {
+        s.x = Math.max(s.minX, Math.min(s.maxX, s.x + s.vx / 4));
+        s.y += s.vy / 4;
+        const r = stormGrounded(s);
+        if (r >= 0 || s.y + STORM_H >= LH - T) {
+          if (r >= 0) s.y = r * T - STORM_H;
+          s.state = "stunned";
+          s.timer = STORM_STUN[lvl];
+          shake = Math.max(shake, 10);
+          burst(s.x + STORM_W / 2, s.y + STORM_H, ["#ffffff", "#c9d6ee", "#ffe066"], 24);
+          sound.play("boom");
+          break;
+        }
+      }
+    } else if (s.state === "stunned") {
+      if (stormGrounded(s) < 0) s.y += 4; // si quedó en el aire, cae
+      if (--s.timer <= 0) s.state = "rise";
+      // ¡Encima! Quien le cae encima le da un golpe y sale rebotando.
+      for (const p of players) {
+        if (!p.alive || p.vy <= 0) continue;
+        const feet = p.y + p.h;
+        if (p.x + p.w > s.x + 8 && p.x < s.x + STORM_W - 8 && feet >= s.y - 4 && feet <= s.y + 20) {
+          p.vy = -JUMP_SPEED * 0.85;
+          hitStorm(s);
+          return;
+        }
+      }
+    } else if (s.state === "rise") {
+      s.y = Math.max(STORM_FLY_Y, s.y - STORM_RISE);
+      if (s.y <= STORM_FLY_Y) {
+        s.state = "fly";
+        s.timer = STORM_FLY[lvl];
+      }
+    } else if (s.state === "flapwarn") {
+      if (--s.timer <= 0) {
+        s.state = "flap";
+        s.timer = STORM_FLAP_BLOW;
+        gust.warn = false;
+        gust.blowing = true;
+        sound.play("wind");
+      }
+    } else if (s.state === "flap") {
+      gust.t++;
+      if (--s.timer <= 0) {
+        gust.blowing = false;
+        s.state = "fly";
+        s.timer = STORM_FLY[lvl];
+      }
+    } else if (s.state === "cast") {
+      if (--s.timer <= 0) {
+        s.state = "fly";
+        s.timer = STORM_FLY[lvl];
+      }
+    }
+
+    // Tocarla mientras vuela o se lanza duele (mareada en el suelo, no).
+    if (s.state !== "stunned" && s.state !== "rise") {
+      const body = stormBody(s);
+      for (const p of players) {
+        if (p.alive && p.hurt === 0 && intersects(body.x, body.y, body.w, body.h, p)) {
+          hurtPlayer(p, { x: s.x, w: STORM_W }, "chocó con el Ave de la tormenta");
+          if (state !== "playing") return;
+        }
+      }
+    }
+  }
+
+  function startStormAttack(s) {
+    const kind = STORM_ATTACKS[s.attack % STORM_ATTACKS.length];
+    const alive = players.map((p, i) => i).filter((i) => players[i].alive);
+    s.attack++;
+    if (!alive.length) return;
+    if (kind === "dive") {
+      s.target = alive[Math.floor(s.attack / 2) % alive.length];
+      s.state = "divewarn";
+      s.timer = STORM_DIVE_WARN;
+      sound.play("hiss");
+    } else if (kind === "flap") {
+      // Sopla alejándose de ella: desde la izquierda, hacia la derecha, y al revés.
+      const mid = (s.minX + s.maxX + STORM_W) / 2;
+      gust.dir = s.x + STORM_W / 2 < mid ? 1 : -1;
+      gust.warn = true;
+      s.state = "flapwarn";
+      s.timer = STORM_FLAP_WARN;
+    } else {
+      // Un rayo sobre la columna de cada uno (con aviso).
+      for (const i of alive) {
+        const p = players[i];
+        const c = Math.floor((p.x + p.w / 2) / T);
+        if (!s.bolts.some((b) => b.c === c)) s.bolts.push({ c, t: STORM_BOLT_WARN, strike: false, bottom: 0 });
+      }
+      s.state = "cast";
+      s.timer = 40;
+      sound.play("hiss");
+    }
+  }
+
+  function updateBolts(s) {
+    for (const b of s.bolts) {
+      if (--b.t > 0) {
+        if (!b.strike) continue;
+        // Mientras cae, quema a quien esté en la columna por encima del primer techo.
+        for (const p of players) {
+          if (p.alive && p.hurt === 0 && intersects(b.c * T + 6, 0, T - 12, b.bottom, p)) {
+            hurtPlayer(p, { x: b.c * T, w: T }, "recibió un rayo");
+            if (state !== "playing") return;
+          }
+        }
+        continue;
+      }
+      if (b.strike) {
+        b.done = true;
+        continue;
+      }
+      b.strike = true;
+      b.t = STORM_BOLT_STRIKE;
+      let r = 1;
+      while (r < grid.length - 1 && !isSolidTile(tileAt(b.c, r))) r++;
+      b.bottom = r * T;
+      shake = Math.max(shake, 5);
+      burst(b.c * T + T / 2, b.bottom, ["#fff7b0", "#ffe066", "#ffffff"], 16);
+      sound.play("boom");
+    }
+    s.bolts = s.bolts.filter((b) => !b.done);
+  }
+
+  function hitStorm(s) {
+    s.hits++;
+    s.flash = 30;
+    shake = Math.max(shake, 8);
+    burst(s.x + STORM_W / 2, s.y, ["#ffe066", "#ffffff", "#6b7fa8"], 40);
+    sound.play("bossHit");
+    if (s.hits >= STORM_HP) {
+      s.state = "dying";
+      s.timer = 100;
+      s.bolts = [];
+      gust.blowing = gust.warn = false;
+      sound.play("roar");
+      return;
+    }
+    s.state = "rise";
+    toast = { text: `¡Toma! Le quedan ${STORM_HP - s.hits}`, frames: TOAST_FRAMES / 2 };
+  }
+
+  function defeatStorm(s) {
+    s.state = "dead";
+    bossDefeatedAt = levelFrames;
+    shake = 30;
+    burst(s.x + STORM_W / 2, s.y + STORM_H / 2, ["#ffe066", "#ffffff", "#6b7fa8"], 90);
+    sound.play("boom");
+    sound.play("win");
+    for (const e of enemies) if (e.alive) defeatEnemy(e);
+    s.bolts = [];
+    gust.blowing = gust.warn = false;
+    breakSeals();
+  }
+
   // La marea espera un rato y luego sube; un desagüe activo la hace bajar. Quien no es de su
   // elemento y se queda con la cabeza por debajo de la superficie se hunde.
   function updateTide() {
@@ -3847,7 +4128,7 @@
     for (const g of geysers) [g.h, g.plugged ? 1 : 0].forEach(add);
     if (gust) [gust.t, gust.dir, gust.blowing ? 1 : 0].forEach(add);
     [levelFrames, STATE_CODE[state] || 0, tide ? tide.y : 0, gems.filter((g) => g.taken).length].forEach(add);
-    for (const b of [boss, golem, hydra, shade, crab, automaton, yeti]) if (b) [b.x || 0, b.y || 0, b.hits || b.hp || 0].forEach(add);
+    for (const b of [boss, golem, hydra, shade, crab, automaton, yeti, storm]) if (b) [b.x || 0, b.y || 0, b.hits || b.hp || 0].forEach(add);
     return h;
   }
 
@@ -3979,7 +4260,7 @@
     }
     const w = unpackWorld(s.world);
     ({ grid, liquids, breakables, dissolving, barriers, fans, doors, boxes, gems, mechs, portals } = w);
-    ({ enemies, items, springs, crumbles, spikes, flags, obsidian, boss, bossDefeatedAt, golem, crab, automaton, yeti, dispensers, tide, hydra, torches, shade, geysers, gust } = w);
+    ({ enemies, items, springs, crumbles, spikes, flags, obsidian, boss, bossDefeatedAt, golem, crab, automaton, yeti, storm, dispensers, tide, hydra, torches, shade, geysers, gust } = w);
     players = w.players.map((p) => Object.assign(p, { ch: CHARACTERS[p.ch], controls: CHARACTERS[p.controls].keys }));
     checkpoint = s.checkpoint ? unpackWorld(s.checkpoint) : null;
     shots = s.shots.map((x) => ({ ...x, owner: players[x.owner] }));
@@ -4021,7 +4302,7 @@
         updateMechs();
         updateFans();
         if (geysers.length) updateGeysers();
-        if (gust) updateGust();
+        if (gust && !gust.boss) updateGust();
         for (const p of players) updatePlayer(p);
         updateFlags();
         if (tide) updateTide();
@@ -4040,6 +4321,7 @@
         if (crab && state === "playing") updateCrab();
         if (automaton && state === "playing") updateAutomaton();
         if (yeti && state === "playing") updateYeti();
+        if (storm && state === "playing") updateStorm();
         if (hydra && state === "playing") updateHydra();
         updateDispensers();
         updateBreakables();
@@ -5338,7 +5620,7 @@
       ctx.stroke();
     }
     const label = `${gust.dir > 0 ? "≫" : "≪"} ${gust.blowing ? "¡Ráfaga!" : "Viene una ráfaga"} ${gust.dir > 0 ? "≫" : "≪"}`;
-    text(label, LW / 2, T * 3, 18, gust.blowing ? "#ffffff" : "rgba(255,255,255,0.85)");
+    text(label, LW / 2, storm ? T * 6 : T * 3, 18, gust.blowing ? "#ffffff" : "rgba(255,255,255,0.85)");
   }
 
   function drawFans(t) {
@@ -6960,6 +7242,159 @@
     }
   }
 
+  // Ave de la tormenta: plumaje azul pizarra, cresta amarilla en zigzag, pico naranja. Bate las
+  // alas (rápido cuando sopla), chilla con los ojos rojos antes de la picada y, mareada, ve estrellas.
+  function drawStorm(t) {
+    const s = storm;
+    if (!s) return;
+    // Rayos: primero la columna que avisa; luego el relámpago hasta el primer techo.
+    for (const b of s.bolts) {
+      const x = b.c * T;
+      if (!b.strike) {
+        ctx.fillStyle = `rgba(255,236,120,${0.12 + 0.1 * Math.sin(t * 14)})`;
+        ctx.fillRect(x + 4, 0, T - 8, LH);
+        ctx.fillStyle = "rgba(60,70,95,0.85)";
+        for (const [dx, rad] of [[6, 9], [16, 12], [26, 9]]) {
+          ctx.beginPath();
+          ctx.arc(x + dx, T + 6, rad, 0, Math.PI * 2);
+          ctx.fill();
+        }
+      } else {
+        ctx.save();
+        ctx.strokeStyle = "rgba(255,240,150,0.45)";
+        ctx.lineWidth = 12;
+        ctx.beginPath();
+        ctx.moveTo(x + T / 2, 0);
+        ctx.lineTo(x + T / 2, b.bottom);
+        ctx.stroke();
+        ctx.strokeStyle = "#fffbe0";
+        ctx.lineWidth = 3;
+        ctx.beginPath();
+        ctx.moveTo(x + T / 2, 0);
+        for (let y = 24; y < b.bottom; y += 24) ctx.lineTo(x + T / 2 + ((y / 24 + b.t) % 2 ? 7 : -7), y);
+        ctx.lineTo(x + T / 2, b.bottom);
+        ctx.stroke();
+        ctx.restore();
+      }
+    }
+    if (s.state === "dead") return;
+    const shakeX = s.state === "divewarn" ? Math.sin(t * 60) * 2 : 0;
+    const x = s.x + shakeX;
+    const y = s.y;
+    const cx = x + STORM_W / 2;
+    const stunned = s.state === "stunned";
+    const speed = s.state === "flap" || s.state === "flapwarn" ? 0.6 : stunned ? 0 : 0.2;
+    const flap = stunned ? 0.9 : Math.sin(s.anim * speed);
+    ctx.save();
+    if (s.state === "dying") ctx.globalAlpha = Math.max(0.2, s.timer / 100);
+    // Alas
+    ctx.fillStyle = "#4a5d86";
+    for (const side of [-1, 1]) {
+      ctx.beginPath();
+      ctx.moveTo(cx + side * 10, y + 18);
+      ctx.lineTo(cx + side * 44, y + 8 - flap * 18);
+      ctx.lineTo(cx + side * 38, y + 26 - flap * 8);
+      ctx.lineTo(cx + side * 26, y + 30);
+      ctx.closePath();
+      ctx.fill();
+    }
+    // Cuerpo
+    ctx.fillStyle = s.flash > 0 && s.flash % 6 < 3 ? "#ffffff" : "#3b4a6b";
+    ctx.beginPath();
+    ctx.ellipse(cx, y + 24, 22, 18, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = "#c9d6ee";
+    ctx.beginPath();
+    ctx.ellipse(cx, y + 30, 13, 10, 0, 0, Math.PI * 2);
+    ctx.fill();
+    // Cresta en zigzag
+    ctx.fillStyle = "#ffe066";
+    ctx.beginPath();
+    ctx.moveTo(cx - 8, y + 8);
+    ctx.lineTo(cx - 2, y - 6);
+    ctx.lineTo(cx + 1, y + 2);
+    ctx.lineTo(cx + 7, y - 9);
+    ctx.lineTo(cx + 6, y + 8);
+    ctx.closePath();
+    ctx.fill();
+    // Pico
+    const d = s.dir || 1;
+    ctx.fillStyle = "#ff9f2e";
+    ctx.beginPath();
+    ctx.moveTo(cx + d * 14, y + 18);
+    ctx.lineTo(cx + d * 28, y + 23);
+    ctx.lineTo(cx + d * 14, y + 27);
+    ctx.closePath();
+    ctx.fill();
+    // Ojo
+    const ex = cx + d * 8;
+    if (stunned) {
+      ctx.strokeStyle = "#ffffff";
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.moveTo(ex - 4, y + 13);
+      ctx.lineTo(ex + 4, y + 21);
+      ctx.moveTo(ex + 4, y + 13);
+      ctx.lineTo(ex - 4, y + 21);
+      ctx.stroke();
+      // Estrellitas dando vueltas
+      for (let k = 0; k < 3; k++) {
+        const a = t * 4 + (k * Math.PI * 2) / 3;
+        text("★", cx + Math.cos(a) * 26, y - 8 + Math.sin(a) * 6, 12, "#ffe066");
+      }
+    } else {
+      ctx.fillStyle = "#ffffff";
+      ctx.beginPath();
+      ctx.arc(ex, y + 17, 5, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = s.state === "divewarn" ? "#ff3b3b" : "#1b1b2b";
+      ctx.beginPath();
+      ctx.arc(ex + d * 1.5, y + 17, 2.6, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    // Patas
+    ctx.strokeStyle = "#ff9f2e";
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+    ctx.moveTo(cx - 7, y + 38);
+    ctx.lineTo(cx - 9, y + STORM_H);
+    ctx.moveTo(cx + 7, y + 38);
+    ctx.lineTo(cx + 9, y + STORM_H);
+    ctx.stroke();
+    ctx.restore();
+    if (s.state === "divewarn") text("!", cx, y - 18, 22, "#ff3b3b");
+  }
+
+  function drawStormBar() {
+    const s = storm;
+    if (s.state === "dead") {
+      const since = levelFrames - bossDefeatedAt;
+      if (since < 240) {
+        ctx.save();
+        ctx.globalAlpha = Math.min(1, since / 20, (240 - since) / 40);
+        ctx.fillStyle = "rgba(10,8,5,0.75)";
+        ctx.fillRect(0, H / 2 - 50, W, 100);
+        text(`¡${s.name} se fue con la tormenta!`, W / 2, H / 2 - 12, 34, "#ffe08a");
+        text("El sello de las puertas se rompe…", W / 2, H / 2 + 26, 18, "#d9c9a6", "center", "normal");
+        ctx.restore();
+      }
+      return;
+    }
+    const w = Math.min(420, W - 120);
+    const x = W / 2 - w / 2;
+    const yy = T + 12;
+    text(s.name, W / 2, yy, 15, "#ffe9b8");
+    const seg = w / STORM_HP;
+    for (let i = 0; i < STORM_HP; i++) {
+      ctx.fillStyle = "rgba(0,0,0,0.6)";
+      ctx.fillRect(x + i * seg + 2, yy + 12, seg - 4, 10);
+      if (i >= s.hits) {
+        ctx.fillStyle = mix("#ffe066", "#4a5d86", i / STORM_HP);
+        ctx.fillRect(x + i * seg + 2, yy + 12, seg - 4, 10);
+      }
+    }
+  }
+
   // Marea: una capa translúcida del líquido que lo cubre todo por debajo de la superficie.
   function drawTide(t) {
     if (!tide || tide.y >= tide.bottom) return;
@@ -7392,6 +7827,7 @@
     drawCrab(t);
     drawAutomaton(t);
     drawYeti(t);
+    drawStorm(t);
     drawHydra(t);
     drawShade(t);
     drawGeyserJets(t);
@@ -7435,6 +7871,9 @@
         drawToast(true);
       } else if (yeti && levelFrames > HINT_FRAMES / 2) {
         drawYetiBar();
+        drawToast(true);
+      } else if (storm && levelFrames > HINT_FRAMES / 2) {
+        drawStormBar();
         drawToast(true);
       }
       else if (shade && levelFrames > HINT_FRAMES / 2) {
