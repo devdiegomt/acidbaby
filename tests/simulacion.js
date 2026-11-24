@@ -3296,6 +3296,105 @@ run(200);
 check("…y pegados al pilar no les pasa nada", playing() && center(water) > 24 * 32, where());
 G.setLevel(0);
 
+// --- Temporada 3, nivel 2-3: corrientes entre nubes ------------------------------------------------
+console.log("\nTemporada 3, nivel 2-3");
+G.setLevel(8, 2); run(1);
+fire = P("Chispa"); water = P("Gota"); acid = P("Acidito");
+// Suben con el ventilador, saltan a la nube de la esmeralda y cruzan las nubes hasta la isla.
+for (const p of [acid, water, fire]) {
+  ride(p, 6, 1);
+  walkTo(p, 9); vjump(p);
+  walkTo(p, 14); runJump(p, 14, 17); runJump(p, 19, 22); runJump(p, 24, 27);
+  if (p === acid) check("Acidito agarra la esmeralda de la nube de arriba", gemOf("acid").taken && playing(), where());
+}
+check("Gota y Chispa agarran sus gemas saltando de nube en nube", G.gems.every((g) => g.taken) && G.players.every((p) => feetRow(p) === 10 && center(p) > 26 * 32), where());
+const box23 = G.boxes[0];
+walkTo(fire, 28); hold(["KeyD"], 120, () => Math.floor((box23.x + box23.w / 2) / 32) === 31); walkTo(fire, 28);
+check("Chispa empuja la caja al botón y se abre la compuerta de arriba", M("g").active && Math.floor((box23.x + box23.w / 2) / 32) === 31, `${box23.x}`);
+for (const p of [fire, water, acid]) {
+  walkTo(p, 30); hopTo(p, 31); walkTo(p, 33); run(90);
+  hold([keysOf(p).l], 40, () => p.onGround && feetRow(p) === 4); run(20);
+  walkTo(p, G.doors[p.ch.door].c);
+}
+check("Suben con el otro ventilador, pasan la compuerta y llegan a sus puertas", G.state === "won", where());
+
+// --- Temporada 3, nivel 2-4: tablones al viento ----------------------------------------------------
+console.log("\nTemporada 3, nivel 2-4");
+G.setLevel(9, 2); run(1);
+fire = P("Chispa"); water = P("Gota"); acid = P("Acidito");
+// Espera a que empiece una ráfaga (con el viento a favor se salta el hueco grande).
+const waitGustStart = () => { for (let i = 0; i < 1000 && !(GU().blowing && GU().t % (GU().cfg.calm + GU().cfg.blow) <= GU().cfg.calm + 2); i++) run(1); };
+// Salta el pilar de la salida, corre por los tablones (se caen al pisarlos) hasta el siguiente
+// pilar y, cuando empieza una ráfaga, salta el hueco grande con el viento a favor.
+function planksRun(p) {
+  walkTo(p, 5); hopTo(p, 6);
+  runJump(p, 11, 13); hopTo(p, 15);
+  waitGustStart(); runJump(p, 18, 24);
+  walkTo(p, 25); waitWind(100); hopTo(p, 26); hopTo(p, 28);
+}
+// Sin la ráfaga, el hueco grande no se alcanza.
+planksRun.calm = (p) => { walkTo(p, 5); hopTo(p, 6); runJump(p, 11, 13); hopTo(p, 15); for (let i = 0; i < 1000 && calmFor() < 150; i++) run(1); runJump(p, 18, 24); };
+planksRun.calm(water);
+check("Sin ráfaga, el hueco grande no se alcanza", G.state === "dead" && /Gota/.test(G.deathMessage), where());
+G.setLevel(9, 2); run(1);
+fire = P("Chispa"); water = P("Gota"); acid = P("Acidito");
+planksRun(fire);
+check("Chispa salta el hueco grande con la ráfaga a favor y agarra el rubí", playing() && gemOf("fire").taken && feetRow(fire) === 12 && center(fire) > 27 * 32, where());
+planksRun(water); planksRun(acid);
+check("Gota y Acidito también cruzan (los tablones vuelven a aparecer)", playing() && [water, acid].every((p) => center(p) > 27 * 32 && feetRow(p) === 12), where());
+walkTo(acid, 30); run(60); walkTo(acid, 31);
+check("Acidito sube con el muelle a la nube de la esmeralda", gemOf("acid").taken && playing() && feetRow(acid) === 6, where());
+waitWind(150); walkTo(acid, 33); run(10); runJump(acid, 33, 34); walkTo(acid, G.doors[acid.ch.door].c);
+for (const p of [fire, water]) { waitWind(150); walkTo(p, 29); runJump(p, 29, 31); runJump(p, 32, 34); walkTo(p, G.doors[p.ch.door].c); }
+check("Gota agarra el zafiro sobre los últimos tablones y llegan a sus puertas", gemOf("water").taken && G.state === "won", where());
+
+// --- Temporada 3, nivel 2-5: la isla del viento ----------------------------------------------------
+console.log("\nTemporada 3, nivel 2-5");
+G.setLevel(10, 2); run(1);
+fire = P("Chispa"); water = P("Gota"); acid = P("Acidito");
+// Corre hacia la izquierda y salta en la columna "from"; sigue hasta aterrizar cerca de "to".
+function runJumpLeft(p, from, to) {
+  const k = keysOf(p);
+  down(k.l);
+  for (let i = 0; i < 400 && center(p) > from * 32 + 16 && playing(); i++) run(1);
+  down(k.j); run(14); up(k.j);
+  for (let i = 0; i < 80 && !(p.onGround && center(p) <= to * 32 + 32) && playing(); i++) run(1);
+  up(k.l);
+}
+function lowerIslands(p) {
+  walkTo(p, 7); waitWind(185); hopTo(p, 8); hopTo(p, 12);
+  waitWind(235); walkTo(p, 13); hopTo(p, 14); hopTo(p, 16);
+  waitWind(235); walkTo(p, 17); hopTo(p, 20); hopTo(p, 24);
+}
+for (const p of [fire, water, acid]) lowerIslands(p);
+check("Cruzan las islas de abajo (Acidito agarra la esmeralda del pilar, Gota el zafiro de la nube)", playing() && G.players.every((p) => feetRow(p) === 12 && center(p) > 23 * 32) && gemOf("acid").taken && gemOf("water").taken, where());
+check("…y encienden la bandera", G.flags[0].on);
+function upperFloor(p) {
+  waitWind(235); hopTo(p, 26); hopTo(p, 28); walkTo(p, 29); run(90);
+  hold([keysOf(p).l], 40, () => p.onGround && feetRow(p) === 6); run(20);
+}
+upperFloor(fire);
+const box25 = G.boxes[0];
+hold([keysOf(fire).l], 200, () => Math.floor((box25.x + box25.w / 2) / 32) === 21); run(20);
+check("Chispa sube con el ventilador y empuja la caja al botón: se abre la compuerta", Math.floor((box25.x + box25.w / 2) / 32) === 21 && M("g").active, where());
+upperFloor(water); upperFloor(acid);
+for (const p of [fire, water, acid]) {
+  walkTo(p, 22); waitWind(235); hopTo(p, 21); hopTo(p, 20);
+  runJumpLeft(p, 16, 8); walkTo(p, 6); hopTo(p, 5); hopTo(p, 4);
+  walkTo(p, G.doors[p.ch.door].c);
+}
+check("Saltan el pilar, cruzan los tablones (Chispa agarra el rubí) y llegan a sus puertas", G.state === "won" && G.gems.every((g) => g.taken), where());
+// Si alguien cae después de encender la bandera, vuelven ahí.
+G.setLevel(10, 2); run(1);
+fire = P("Chispa"); water = P("Gota"); acid = P("Acidito");
+for (const p of G.players) place(p, 24, 12);
+run(10);
+place(water, 31, 15); run(60);
+const fell25 = G.state === "dead";
+tapKey("KeyR"); run(5);
+for (let i = 0; i < 200 && G.state !== "playing"; i++) run(1);
+check("Con la bandera encendida, al caer vuelven a la bandera", fell25 && G.flags[0].on && G.players.every((p) => Math.abs(center(p) / 32 - 24) < 3 && feetRow(p) === 12), where());
+
 // --- Código de progreso --------------------------------------------------------
 console.log("\nCódigo de progreso");
 {
