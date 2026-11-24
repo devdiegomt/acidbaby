@@ -127,7 +127,7 @@
 
   // Avisos de novedades: salen en la portada, en el menú de niveles y en la pausa.
   // Para cambiarlos (o quitarlos), basta con editar esta lista.
-  const NEWS = ["¡Nuevo! Temporada 3: Las alturas", "Mundo 2: Las islas flotantes"];
+  const NEWS = ["¡Nuevo! Temporada 3: Las alturas", "Mundo 2: Las islas flotantes, del 2-1 al 2-5"];
 
   // Jefe del Mundo 3 (Temporada 2): la Sombra de la mina. Flota hacia Gota o Acidito atravesando
   // las paredes; si se queda un rato a la luz de una antorcha encendida se quema (un golpe), apaga
