@@ -39,6 +39,13 @@
   const GUST_DEFAULTS = { dir: 1, calm: 200, blow: 110, strength: 1.5, offset: 0 };
   const GUST_WARN = 70; // frames de aviso antes de que sople
   const GUST_SHELTER = 3; // casillas de resguardo detrás de una pared
+  // Temporada 3, Mundo 3 (la tormenta): nubarrones que llueven y suelo de metal que electrifica el trueno.
+  const STORMCLOUD_TILE = "▓"; // nubarrón: llueve debajo (a Chispa le quita vidas; disuelve la sal y enfría la lava)
+  const RAIN_DEFAULTS = { calm: 160, pour: 140, offset: 0 };
+  const RAIN_WARN = 50;
+  const METAL_TILE = "≡"; // suelo de metal: con cada trueno se electrifica un momento
+  const THUNDER_DEFAULTS = { calm: 220, zap: 24, offset: 0 }; // un salto (unos 37 frames) a tiempo lo esquiva
+  const THUNDER_WARN = 70;
   const BOX_ICE_SPEED = 3.2; // una caja (o barril) empujada en el hielo sale patinando a esta velocidad
   const FROZEN_MELT_DELAY = 45; // frames que aguanta el hielo de un charco bajo Chispa
   const FROZEN_MELT_SPREAD = 8;
@@ -127,7 +134,7 @@
 
   // Avisos de novedades: salen en la portada, en el menú de niveles y en la pausa.
   // Para cambiarlos (o quitarlos), basta con editar esta lista.
-  const NEWS = ["¡Nuevo! Temporada 3: Las alturas", "Mundo 2 completo: Las islas flotantes"];
+  const NEWS = ["¡Nuevo! Temporada 3: Las alturas", "Mundo 3: La tormenta"];
 
   // Jefe del Mundo 3 (Temporada 2): la Sombra de la mina. Flota hacia Gota o Acidito atravesando
   // las paredes; si se queda un rato a la luz de una antorcha encendida se quema (un golpe), apaga
@@ -809,6 +816,9 @@
   let tide = null; // marea: { type, y (superficie, px), bottom, top, speed, delay, draining }
   let dispensers = []; // sueltan barriles de agua: { c, r, wait }
   let clouds = []; // nubes: { c, r }
+  let stormClouds = []; // nubarrones: { c, r }
+  let rain = null; // lluvia de los nubarrones: { t, pouring, warn, cfg }
+  let thunder = null; // truenos que electrifican el metal: { t, zapping, warn, cfg }
   let gust = null; // ráfagas de viento: { t, dir, blowing, warn, cfg }
   let geysers = []; // { c, r, type, t, offset, steady, h (alto del chorro, px), max, warn, plugged }
   let rocks = []; // rocas que suelta el jefe
@@ -831,7 +841,7 @@
   }
 
   function isSolidTile(t) {
-    return t === "#" || t === OBSIDIAN_TILE || t === CRUMBLE_TILE || t === ICE_FLOOR_TILE || t in BREAKABLE || t in LIQUID_BY_TILE || t in BARRIER_BY_TILE || t in GEYSER_BY_TILE;
+    return t === "#" || t === OBSIDIAN_TILE || t === CRUMBLE_TILE || t === ICE_FLOOR_TILE || t === METAL_TILE || t in BREAKABLE || t in LIQUID_BY_TILE || t in BARRIER_BY_TILE || t in GEYSER_BY_TILE;
   }
 
   // Como isSolidTile, pero cada personaje atraviesa la barrera de su elemento.
@@ -900,6 +910,7 @@
     dispensers = [];
     geysers = [];
     clouds = [];
+    stormClouds = [];
     rocks = [];
     waves = [];
     shake = 0;
@@ -931,7 +942,11 @@
     for (let r = 0; r < grid.length; r++) {
       for (let c = 0; c < grid[r].length; c++) {
         const t = grid[r][c];
-        if (t === "#" || t === " " || t === ICE_FLOOR_TILE) continue;
+        if (t === "#" || t === " " || t === ICE_FLOOR_TILE || t === METAL_TILE) continue;
+        if (t === STORMCLOUD_TILE) {
+          stormClouds.push({ c, r }); // se queda en el mapa (no es sólido)
+          continue;
+        }
         if (t === CLOUD_TILE) {
           clouds.push({ c, r }); // se queda en el mapa: lo usa cloudUnder
           continue;
@@ -1118,6 +1133,17 @@
       };
     }
 
+    rain = null;
+    if (stormClouds.length) {
+      const cfg = { ...RAIN_DEFAULTS, ...level.rain };
+      rain = { t: -(cfg.offset || 0), pouring: false, warn: false, cfg };
+    } else if (level.rain) fail('hay "rain" pero el mapa no tiene nubarrones (▓)');
+    thunder = null;
+    if (grid.some((row) => row.includes(METAL_TILE))) {
+      const cfg = { ...THUNDER_DEFAULTS, ...level.thunder };
+      thunder = { t: -(cfg.offset || 0), zapping: false, warn: false, cfg };
+    } else if (level.thunder) fail('hay "thunder" pero el mapa no tiene suelo de metal (≡)');
+
     gust = null;
     if (level.gust) {
       const cfg = { ...GUST_DEFAULTS, ...level.gust };
@@ -1200,7 +1226,7 @@
   function liveState() {
     return {
       grid, liquids, breakables, dissolving, barriers, fans, doors, boxes, gems, mechs, portals,
-      enemies, items, springs, crumbles, spikes, flags, obsidian, boss, bossDefeatedAt, golem, crab, automaton, yeti, storm, dispensers, tide, hydra, torches, shade, geysers, gust,
+      enemies, items, springs, crumbles, spikes, flags, obsidian, boss, bossDefeatedAt, golem, crab, automaton, yeti, storm, dispensers, tide, hydra, torches, shade, geysers, gust, rain, thunder,
       players: players.map((p) => ({
         ...p,
         ch: CHARACTERS.indexOf(p.ch),
@@ -1223,7 +1249,7 @@
   function backToCheckpoint() {
     const s = structuredClone(checkpoint);
     ({ grid, liquids, breakables, dissolving, barriers, fans, doors, boxes, gems, mechs, portals } = s);
-    ({ enemies, items, springs, crumbles, spikes, flags, obsidian, boss, bossDefeatedAt, golem, crab, automaton, yeti, storm, dispensers, tide, hydra, torches, shade, geysers, gust } = s);
+    ({ enemies, items, springs, crumbles, spikes, flags, obsidian, boss, bossDefeatedAt, golem, crab, automaton, yeti, storm, dispensers, tide, hydra, torches, shade, geysers, gust, rain, thunder } = s);
     players = s.players.map((p) =>
       Object.assign(p, {
         ch: CHARACTERS[p.ch],
@@ -1633,6 +1659,80 @@
     if (g.cfg.dir === "alternate") g.dir = n % 2 ? -1 : 1;
     if (blowing && !g.blowing) sound.play("wind");
     g.blowing = blowing;
+  }
+
+  // ---------------------------------------------------------------------------
+  // La tormenta: lluvia de los nubarrones y truenos que electrifican el metal
+  // ---------------------------------------------------------------------------
+  // Fase de un ciclo calma → activo: { on, warn } (con aviso los últimos `warn` frames de calma).
+  function cyclePhase(o, active, warnFrames) {
+    o.t++;
+    if (o.t < 0) return { on: false, warn: false };
+    const cycle = o.cfg.calm + o.cfg[active];
+    const phase = o.t % cycle;
+    return { on: phase >= o.cfg.calm, warn: phase < o.cfg.calm && phase >= o.cfg.calm - warnFrames };
+  }
+
+  // Hasta dónde cae la lluvia de un nubarrón: la primera casilla sólida (o caja) de debajo.
+  function rainBottom(c, r) {
+    let rr = r + 1;
+    while (rr < grid.length - 1 && !isSolidTile(tileAt(c, rr)) && !boxes.some((b) => intersects(c * T + 8, rr * T, T - 16, T, b)) && !mechs.some((m) => m.collidable && hitsMech(m, c * T + 8, rr * T, T - 16, T))) rr++;
+    return rr;
+  }
+
+  function updateRain() {
+    const { on, warn } = cyclePhase(rain, "pour", RAIN_WARN);
+    if (on && !rain.pouring) sound.play("flood");
+    rain.pouring = on;
+    rain.warn = warn;
+    if (!on) return;
+    for (const { c, r } of stormClouds) {
+      const bottom = rainBottom(c, r);
+      // Lo que moja: la sal se disuelve y la lava se enfría en obsidiana.
+      const t = tileAt(c, bottom);
+      if (t === "=" && !dissolving.has(key(c, bottom))) startDissolve(c, bottom);
+      else if (t === "L") {
+        grid[bottom][c] = OBSIDIAN_TILE;
+        obsidian.push({ c, r: bottom, age: 0 });
+        liquids = liquids.filter((l) => grid[l.r][l.c] !== OBSIDIAN_TILE);
+        burst(c * T + T / 2, bottom * T + 4, ["#e8e8f0", "#b9b4cc", "#ffffff"], 10);
+        sound.play("hiss");
+      }
+      // A Chispa (al de fuego) la lluvia le quita vidas.
+      for (const p of players) {
+        if (p.alive && p.hurt === 0 && p.ch.immune === "fire" && intersects(c * T + 6, (r + 1) * T, T - 12, (bottom - r - 1) * T, p)) {
+          hurtPlayer(p, { x: c * T, w: T }, "se mojó con la lluvia");
+          if (state !== "playing") return;
+        }
+      }
+    }
+  }
+
+  // ¿Toca suelo de metal? (de pie encima o pegado de lado)
+  function touchesMetal(p) {
+    for (let r = Math.floor((p.y - 1) / T); r <= Math.floor((p.y + p.h) / T); r++) {
+      for (let c = Math.floor((p.x - 1) / T); c <= Math.floor((p.x + p.w) / T); c++) {
+        if (tileAt(c, r) === METAL_TILE && intersects(c * T, r * T, T, T, { x: p.x - 1, y: p.y - 1, w: p.w + 2, h: p.h + 2 })) return true;
+      }
+    }
+    return false;
+  }
+
+  function updateThunder() {
+    const { on, warn } = cyclePhase(thunder, "zap", THUNDER_WARN);
+    if (on && !thunder.zapping) {
+      sound.play("boom");
+      shake = Math.max(shake, 6);
+    }
+    thunder.zapping = on;
+    thunder.warn = warn;
+    if (!on) return;
+    for (const p of players) {
+      if (p.alive && p.hurt === 0 && touchesMetal(p)) {
+        hurtPlayer(p, { x: p.x + p.w / 2 - p.facing, w: 0 }, "recibió una descarga");
+        if (state !== "playing") return;
+      }
+    }
   }
 
   // ---------------------------------------------------------------------------
@@ -4127,6 +4227,8 @@
     for (const m of mechs) [m.ox, m.oy].forEach(add);
     for (const g of geysers) [g.h, g.plugged ? 1 : 0].forEach(add);
     if (gust) [gust.t, gust.dir, gust.blowing ? 1 : 0].forEach(add);
+    if (rain) add(rain.t);
+    if (thunder) add(thunder.t);
     [levelFrames, STATE_CODE[state] || 0, tide ? tide.y : 0, gems.filter((g) => g.taken).length].forEach(add);
     for (const b of [boss, golem, hydra, shade, crab, automaton, yeti, storm]) if (b) [b.x || 0, b.y || 0, b.hits || b.hp || 0].forEach(add);
     return h;
@@ -4260,7 +4362,7 @@
     }
     const w = unpackWorld(s.world);
     ({ grid, liquids, breakables, dissolving, barriers, fans, doors, boxes, gems, mechs, portals } = w);
-    ({ enemies, items, springs, crumbles, spikes, flags, obsidian, boss, bossDefeatedAt, golem, crab, automaton, yeti, storm, dispensers, tide, hydra, torches, shade, geysers, gust } = w);
+    ({ enemies, items, springs, crumbles, spikes, flags, obsidian, boss, bossDefeatedAt, golem, crab, automaton, yeti, storm, dispensers, tide, hydra, torches, shade, geysers, gust, rain, thunder } = w);
     players = w.players.map((p) => Object.assign(p, { ch: CHARACTERS[p.ch], controls: CHARACTERS[p.controls].keys }));
     checkpoint = s.checkpoint ? unpackWorld(s.checkpoint) : null;
     shots = s.shots.map((x) => ({ ...x, owner: players[x.owner] }));
@@ -4303,6 +4405,8 @@
         updateFans();
         if (geysers.length) updateGeysers();
         if (gust && !gust.boss) updateGust();
+        if (rain) updateRain();
+        if (thunder) updateThunder();
         for (const p of players) updatePlayer(p);
         updateFlags();
         if (tide) updateTide();
@@ -4625,6 +4729,11 @@
       sky: ["#1f1c2b", "#0b0a12"], bricks: "rgba(190,170,255,0.03)",
       stone: "#3b3550", joints: "#26213a70", edges: ["#7a6fa0", "#1a1726", "#564c78", "#252036"],
     },
+    // Temporada 3, Mundo 3: la tormenta. Cielo gris oscuro y roca mojada.
+    storm: {
+      sky: ["#3c4554", "#12161e"], bricks: "rgba(255,255,255,0.0)", clouds: true,
+      stone: "#5c6370", joints: "#40465270", edges: ["#a9b3c2", "#262a31", "#7f8896", "#30353d"],
+    },
     // Temporada 3, Mundo 2: islas de roca flotando en el cielo, con nubes al fondo.
     sky: {
       sky: ["#6f9fd2", "#2c5384"], bricks: "rgba(255,255,255,0.0)", clouds: true,
@@ -4711,7 +4820,7 @@
 
     // Los bloques oxidados se dibujan aparte porque pueden desaparecer. Fuera del nivel (el relleno
     // de la vista) todo es pared: tileAt devuelve "#".
-    const isWall = (t) => t === "#" || t === ICE_FLOOR_TILE || t === FROZEN_TILE || t in LIQUID_BY_TILE || t in GEYSER_BY_TILE;
+    const isWall = (t) => t === "#" || t === METAL_TILE || t === ICE_FLOOR_TILE || t === FROZEN_TILE || t in LIQUID_BY_TILE || t in GEYSER_BY_TILE;
     g.translate(OX, OY);
     const c0 = -Math.ceil(OX / T);
     const r0 = -Math.ceil(OY / T);
@@ -4721,6 +4830,22 @@
         const x = c * T;
         const y = r * T;
         drawStone(g, x, y, r, theme);
+        if (tileAt(c, r) === METAL_TILE) {
+          // Suelo de metal: plancha gris con remaches.
+          const steel = g.createLinearGradient(0, y, 0, y + T);
+          steel.addColorStop(0, "#c9d0d8");
+          steel.addColorStop(0.4, "#8a939e");
+          steel.addColorStop(1, "#5b636d");
+          g.fillStyle = steel;
+          g.fillRect(x, y, T, T);
+          g.fillStyle = "#e9eef3";
+          g.fillRect(x, y, T, 2);
+          g.fillStyle = "#3e444c";
+          g.fillRect(x + T - 1, y, 1, T);
+          g.fillStyle = "#4a515a";
+          for (const [rx, ry] of [[5, 7], [T - 7, 7], [5, T - 7], [T - 7, T - 7]]) g.fillRect(x + rx - 1, y + ry - 1, 3, 3);
+          continue;
+        }
         if (tileAt(c, r) === ICE_FLOOR_TILE) {
           // Suelo de hielo: capa azul clara con brillo encima de la roca.
           const ice = g.createLinearGradient(0, y, 0, y + T);
@@ -5600,6 +5725,86 @@
       ctx.fillStyle = "rgba(200,220,240,0.7)";
       ctx.fillRect(x + 2, y + 16 + bob, T - 4, 3);
     }
+  }
+
+  // Nubarrones: nubes oscuras; cuando van a llover gotean y, lloviendo, la cortina de agua cae
+  // hasta la primera casilla sólida.
+  function drawStormClouds(t) {
+    for (const { c, r } of stormClouds) {
+      const x = c * T;
+      const y = r * T;
+      if (rain?.pouring) {
+        const bottom = rainBottom(c, r) * T;
+        ctx.fillStyle = "rgba(120,170,230,0.18)";
+        ctx.fillRect(x + 4, y + T, T - 8, bottom - y - T);
+        ctx.strokeStyle = "rgba(170,210,255,0.75)";
+        ctx.lineWidth = 1.5;
+        for (let k = 0; k < 4; k++) {
+          const dx = 6 + k * 7;
+          const off = ((t * 520 + k * 37 + c * 13) % 40);
+          for (let yy = y + T + off - 40; yy < bottom; yy += 40) {
+            const y0 = Math.max(y + T, yy);
+            const y1 = Math.min(bottom, yy + 14);
+            if (y1 <= y0) continue;
+            ctx.beginPath();
+            ctx.moveTo(x + dx, y0);
+            ctx.lineTo(x + dx - 2, y1);
+            ctx.stroke();
+          }
+        }
+        ctx.fillStyle = "rgba(200,225,255,0.6)";
+        ctx.fillRect(x + 4, bottom - 2, T - 8, 2);
+      } else if (rain?.warn) {
+        ctx.fillStyle = "rgba(170,210,255,0.8)";
+        for (let k = 0; k < 2; k++) {
+          const drop = ((t * 90 + k * 23 + c * 11) % 30);
+          ctx.fillRect(x + 9 + k * 12, y + T + drop, 2, 5);
+        }
+      }
+      const bob = Math.sin(t * 1.2 + c * 0.9) * 1;
+      ctx.fillStyle = "#4b5161";
+      for (const [dx, dy, rad] of [[6, 14, 9], [16, 9, 12], [26, 14, 9], [16, 18, 10]]) {
+        ctx.beginPath();
+        ctx.arc(x + dx, y + dy + bob, rad, 0, Math.PI * 2);
+        ctx.fill();
+      }
+      ctx.fillStyle = "rgba(255,255,255,0.12)";
+      ctx.beginPath();
+      ctx.arc(x + 14, y + 7 + bob, 6, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  }
+
+  // Trueno: chispas en el metal mientras avisa; al caer, el metal brilla y salta la corriente.
+  function drawThunder(t) {
+    if (!thunder || !(thunder.warn || thunder.zapping)) return;
+    for (let r = 0; r < grid.length; r++) {
+      for (let c = 0; c < grid[r].length; c++) {
+        if (grid[r][c] !== METAL_TILE) continue;
+        const x = c * T;
+        const y = r * T;
+        if (thunder.zapping) {
+          ctx.fillStyle = `rgba(150,220,255,${0.45 + 0.25 * Math.sin(t * 40 + c)})`;
+          ctx.fillRect(x, y, T, T);
+          ctx.strokeStyle = "#f2fbff";
+          ctx.lineWidth = 2;
+          ctx.beginPath();
+          ctx.moveTo(x, y + 2);
+          for (let k = 1; k <= 4; k++) ctx.lineTo(x + k * 8, y + 2 - (((k + c + Math.floor(t * 20)) % 2) ? 6 : 0));
+          ctx.stroke();
+        } else if ((Math.floor(t * 12) + c * 3 + r) % 7 === 0) {
+          ctx.fillStyle = "#bfeaff";
+          ctx.fillRect(x + ((c * 11 + Math.floor(t * 30)) % 26), y - 3, 3, 3);
+        }
+      }
+    }
+    // Destello del cielo al caer el trueno.
+    const since = thunder.t % (thunder.cfg.calm + thunder.cfg.zap) - thunder.cfg.calm;
+    if (thunder.zapping && since < 8) {
+      ctx.fillStyle = `rgba(255,255,255,${0.35 * (1 - since / 8)})`;
+      ctx.fillRect(0, 0, LW, LH);
+    }
+    if (thunder.warn) text("⚡ Viene un trueno: ¡fuera del metal! ⚡", LW / 2, T * 3, 18, "rgba(255,255,255,0.85)");
   }
 
   // Ráfaga: rayas blancas que cruzan el nivel (tenues mientras avisa) y una flecha arriba.
@@ -7815,6 +8020,7 @@
       if (doors[ch.door]) drawDoor(doors[ch.door], players.find((p) => p.ch === ch) || { ch, inDoor: false });
     }
     drawClouds(t);
+    drawStormClouds(t);
     drawFans(t);
     drawMechs(t);
     drawPortals(t);
@@ -7839,6 +8045,7 @@
     drawBarriers(t);
     drawParticles();
     drawGust(t);
+    drawThunder(t);
     drawDarkness(t);
     drawShadeEyes(t);
     // Tras un cambio de personaje, las teclas de cada jugador encima de su cabeza (por encima de todo).

@@ -99,6 +99,8 @@
     if (data.yeti && typeof data.yeti === "object") clean.yeti = { ...data.yeti }; // el Yeti
     if (data.storm && typeof data.storm === "object") clean.storm = { ...data.storm }; // el Ave de la tormenta
     if (data.gust && typeof data.gust === "object") clean.gust = { ...data.gust }; // las ráfagas
+    if (data.rain && typeof data.rain === "object") clean.rain = { ...data.rain }; // la lluvia
+    if (data.thunder && typeof data.thunder === "object") clean.thunder = { ...data.thunder }; // los truenos
     if (data.dark) clean.dark = true; // nivel a oscuras
     return clean;
   }
@@ -117,7 +119,7 @@
       }
       lines.push("  },");
     }
-    for (const cfg of ["boss", "golem", "tide", "hydra", "shade", "geyser", "crab", "automaton", "yeti", "storm", "gust"]) {
+    for (const cfg of ["boss", "golem", "tide", "hydra", "shade", "geyser", "crab", "automaton", "yeti", "storm", "gust", "rain", "thunder"]) {
       if (!data[cfg]) continue;
       const fields = Object.entries(data[cfg]).map(([k, v]) => `${k}: ${q(v)}`);
       lines.push(`  ${cfg}: { ${fields.join(", ")} },`);
@@ -267,6 +269,8 @@
       ["⇞", "Géiser de ácido (en la fila del suelo)", "#46c22a"],
       ["_", "Suelo de hielo (resbala; a Chispa no)", "#9fd8f0"], ["◇", "Agua congelada (Chispa la derrite)", "#bfe9ff"],
       ["☁", "Nube (se atraviesa desde abajo)", "#ffffff"],
+      ["▓", "Nubarrón (llueve: a Chispa le quita vidas; disuelve la sal y enfría la lava)", "#4b5161"],
+      ["≡", "Suelo de metal (con cada trueno da descarga)", "#a5aeb8"],
     ]],
     ["Bichos", [
       ["@", "Escarabajo", "#9b4dca"], ["&", "Murciélago", "#8a63c4"], ["!", "Erizo (no se pisa)", "#8a5a2b"],
@@ -334,6 +338,8 @@
     if (clean.yeti) data.yeti = clean.yeti;
     if (clean.storm) data.storm = clean.storm;
     if (clean.gust) data.gust = clean.gust;
+    if (clean.rain) data.rain = clean.rain;
+    if (clean.thunder) data.thunder = clean.thunder;
     if (clean.dark) data.dark = true;
   }
 
