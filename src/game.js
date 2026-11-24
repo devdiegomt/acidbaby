@@ -34,6 +34,11 @@
   const ICE_GRIP = 0.08; // cuánto agarra el hielo al acelerar (en suelo normal, 0.35)
   const ICE_COAST = 0.04; // y al soltar las teclas: se sigue deslizando unas 3 casillas
   const ICE_SPEED = 1.25; // en hielo se llega a correr un poco más
+  // Temporada 3, Mundo 2 (las islas flotantes): nubes y ráfagas de viento.
+  const CLOUD_TILE = "☁"; // nube: se atraviesa desde abajo y se puede estar encima
+  const GUST_DEFAULTS = { dir: 1, calm: 200, blow: 110, strength: 1.5, offset: 0 };
+  const GUST_WARN = 70; // frames de aviso antes de que sople
+  const GUST_SHELTER = 3; // casillas de resguardo detrás de una pared
   const BOX_ICE_SPEED = 3.2; // una caja (o barril) empujada en el hielo sale patinando a esta velocidad
   const FROZEN_MELT_DELAY = 45; // frames que aguanta el hielo de un charco bajo Chispa
   const FROZEN_MELT_SPREAD = 8;
@@ -122,7 +127,7 @@
 
   // Avisos de novedades: salen en la portada, en el menú de niveles y en la pausa.
   // Para cambiarlos (o quitarlos), basta con editar esta lista.
-  const NEWS = ["¡Nuevo! Temporada 3: Las alturas", "Mundo 1 completo: La montaña helada"];
+  const NEWS = ["¡Nuevo! Temporada 3: Las alturas", "Mundo 2: Las islas flotantes"];
 
   // Jefe del Mundo 3 (Temporada 2): la Sombra de la mina. Flota hacia Gota o Acidito atravesando
   // las paredes; si se queda un rato a la luz de una antorcha encendida se quema (un golpe), apaga
@@ -779,6 +784,8 @@
   let hydra = null; // la Hidra del aljibe (jefe del Mundo 2 de la temporada 2)
   let tide = null; // marea: { type, y (superficie, px), bottom, top, speed, delay, draining }
   let dispensers = []; // sueltan barriles de agua: { c, r, wait }
+  let clouds = []; // nubes: { c, r }
+  let gust = null; // ráfagas de viento: { t, dir, blowing, warn, cfg }
   let geysers = []; // { c, r, type, t, offset, steady, h (alto del chorro, px), max, warn, plugged }
   let rocks = []; // rocas que suelta el jefe
   let waves = []; // ondas de choque cuando se estrella contra el suelo
@@ -867,6 +874,7 @@
     shade = null;
     dispensers = [];
     geysers = [];
+    clouds = [];
     rocks = [];
     waves = [];
     shake = 0;
@@ -899,6 +907,10 @@
       for (let c = 0; c < grid[r].length; c++) {
         const t = grid[r][c];
         if (t === "#" || t === " " || t === ICE_FLOOR_TILE) continue;
+        if (t === CLOUD_TILE) {
+          clouds.push({ c, r }); // se queda en el mapa: lo usa cloudUnder
+          continue;
+        }
         if (t in LIQUID_BY_TILE) {
           liquids.push({ c, r, type: LIQUID_BY_TILE[t] });
           continue;
@@ -1077,6 +1089,13 @@
       };
     }
 
+    gust = null;
+    if (level.gust) {
+      const cfg = { ...GUST_DEFAULTS, ...level.gust };
+      if (cfg.dir !== 1 && cfg.dir !== -1 && cfg.dir !== "alternate") fail('las ráfagas van con dir 1, -1 o "alternate"');
+      gust = { t: -(cfg.offset || 0), dir: cfg.dir === -1 ? -1 : 1, blowing: false, warn: false, cfg };
+    }
+
     if (geysers.length) {
       const cfg = { ...GEYSER_DEFAULTS, ...level.geyser };
       const steady = [].concat(cfg.steady || []);
@@ -1147,7 +1166,7 @@
   function liveState() {
     return {
       grid, liquids, breakables, dissolving, barriers, fans, doors, boxes, gems, mechs, portals,
-      enemies, items, springs, crumbles, spikes, flags, obsidian, boss, bossDefeatedAt, golem, crab, automaton, yeti, dispensers, tide, hydra, torches, shade, geysers,
+      enemies, items, springs, crumbles, spikes, flags, obsidian, boss, bossDefeatedAt, golem, crab, automaton, yeti, dispensers, tide, hydra, torches, shade, geysers, gust,
       players: players.map((p) => ({
         ...p,
         ch: CHARACTERS.indexOf(p.ch),
@@ -1170,7 +1189,7 @@
   function backToCheckpoint() {
     const s = structuredClone(checkpoint);
     ({ grid, liquids, breakables, dissolving, barriers, fans, doors, boxes, gems, mechs, portals } = s);
-    ({ enemies, items, springs, crumbles, spikes, flags, obsidian, boss, bossDefeatedAt, golem, crab, automaton, yeti, dispensers, tide, hydra, torches, shade, geysers } = s);
+    ({ enemies, items, springs, crumbles, spikes, flags, obsidian, boss, bossDefeatedAt, golem, crab, automaton, yeti, dispensers, tide, hydra, torches, shade, geysers, gust } = s);
     players = s.players.map((p) =>
       Object.assign(p, {
         ch: CHARACTERS[p.ch],
@@ -1239,7 +1258,17 @@
     return false;
   }
 
+  // ¿Está apoyado justo encima de una nube? (Las nubes solo frenan a lo que cae desde arriba.)
+  function cloudUnder(b) {
+    const bottom = b.y + b.h;
+    if (bottom % T !== 0) return false;
+    const r = bottom / T;
+    for (let c = Math.floor(b.x / T); c <= Math.floor((b.x + b.w - 1) / T); c++) if (tileAt(c, r) === CLOUD_TILE) return true;
+    return false;
+  }
+
   function stepBody(b, sx, sy) {
+    if (sy > 0 && cloudUnder(b)) return false;
     if (solidAt(b.x + sx, b.y + sy, b.w, b.h, b)) return false;
     b.x += sx;
     b.y += sy;
@@ -1247,7 +1276,7 @@
   }
 
   function isOnGround(b) {
-    return solidAt(b.x, b.y + 1, b.w, b.h, b);
+    return cloudUnder(b) || solidAt(b.x, b.y + 1, b.w, b.h, b);
   }
 
   function moveX(body, amount) {
@@ -1544,6 +1573,35 @@
   }
 
   // ---------------------------------------------------------------------------
+  // Ráfagas de viento: cada cierto tiempo sopla de lado (avisa antes). Con dir "alternate",
+  // cambia de sentido en cada ráfaga.
+  // ---------------------------------------------------------------------------
+  // ¿Hay una pared (o una caja, o una compuerta cerrada) a pocas casillas, del lado de donde viene
+  // el viento y a la altura del cuerpo? Ahí la ráfaga no empuja.
+  function windSheltered(b) {
+    const edge = gust.dir > 0 ? Math.floor(b.x / T) : Math.floor((b.x + b.w - 1) / T);
+    for (let k = 1; k <= GUST_SHELTER; k++) {
+      const c = edge - k * gust.dir;
+      if (solidAt(c * T + 2, b.y, T - 4, b.h, b)) return true;
+    }
+    return false;
+  }
+
+  function updateGust() {
+    const g = gust;
+    g.t++;
+    const cycle = g.cfg.calm + g.cfg.blow;
+    if (g.t < 0) return;
+    const phase = g.t % cycle;
+    const n = Math.floor(g.t / cycle);
+    const blowing = phase >= g.cfg.calm;
+    g.warn = !blowing && phase >= g.cfg.calm - GUST_WARN;
+    if (g.cfg.dir === "alternate") g.dir = n % 2 ? -1 : 1;
+    if (blowing && !g.blowing) sound.play("wind");
+    g.blowing = blowing;
+  }
+
+  // ---------------------------------------------------------------------------
   // Géiseres
   // ---------------------------------------------------------------------------
   // Lo que para un chorro: una pared, una plataforma o una caja encima.
@@ -1743,6 +1801,8 @@
 
     p.pushing = false;
     if (!moveX(p, p.vx)) p.vx = 0;
+    // Una ráfaga empuja a todos de lado (detrás de una pared, no).
+    if (gust?.blowing && !windSheltered(p)) moveX(p, gust.cfg.strength * gust.dir);
     if (!moveY(p, p.vy)) p.vy = 0;
     p.onGround = isOnGround(p);
 
@@ -3785,6 +3845,7 @@
     for (const e of enemies) [e.x, e.y, e.alive ? 1 : 0].forEach(add);
     for (const m of mechs) [m.ox, m.oy].forEach(add);
     for (const g of geysers) [g.h, g.plugged ? 1 : 0].forEach(add);
+    if (gust) [gust.t, gust.dir, gust.blowing ? 1 : 0].forEach(add);
     [levelFrames, STATE_CODE[state] || 0, tide ? tide.y : 0, gems.filter((g) => g.taken).length].forEach(add);
     for (const b of [boss, golem, hydra, shade, crab, automaton, yeti]) if (b) [b.x || 0, b.y || 0, b.hits || b.hp || 0].forEach(add);
     return h;
@@ -3918,7 +3979,7 @@
     }
     const w = unpackWorld(s.world);
     ({ grid, liquids, breakables, dissolving, barriers, fans, doors, boxes, gems, mechs, portals } = w);
-    ({ enemies, items, springs, crumbles, spikes, flags, obsidian, boss, bossDefeatedAt, golem, crab, automaton, yeti, dispensers, tide, hydra, torches, shade, geysers } = w);
+    ({ enemies, items, springs, crumbles, spikes, flags, obsidian, boss, bossDefeatedAt, golem, crab, automaton, yeti, dispensers, tide, hydra, torches, shade, geysers, gust } = w);
     players = w.players.map((p) => Object.assign(p, { ch: CHARACTERS[p.ch], controls: CHARACTERS[p.controls].keys }));
     checkpoint = s.checkpoint ? unpackWorld(s.checkpoint) : null;
     shots = s.shots.map((x) => ({ ...x, owner: players[x.owner] }));
@@ -3960,6 +4021,7 @@
         updateMechs();
         updateFans();
         if (geysers.length) updateGeysers();
+        if (gust) updateGust();
         for (const p of players) updatePlayer(p);
         updateFlags();
         if (tide) updateTide();
@@ -4281,6 +4343,11 @@
       sky: ["#1f1c2b", "#0b0a12"], bricks: "rgba(190,170,255,0.03)",
       stone: "#3b3550", joints: "#26213a70", edges: ["#7a6fa0", "#1a1726", "#564c78", "#252036"],
     },
+    // Temporada 3, Mundo 2: islas de roca flotando en el cielo, con nubes al fondo.
+    sky: {
+      sky: ["#6f9fd2", "#2c5384"], bricks: "rgba(255,255,255,0.0)", clouds: true,
+      stone: "#8a7864", joints: "#6a5a4870", edges: ["#d8c7a6", "#3e3326", "#b09a7c", "#4a3d2e"],
+    },
     // Temporada 3, Mundo 1: roca y nieve de la montaña helada, con cielo azul de invierno.
     ice: {
       sky: ["#3d5f80", "#16243a"], bricks: "rgba(220,240,255,0.04)",
@@ -4329,6 +4396,20 @@
     g.fillStyle = grad;
     g.fillRect(0, 0, W, H);
 
+    // Nubes lejanas (temas con cielo abierto)
+    if (theme.clouds) {
+      // Nubes lejanas, tenues y azuladas, para que no se confundan con las nubes donde se para.
+      g.fillStyle = "rgba(225,238,255,0.08)";
+      for (let k = 0; k < 14; k++) {
+        const cx = (k * 173) % W;
+        const cy = 40 + ((k * 97) % Math.max(1, H - 160));
+        for (const [dx, dy, rad] of [[0, 0, 26], [28, -10, 32], [58, 0, 24], [28, 8, 28]]) {
+          g.beginPath();
+          g.arc(cx + dx, cy + dy, rad, 0, Math.PI * 2);
+          g.fill();
+        }
+      }
+    }
     // Ladrillos tenues del fondo
     g.strokeStyle = theme.bricks;
     g.lineWidth = 1;
@@ -5216,6 +5297,48 @@
         ctx.fill();
       }
     }
+  }
+
+  // Nube: bolas blancas esponjosas que se mecen un poco.
+  function drawClouds(t) {
+    for (const { c, r } of clouds) {
+      const x = c * T;
+      const y = r * T;
+      const bob = Math.sin(t * 1.5 + c * 0.7) * 1.2;
+      ctx.fillStyle = "rgba(30,60,110,0.22)";
+      ctx.beginPath();
+      ctx.ellipse(x + 16, y + 21 + bob, 15, 4, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = "rgba(255,255,255,0.96)";
+      for (const [dx, dy, rad] of [[6, 10, 8], [16, 6, 10], [26, 10, 8], [16, 13, 9]]) {
+        ctx.beginPath();
+        ctx.arc(x + dx, y + dy + bob, rad, 0, Math.PI * 2);
+        ctx.fill();
+      }
+      ctx.fillStyle = "rgba(200,220,240,0.7)";
+      ctx.fillRect(x + 2, y + 16 + bob, T - 4, 3);
+    }
+  }
+
+  // Ráfaga: rayas blancas que cruzan el nivel (tenues mientras avisa) y una flecha arriba.
+  function drawGust(t) {
+    if (!gust || !(gust.warn || gust.blowing)) return;
+    const a = gust.blowing ? 0.55 : 0.15 + 0.1 * Math.sin(t * 12);
+    ctx.strokeStyle = `rgba(255,255,255,${a})`;
+    ctx.lineWidth = gust.blowing ? 3 : 2;
+    for (let k = 0; k < 18; k++) {
+      const y = ((k * 97) % (LH - 64)) + 40;
+      const len = 40 + ((k * 37) % 50);
+      const speed = gust.blowing ? 14 : 4;
+      const x = ((((t * 60 * speed + k * 211) % (LW + 200)) + LW + 200) % (LW + 200)) - 100;
+      const xx = gust.dir > 0 ? x : LW - x;
+      ctx.beginPath();
+      ctx.moveTo(xx, y);
+      ctx.lineTo(xx - gust.dir * len, y);
+      ctx.stroke();
+    }
+    const label = `${gust.dir > 0 ? "≫" : "≪"} ${gust.blowing ? "¡Ráfaga!" : "Viene una ráfaga"} ${gust.dir > 0 ? "≫" : "≪"}`;
+    text(label, LW / 2, T * 3, 18, gust.blowing ? "#ffffff" : "rgba(255,255,255,0.85)");
   }
 
   function drawFans(t) {
@@ -7256,6 +7379,7 @@
     for (const ch of CHARACTERS) {
       if (doors[ch.door]) drawDoor(doors[ch.door], players.find((p) => p.ch === ch) || { ch, inDoor: false });
     }
+    drawClouds(t);
     drawFans(t);
     drawMechs(t);
     drawPortals(t);
@@ -7278,6 +7402,7 @@
     drawRocksAndWaves(t);
     drawBarriers(t);
     drawParticles();
+    drawGust(t);
     drawDarkness(t);
     drawShadeEyes(t);
     // Tras un cambio de personaje, las teclas de cada jugador encima de su cabeza (por encima de todo).
