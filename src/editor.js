@@ -97,6 +97,7 @@
     if (data.crab && typeof data.crab === "object") clean.crab = { ...data.crab }; // el Cangrejo
     if (data.automaton && typeof data.automaton === "object") clean.automaton = { ...data.automaton }; // el Autómata
     if (data.yeti && typeof data.yeti === "object") clean.yeti = { ...data.yeti }; // el Yeti
+    if (data.storm && typeof data.storm === "object") clean.storm = { ...data.storm }; // el Ave de la tormenta
     if (data.gust && typeof data.gust === "object") clean.gust = { ...data.gust }; // las ráfagas
     if (data.dark) clean.dark = true; // nivel a oscuras
     return clean;
@@ -116,7 +117,7 @@
       }
       lines.push("  },");
     }
-    for (const cfg of ["boss", "golem", "tide", "hydra", "shade", "geyser", "crab", "automaton", "yeti", "gust"]) {
+    for (const cfg of ["boss", "golem", "tide", "hydra", "shade", "geyser", "crab", "automaton", "yeti", "storm", "gust"]) {
       if (!data[cfg]) continue;
       const fields = Object.entries(data[cfg]).map(([k, v]) => `${k}: ${q(v)}`);
       lines.push(`  ${cfg}: { ${fields.join(", ")} },`);
@@ -279,6 +280,7 @@
       ["Ж", "Cangrejo hirviente (jefe; necesita géiseres de los tres)", "#7a4636"],
       ["Ф", "Autómata de la forja (jefe; necesita prensas)", "#4a4a55"],
       ["Ш", "Yeti de la cumbre (jefe; necesita un lago de agua congelada)", "#e8f0f6"],
+      ["Ѱ", "Ave de la tormenta (jefe; hace sus propias ráfagas)", "#4a5d86"],
     ]],
   ];
   const LABELS = Object.fromEntries(PALETTE.flatMap(([, tiles]) => tiles.map(([ch, label]) => [ch, label])));
@@ -330,6 +332,7 @@
     if (clean.crab) data.crab = clean.crab;
     if (clean.automaton) data.automaton = clean.automaton;
     if (clean.yeti) data.yeti = clean.yeti;
+    if (clean.storm) data.storm = clean.storm;
     if (clean.gust) data.gust = clean.gust;
     if (clean.dark) data.dark = true;
   }

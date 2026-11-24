@@ -28,7 +28,7 @@ game = game.replace(
      get grid(){return grid}, get fans(){return fans}, get doors(){return doors}, get enemies(){return enemies}, get items(){return items}, get shots(){return shots},
      get save(){return save}, isUnlocked, get levelIndex(){return levelIndex}, get lastResult(){return lastResult},
      get menuIndex(){return menuIndex}, get levelFrames(){return levelFrames}, setLevel(i, si = 0){ testLevel = null; seasonIndex = si; levelIndex = i; loadLevel(i); state = "playing"; }, get darts(){return darts}, get crumbles(){return crumbles}, get boss(){return boss}, solidAt,
-     SEASONS, get seasonIndex(){return seasonIndex}, get titleIndex(){return titleIndex}, isSeasonUnlocked, levelNumber, get flags(){return flags}, get checkpoint(){return checkpoint}, get retries(){return retries}, get toast(){return toast}, get level(){return level}, worldRange, get spikes(){return spikes}, get obsidian(){return obsidian}, get liquids(){return liquids}, starsOf, starCount, get golem(){return golem}, get rocks(){return rocks}, get waves(){return waves}, get tide(){return tide}, get hydra(){return hydra}, get torches(){return torches}, lightSources, get shade(){return shade}, get geysers(){return geysers}, get mainIndex(){return mainIndex}, mainItems, get crab(){return crab}, get automaton(){return automaton}, get yeti(){return yeti}, get gust(){return gust}, get clouds(){return clouds}, get rocks2(){return rocks} };\n})();`,
+     SEASONS, get seasonIndex(){return seasonIndex}, get titleIndex(){return titleIndex}, isSeasonUnlocked, levelNumber, get flags(){return flags}, get checkpoint(){return checkpoint}, get retries(){return retries}, get toast(){return toast}, get level(){return level}, worldRange, get spikes(){return spikes}, get obsidian(){return obsidian}, get liquids(){return liquids}, starsOf, starCount, get golem(){return golem}, get rocks(){return rocks}, get waves(){return waves}, get tide(){return tide}, get hydra(){return hydra}, get torches(){return torches}, lightSources, get shade(){return shade}, get geysers(){return geysers}, get mainIndex(){return mainIndex}, mainItems, get crab(){return crab}, get automaton(){return automaton}, get yeti(){return yeti}, get gust(){return gust}, get storm(){return storm}, get clouds(){return clouds}, get rocks2(){return rocks} };\n})();`,
 );
 // editor.js va antes que game.js (como en index.html); sin DOM solo define EditorCore.
 eval(fs.readFileSync(ROOT + "levels.js", "utf8") + "\nglobalThis.LEVELS = LEVELS;\n" + fs.readFileSync(ROOT + "levels2.js", "utf8") + "\nglobalThis.SEASON_2 = SEASON_2;\n" + fs.readFileSync(ROOT + "levels3.js", "utf8") + "\nglobalThis.SEASON_3 = SEASON_3;\n" + fs.readFileSync(ROOT + "editor.js", "utf8") + "\n" + game);
@@ -3394,6 +3394,92 @@ const fell25 = G.state === "dead";
 tapKey("KeyR"); run(5);
 for (let i = 0; i < 200 && G.state !== "playing"; i++) run(1);
 check("Con la bandera encendida, al caer vuelven a la bandera", fell25 && G.flags[0].on && G.players.every((p) => Math.abs(center(p) / 32 - 24) < 3 && feetRow(p) === 12), where());
+
+// --- Temporada 3, nivel 2-6: el Ave de la tormenta --------------------------------------------------
+console.log("\nTemporada 3, nivel 2-6");
+const stormLevel = () => { G.setLevel(11, 2); run(1); fire = P("Chispa"); water = P("Gota"); acid = P("Acidito"); };
+const ST = () => G.storm;
+const stCol = () => Math.floor((ST().x + 32) / 32);
+// Prepara el siguiente ataque: 0 picada, 1 ráfaga, 3 rayos.
+const nextAttack = (n) => { ST().state = "fly"; ST().timer = 1; ST().attack = n; };
+stormLevel();
+check("El Ave de la tormenta aparece y trae sus propias ráfagas", !!ST() && G.gust?.boss === true && ST().state === "intro");
+run(130);
+check("Se presenta y da un consejo", ST().state === "fly" && /mareada/.test(G.toast?.text || ""), G.toast?.text);
+
+// Rayos: uno sobre la columna de cada uno; bajo el techo no llega.
+for (const [p, c] of [[fire, 25], [water, 14], [acid, 6]]) place(p, c, 13);
+run(5);
+nextAttack(3); run(2);
+check("Lanza un rayo sobre la columna de cada uno (con aviso)", ST().bolts.length === 3 && ST().bolts.every((b) => !b.strike) && ST().bolts.some((b) => b.c === 14), JSON.stringify(ST().bolts.map((b) => b.c)));
+const h0 = G.players.map((p) => p.hearts);
+walkTo(fire, 28);
+for (let i = 0; i < 100 && ST().bolts.length; i++) { ST().state = "fly"; ST().timer = 999; run(1); }
+check("Le cae a quien se queda quieto en campo abierto", water.hearts === h0[1] - 1, `${water.hearts}`);
+check("…pero no a quien está bajo un techo ni a quien se apartó", acid.hearts === h0[2] && fire.hearts === h0[0], `${acid.hearts} ${fire.hearts}`);
+
+// Ráfagas: soplan alejándose de ella; detrás de un bloque, no.
+stormLevel(); run(130);
+for (const [p, c] of [[fire, 17], [water, 5], [acid, 22]]) place(p, c, 13);
+run(5);
+ST().x = 64; nextAttack(1); run(2);
+check("Bate las alas: avisa que viene una ráfaga hacia el lado contrario", ST().state === "flapwarn" && G.gust.warn && G.gust.dir === 1);
+const stFx = fire.x, wx0 = water.x;
+for (let i = 0; i < 200 && !G.gust.blowing; i++) run(1);
+run(60);
+check("La ráfaga empuja a los de campo abierto; al de detrás del bloque, no", water.x - wx0 > 50 && Math.abs(fire.x - stFx) < 1, `${(water.x - wx0).toFixed(0)} / ${(fire.x - stFx).toFixed(0)}`);
+for (let i = 0; i < 200 && G.gust.blowing; i++) run(1);
+check("Al terminar de batir las alas, deja de soplar", !G.gust.blowing && ST().state === "fly");
+
+// Picada: apunta a alguien, chilla y se lanza. Si se apartan, se estrella y queda mareada.
+stormLevel(); run(130);
+for (const [p, c] of [[fire, 13], [water, 17], [acid, 22]]) place(p, c, 13);
+run(5);
+nextAttack(0); run(2);
+check("Chilla antes de lanzarse en picada contra alguien", ST().state === "divewarn" && G.players[ST().target] === fire);
+for (let i = 0; i < 100 && ST().state === "divewarn" && ST().timer > 10; i++) run(1);
+const hf = fire.hearts;
+walkTo(fire, 15);
+for (let i = 0; i < 120 && ST().state === "dive"; i++) run(1);
+check("Chispa se aparta: el ave se estrella y queda mareada", ST().state === "stunned" && fire.hearts === hf && Math.abs(stCol() - 13) <= 1, `${ST().state} col ${stCol()} ${where()}`);
+walkTo(fire, 15);
+down("KeyA"); down("KeyW"); run(10); up("KeyA"); run(8); up("KeyW"); run(40);
+check("Chispa le salta encima: un golpe", ST().hits === 1 && ST().state === "rise", `${ST().hits} ${ST().state}`);
+// Si no se aparta, la picada duele (al lado de un bloque, el bloque la para).
+for (let i = 0; i < 300 && ST().state !== "fly"; i++) run(1);
+place(fire, 14, 13); run(30);
+nextAttack(0); run(2);
+const tgt = G.players[ST().target], ht = tgt.hearts;
+for (let i = 0; i < 200 && ST().state !== "stunned"; i++) run(1);
+check("Si se queda quieto, la picada duele", tgt.hearts === ht - 1, `${tgt.ch.name} ${tgt.hearts}`);
+
+// La pelea completa: cada uno espera junto a un bloque (ahí la ráfaga no los tira a los charcos).
+// Cuando se estrella, el más cercano le salta encima.
+const restCol = { Chispa: 14, Gota: 17, Acidito: 24 };
+stormLevel();
+for (const p of [fire, water, acid]) place(p, restCol[p.ch.name], 13);
+guarded(130);
+let stomps = 0;
+for (let n = 0; n < 8000 && ST().hits < 4 && playing(); n++) {
+  if (ST().state === "stunned" && ST().timer < 150) {
+    const c = stCol();
+    const p = [fire, water, acid].reduce((a, b) => (Math.abs(center(b) / 32 - c) < Math.abs(center(a) / 32 - c) ? b : a));
+    const before = ST().hits;
+    if (Math.abs(center(p) / 32 - c) > 1) guardedWalk(p, c);
+    down(keysOf(p).j); guarded(16); up(keysOf(p).j);
+    guarded(60, () => ST().hits > before);
+    if (ST().hits > before) stomps++;
+    guarded(30);
+    for (const q of [fire, water, acid]) if (Math.abs(center(q) / 32 - restCol[q.ch.name]) > 0.5) guardedWalk(q, restCol[q.ch.name]);
+  }
+  for (const q of [fire, water, acid]) if (q.onGround && Math.abs(center(q) / 32 - restCol[q.ch.name]) > 1.5 && !G.gust.blowing) guardedWalk(q, restCol[q.ch.name]);
+  guarded(1);
+}
+check("Esquivan picadas, rayos y ráfagas y le saltan encima cuatro veces", ST().hits === 4 && stomps === 4, `${ST().hits} golpes · ${where()}`);
+guarded(240);
+check("Se va con la tormenta y se rompe el sello de las puertas", ST().state === "dead" && G.grid[12][34] === " " && !G.gust.blowing, ST().state);
+for (const p of [fire, water, acid]) { runRightTo(p, 33); walkTo(p, G.doors[p.ch.door].c); }
+check("Llegan a sus puertas", G.state === "won", where());
 
 // --- Código de progreso --------------------------------------------------------
 console.log("\nCódigo de progreso");
