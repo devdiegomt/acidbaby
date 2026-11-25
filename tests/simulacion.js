@@ -3708,7 +3708,8 @@ check("Llegan a sus puertas", G.state === "won", where());
 
 // --- Temporada 3, nivel 4-1: el desafío final (salas) ----------------------------------------------
 console.log("\nTemporada 3, nivel 4-1 (desafío final)");
-const challenge = () => { G.setLevel(18, 2); run(1); fire = P("Chispa"); water = P("Gota"); acid = P("Acidito"); };
+const refreshP = () => { fire = P("Chispa"); water = P("Gota"); acid = P("Acidito"); }; // al cambiar de sala hay personajes nuevos
+const challenge = () => { G.setLevel(18, 2); run(1); refreshP(); };
 challenge();
 check("El desafío final es un nivel con salas: empieza en la del Gólem", G.level.base?.name === "El desafío final" && G.roomIndex === 0 && !!G.golem && G.level.rooms >= 2, G.level.name);
 check("Las salas no tienen gemas", G.gems.length === 0);
@@ -3720,7 +3721,7 @@ check("Al vencer al Gólem se rompe el sello", G.golem.state === "dead");
 fire.hearts = 2;
 const framesBefore = G.levelFrames;
 toDoors();
-run(5);
+run(5); refreshP();
 check("Al llegar a las puertas pasa a la sala del Cangrejo, sin volver al menú", G.state === "playing" && G.roomIndex === 1 && !!G.crab && !G.golem, `${G.state} sala ${G.roomIndex}`);
 check("…el reloj sigue corriendo y se conservan las vidas", G.levelFrames >= framesBefore && fire.hearts === 2, `${G.levelFrames} ${fire.hearts}`);
 check("…y avisa en qué sala están", /Sala 2 de/.test(G.toast?.text || ""), G.toast?.text);
@@ -3730,13 +3731,51 @@ G.crab.hits = 2; water.hearts = 1;
 check("Si a mitad de la sala del Cangrejo reintentan (o alguien cae)…", G.state === "playing" && G.roomIndex === 1);
 tapKey("KeyR"); run(5);
 for (let i = 0; i < 200 && G.state !== "playing"; i++) run(1);
+refreshP();
 check("…vuelven al principio de esa misma sala, con las vidas llenas", G.roomIndex === 1 && !!G.crab && G.crab.hits === 0 && G.players.every((p) => p.hearts === 3), `sala ${G.roomIndex}`);
-for (let k = G.roomIndex; k < G.level.rooms; k++) {
-  run(150);
-  for (const b of [G.golem, G.crab, G.yeti, G.storm, G.nimbus]) if (b && b.state !== "dead") { b.state = "dying"; b.timer = 1; }
-  run(250);
-  toDoors(); run(5);
+// Del Cangrejo (aquí, de una) a las salas de la temporada 3, que se juegan de verdad.
+run(150); G.crab.state = "dying"; G.crab.timer = 1; run(250); toDoors(); run(5); refreshP();
+check("Tercera sala: el Yeti, con el tema de la montaña helada", G.roomIndex === 2 && !!G.yeti && G.level.theme === "ice", `sala ${G.roomIndex}`);
+let chHits = 0;
+for (let n = 0; n < 4 && playing(); n++) if (yetiHit()) chHits++;
+run(220);
+check("En el desafío, el Yeti se vence igual: cuatro chapuzones", chHits === 4 && G.yeti.state === "dead", `${chHits} ${where()}`);
+for (const p of G.players) place(p, 33, 16);
+run(5);
+for (const p of [fire, water, acid]) walkTo(p, G.doors[p.ch.door].c);
+refreshP();
+check("Cuarta sala: el Ave de la tormenta", G.roomIndex === 3 && !!G.storm && G.level.theme === "sky", `sala ${G.roomIndex} ${where()}`);
+for (const p of [fire, water, acid]) place(p, restCol[p.ch.name], 13);
+guarded(130);
+for (let n = 0; n < 8000 && ST().hits < 4 && playing(); n++) {
+  if (ST().state === "stunned" && ST().timer < 150) {
+    const c = stCol();
+    const p = [fire, water, acid].reduce((a, b) => (Math.abs(center(b) / 32 - c) < Math.abs(center(a) / 32 - c) ? b : a));
+    const before = ST().hits;
+    if (Math.abs(center(p) / 32 - c) > 1) guardedWalk(p, c);
+    down(keysOf(p).j); guarded(16); up(keysOf(p).j);
+    guarded(60, () => ST().hits > before);
+    guarded(30);
+    for (const q of [fire, water, acid]) if (Math.abs(center(q) / 32 - restCol[q.ch.name]) > 0.5) guardedWalk(q, restCol[q.ch.name]);
+  }
+  for (const q of [fire, water, acid]) if (q.onGround && Math.abs(center(q) / 32 - restCol[q.ch.name]) > 1.5 && !G.gust.blowing) guardedWalk(q, restCol[q.ch.name]);
+  guarded(1);
 }
+guarded(240);
+check("En el desafío, el Ave cae con cuatro saltos encima", ST().state === "dead", `${ST().hits} ${ST().state}`);
+for (const p of [fire, water, acid]) { runRightTo(p, 33); walkTo(p, G.doors[p.ch.door].c); }
+refreshP();
+check("Quinta sala: la Nube negra", G.roomIndex === 4 && !!G.nimbus && G.level.theme === "storm", `sala ${G.roomIndex} ${where()}`);
+guarded(130);
+lureOver(4, 1, 1);
+guardedWalk(water, 15); guarded(120);
+lureOver(17, 1, 13);
+guardedWalk(acid, 25); hold([keysOf(acid).r], 10); guardedWalk(acid, 24); guarded(120);
+lureOver(27, -1, 31);
+for (let k = 0; k < 3 && NB().hits < 4; k++) { guarded(1000, () => !torchAt(4).wet); lureOver(4, 1, 1); }
+guarded(250);
+check("En el desafío, la Nube negra también se hace vapor", NB().state === "dead", `${NB().hits} ${NB().state}`);
+for (const p of [fire, water, acid]) guardedWalk(p, G.doors[p.ch.door].c);
 check("Al salir por las puertas de la última sala se gana el desafío (y se guarda el récord)", G.state === "won" && G.save.levels["t3:El desafío final"]?.done, G.state);
 challenge();
 check("«Reiniciar nivel» vuelve a la primera sala", G.roomIndex === 0 && !!G.golem);

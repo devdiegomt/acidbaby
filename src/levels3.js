@@ -532,7 +532,7 @@ const SEASON_3 = {
 };
 
 // La cumbre (Mundo 4): el desafío final. Un solo nivel con varias salas seguidas, una por jefe de
-// las temporadas 2 y 3 (con sus mismas reglas y sin gemas), y al final un jefe nuevo. Se pasa de
+// las temporadas 2 y 3 (Gólem, Cangrejo, Yeti, Ave de la tormenta y Nube negra) (con sus mismas reglas y sin gemas), y al final un jefe nuevo. Se pasa de
 // sala al llegar a las puertas, con las mismas vidas y el mismo reloj; al caer se vuelve al
 // principio de la sala. Cada sala lleva el tema de su mundo.
 (() => {
@@ -557,6 +557,9 @@ const SEASON_3 = {
         rooms: [
           room(SEASON_2, "Corazón de magma", { name: "El Gólem de magma" }),
           room(SEASON_2, "El Cangrejo hirviente"),
+          room(SEASON_3, "El Yeti de la cumbre"),
+          room(SEASON_3, "El Ave de la tormenta"),
+          room(SEASON_3, "La Nube negra"),
         ],
       },
     ],
