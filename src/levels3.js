@@ -25,6 +25,14 @@
 //          contra el suelo queda mareada: saltarle encima es un golpe (aguanta 4).
 //          storm: { name, left, right }. Al caer se rompen los sellos /.
 
+// La tormenta (Mundo 3):
+//   ▓      nubarrón: no es sólido. Cada calm + pour frames llueve debajo durante pour frames (avisa
+//          goteando), hasta la primera casilla sólida o caja. A Chispa la lluvia le quita vidas; la
+//          sal (=) que moja se disuelve y la lava (L) que moja se enfría en obsidiana (■).
+//          rain: { calm, pour, offset }
+//   ≡      suelo de metal: cada calm + zap frames cae un trueno (avisa) y durante zap frames el metal
+//          da descarga a quien lo toque. Con un salto a tiempo se esquiva. thunder: { calm, zap, offset }
+
 const SEASON_3 = {
   id: "t3",
   name: "Temporada 3",
@@ -348,6 +356,65 @@ const SEASON_3 = {
             "########################################",
             "########################################",
             "########################################",
+          ],
+        },
+      ],
+    },
+    {
+      name: "La tormenta",
+      theme: "storm",
+      levels: [
+        {
+          name: "Primeras gotas",
+          hint: "Llueve debajo de los nubarrones: a Chispa la lluvia le quita vidas, pero disuelve la sal y enfría la lava.",
+          rain: { calm: 180, pour: 120 },
+          map: [
+            "########################################",
+            "#                                      #",
+            "#               ▓▓▓▓▓▓  ▓     ▓▓▓▓     #",
+            "#                                      #",
+            "#                                      #",
+            "#                                      #",
+            "#                                      #",
+            "#                                      #",
+            "#                                      #",
+            "#                                      #",
+            "#                                      #",
+            "#                                      #",
+            "#                                      #",
+            "#                                      #",
+            "#                 z                    #",
+            "#                      ===             #",
+            "#fwb                   =e=     r  1 2 3#",
+            "################LLLLLL##################",
+          ],
+        },
+        {
+          name: "Suelo de metal",
+          hint: "Con cada trueno el metal da descarga. ¡Salten o salgan del metal cuando avise! La caja no siente nada.",
+          thunder: { calm: 200, zap: 24 },
+          mechanisms: {
+            g: { trigger: "button", move: [0, -4] },
+          },
+          map: [
+            "########################################",
+            "#                                      #",
+            "#                                      #",
+            "#                                      #",
+            "#                                      #",
+            "#                                      #",
+            "#                                      #",
+            "#                                      #",
+            "#                                      #",
+            "#                                      #",
+            "#                                      #",
+            "#                                      #",
+            "#                                      #",
+            "#                          g           #",
+            "#         r          e     g           #",
+            "#                          g           #",
+            "#fwb                 x  G# g  z    123 #",
+            "#####≡≡≡AA≡≡≡###≡≡≡≡≡≡≡≡≡###≡≡≡≡≡≡######",
           ],
         },
       ],

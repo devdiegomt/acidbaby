@@ -28,7 +28,7 @@ game = game.replace(
      get grid(){return grid}, get fans(){return fans}, get doors(){return doors}, get enemies(){return enemies}, get items(){return items}, get shots(){return shots},
      get save(){return save}, isUnlocked, get levelIndex(){return levelIndex}, get lastResult(){return lastResult},
      get menuIndex(){return menuIndex}, get levelFrames(){return levelFrames}, setLevel(i, si = 0){ testLevel = null; seasonIndex = si; levelIndex = i; loadLevel(i); state = "playing"; }, get darts(){return darts}, get crumbles(){return crumbles}, get boss(){return boss}, solidAt,
-     SEASONS, get seasonIndex(){return seasonIndex}, get titleIndex(){return titleIndex}, isSeasonUnlocked, levelNumber, get flags(){return flags}, get checkpoint(){return checkpoint}, get retries(){return retries}, get toast(){return toast}, get level(){return level}, worldRange, get spikes(){return spikes}, get obsidian(){return obsidian}, get liquids(){return liquids}, starsOf, starCount, get golem(){return golem}, get rocks(){return rocks}, get waves(){return waves}, get tide(){return tide}, get hydra(){return hydra}, get torches(){return torches}, lightSources, get shade(){return shade}, get geysers(){return geysers}, get mainIndex(){return mainIndex}, mainItems, get crab(){return crab}, get automaton(){return automaton}, get yeti(){return yeti}, get gust(){return gust}, get storm(){return storm}, get clouds(){return clouds}, get rocks2(){return rocks} };\n})();`,
+     SEASONS, get seasonIndex(){return seasonIndex}, get titleIndex(){return titleIndex}, isSeasonUnlocked, levelNumber, get flags(){return flags}, get checkpoint(){return checkpoint}, get retries(){return retries}, get toast(){return toast}, get level(){return level}, worldRange, get spikes(){return spikes}, get obsidian(){return obsidian}, get liquids(){return liquids}, starsOf, starCount, get golem(){return golem}, get rocks(){return rocks}, get waves(){return waves}, get tide(){return tide}, get hydra(){return hydra}, get torches(){return torches}, lightSources, get shade(){return shade}, get geysers(){return geysers}, get mainIndex(){return mainIndex}, mainItems, get crab(){return crab}, get automaton(){return automaton}, get yeti(){return yeti}, get gust(){return gust}, get storm(){return storm}, get rain(){return rain}, get thunder(){return thunder}, get clouds(){return clouds}, get rocks2(){return rocks} };\n})();`,
 );
 // editor.js va antes que game.js (como en index.html); sin DOM solo define EditorCore.
 eval(fs.readFileSync(ROOT + "levels.js", "utf8") + "\nglobalThis.LEVELS = LEVELS;\n" + fs.readFileSync(ROOT + "levels2.js", "utf8") + "\nglobalThis.SEASON_2 = SEASON_2;\n" + fs.readFileSync(ROOT + "levels3.js", "utf8") + "\nglobalThis.SEASON_3 = SEASON_3;\n" + fs.readFileSync(ROOT + "editor.js", "utf8") + "\n" + game);
@@ -3479,6 +3479,88 @@ check("Esquivan picadas, rayos y ráfagas y le saltan encima cuatro veces", ST()
 guarded(240);
 check("Se va con la tormenta y se rompe el sello de las puertas", ST().state === "dead" && G.grid[12][34] === " " && !G.gust.blowing, ST().state);
 for (const p of [fire, water, acid]) { runRightTo(p, 33); walkTo(p, G.doors[p.ch.door].c); }
+check("Llegan a sus puertas", G.state === "won", where());
+
+// --- Lluvia y truenos (Temporada 3, Mundo 3) ------------------------------------------------------
+console.log("\nLluvia y truenos");
+const RN = () => G.rain, TH = () => G.thunder;
+skybox((g) => { g[5][8] = "▓"; g[5][14] = "▓"; g[16][14] = "="; g[5][20] = "▓"; g[17][20] = "L"; g[17][21] = "L"; }, { rain: { calm: 40, pour: 60 } });
+place(fire, 8, 16); place(water, 3, 16); place(acid, 26, 16); run(5);
+check("Hay nubarrones y lluvia", G.rain && !RN().pouring);
+for (let i = 0; i < 100 && !RN().pouring; i++) run(1);
+run(30);
+check("La lluvia le quita una vida a Chispa", fire.hearts === 2 && playing(), `${fire.hearts}`);
+run(120);
+check("…y disuelve la sal que moja", G.grid[16][14] === " ");
+check("…y enfría en obsidiana la lava que moja (solo esa casilla)", G.grid[17][20] === "■" && G.grid[17][21] === "L");
+skybox((g) => { g[5][8] = "▓"; }, { rain: { calm: 40, pour: 60 } });
+place(water, 8, 16); place(acid, 8, 16); place(fire, 3, 16); run(5);
+for (let i = 0; i < 100 && !RN().pouring; i++) run(1);
+run(50);
+check("A Gota y Acidito la lluvia no les hace nada", water.hearts === 3 && acid.hearts === 3);
+skybox((g) => { for (let c = 6; c <= 14; c++) g[17][c] = "≡"; }, { thunder: { calm: 60, zap: 24 } });
+place(water, 8, 16); place(acid, 18, 16); place(fire, 12, 16); run(5);
+for (let i = 0; i < 100 && !TH().warn; i++) run(1);
+check("El trueno avisa antes de caer", TH().warn && !TH().zapping);
+for (let i = 0; i < 100 && TH().t % 84 < 60 - 6; i++) run(1);
+down(keysOf(fire).j); run(16); up(keysOf(fire).j);
+for (let i = 0; i < 40; i++) run(1);
+check("Al caer, el metal le da descarga a quien lo pisa", water.hearts === 2, `${water.hearts}`);
+check("…pero no a quien está en la roca ni a quien saltó a tiempo", acid.hearts === 3 && fire.hearts === 3, `${acid.hearts} ${fire.hearts}`);
+G.setLevel(0);
+
+// --- Temporada 3, nivel 3-1: primeras gotas -----------------------------------------------------------
+console.log("\nTemporada 3, nivel 3-1");
+G.setLevel(12, 2); run(1);
+fire = P("Chispa"); water = P("Gota"); acid = P("Acidito");
+check("Es el mundo de la tormenta y tiene nubarrones", G.SEASONS[2].worlds[2].name === "La tormenta" && !!G.rain);
+// Frames de calma que le quedan a la lluvia (0 si está lloviendo).
+const rainCalm = () => { const r = RN(), cyc = r.cfg.calm + r.cfg.pour; if (r.t < 0) return r.cfg.calm - r.t; const ph = r.t % cyc; return ph < r.cfg.calm ? r.cfg.calm - ph : 0; };
+const waitRain = (need) => { for (let i = 0; i < 1000 && rainCalm() < need; i++) run(1); };
+for (let i = 0; i < 400 && !RN().pouring; i++) run(1);
+run(40);
+check("La primera lluvia hace un puente de obsidiana sobre la lava y disuelve la jaula de sal", G.grid[17].slice(16, 22).every((t) => t === "■") && G.grid[15][24] === " " && G.grid[16][23] === " ", G.grid[17].slice(16, 22).join(""));
+walkTo(water, 18); jumpHere(water);
+check("Gota cruza por el puente (bajo la lluvia, no le pasa nada) y agarra el zafiro", gemOf("water").taken && playing() && water.hearts === 3, where());
+runRightTo(water, 34);
+runRightTo(acid, 34);
+check("Acidito agarra la esmeralda de la jaula disuelta", gemOf("acid").taken && playing(), where());
+walkTo(fire, 14); waitRain(150); runRightTo(fire, 27);
+check("Chispa pasa la lava y el nubarrón solo cuando no llueve", playing() && fire.hearts === 3 && center(fire) > 26 * 32, where());
+waitRain(100); runRightTo(fire, 31); runRightTo(fire, 34);
+check("…y agarra el rubí debajo del último nubarrón sin mojarse", gemOf("fire").taken && fire.hearts === 3, where());
+for (const p of [fire, water, acid]) walkTo(p, G.doors[p.ch.door].c);
+check("Llegan a sus puertas", G.state === "won", where());
+
+// --- Temporada 3, nivel 3-2: suelo de metal --------------------------------------------------------
+console.log("\nTemporada 3, nivel 3-2");
+G.setLevel(13, 2); run(1);
+fire = P("Chispa"); water = P("Gota"); acid = P("Acidito");
+const zapIn = () => { const th = TH(), cyc = th.cfg.calm + th.cfg.zap; if (th.t < 0) return th.cfg.calm - th.t; const ph = th.t % cyc; return ph < th.cfg.calm ? th.cfg.calm - ph : 0; };
+const waitZap = (need) => { for (let i = 0; i < 1000 && zapIn() < need; i++) run(1); };
+// Cruzan el primer tramo de metal entre trueno y trueno (Chispa salta a por el rubí).
+for (const p of [fire, water, acid]) {
+  waitZap(190);
+  if (p === fire) runJump(fire, 7, 11); // el rubí flota encima del charco de ácido: se agarra en el salto
+  runRightTo(p, 14);
+}
+check("Cruzan el primer tramo de metal sin descargas (Chispa agarra el rubí)", playing() && G.players.every((p) => p.hearts === 3 && center(p) > 13 * 32) && gemOf("fire").taken, where());
+waitZap(190); walkTo(fire, 20);
+const box32 = G.boxes[0];
+hold(["KeyD"], 300, () => Math.floor((box32.x + box32.w / 2) / 32) === 24);
+check("Chispa empuja la caja hasta el botón (en el metal, contra el bloque) y se abre la compuerta", M("g").active && Math.floor((box32.x + box32.w / 2) / 32) === 24, `${box32.x}`);
+walkTo(fire, 15);
+check("…y vuelve a la roca antes del trueno", playing() && fire.hearts === 3, where());
+for (let i = 0; i < 400 && !TH().zapping; i++) run(1);
+run(30);
+check("La caja se queda en el botón aunque caiga el trueno", M("g").active && playing());
+waitZap(190); walkTo(acid, 21); jumpHere(acid); runRightTo(acid, 26);
+check("Acidito salta a por la esmeralda y pasa la compuerta", gemOf("acid").taken && playing() && acid.hearts === 3, where());
+for (const p of [fire, water]) { waitZap(150); runRightTo(p, 26); }
+for (const p of [water, fire]) { waitZap(150); runRightTo(p, 34); }
+waitZap(150); runRightTo(acid, 34);
+check("Gota agarra el zafiro del último tramo; nadie recibe descargas; la caja sigue en el botón", M("g").active && gemOf("water").taken && playing() && G.players.every((p) => p.hearts === 3), where());
+for (const p of [fire, water, acid]) walkTo(p, G.doors[p.ch.door].c);
 check("Llegan a sus puertas", G.state === "won", where());
 
 // --- Código de progreso --------------------------------------------------------
