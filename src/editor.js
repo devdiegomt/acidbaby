@@ -99,6 +99,7 @@
     if (data.yeti && typeof data.yeti === "object") clean.yeti = { ...data.yeti }; // el Yeti
     if (data.storm && typeof data.storm === "object") clean.storm = { ...data.storm }; // el Ave de la tormenta
     if (data.nimbus && typeof data.nimbus === "object") clean.nimbus = { ...data.nimbus }; // la Nube negra
+    if (data.colossus && typeof data.colossus === "object") clean.colossus = { ...data.colossus }; // el Coloso
     if (data.gust && typeof data.gust === "object") clean.gust = { ...data.gust }; // las ráfagas
     if (data.rain && typeof data.rain === "object") clean.rain = { ...data.rain }; // la lluvia
     if (data.thunder && typeof data.thunder === "object") clean.thunder = { ...data.thunder }; // los truenos
@@ -120,7 +121,7 @@
       }
       lines.push("  },");
     }
-    for (const cfg of ["boss", "golem", "tide", "hydra", "shade", "geyser", "crab", "automaton", "yeti", "storm", "nimbus", "gust", "rain", "thunder"]) {
+    for (const cfg of ["boss", "golem", "tide", "hydra", "shade", "geyser", "crab", "automaton", "yeti", "storm", "nimbus", "colossus", "gust", "rain", "thunder"]) {
       if (!data[cfg]) continue;
       const fields = Object.entries(data[cfg]).map(([k, v]) => `${k}: ${q(v)}`);
       lines.push(`  ${cfg}: { ${fields.join(", ")} },`);
@@ -287,6 +288,7 @@
       ["Ш", "Yeti de la cumbre (jefe; necesita un lago de agua congelada)", "#e8f0f6"],
       ["Ѱ", "Ave de la tormenta (jefe; hace sus propias ráfagas)", "#4a5d86"],
       ["☈", "Nube negra (jefe; necesita antorchas †)", "#2f3440"],
+      ["Ѫ", "Coloso de la cumbre (jefe; se le dispara al núcleo desde la fila 10)", "#8a98ab"],
     ]],
   ];
   const LABELS = Object.fromEntries(PALETTE.flatMap(([, tiles]) => tiles.map(([ch, label]) => [ch, label])));
@@ -340,6 +342,7 @@
     if (clean.yeti) data.yeti = clean.yeti;
     if (clean.storm) data.storm = clean.storm;
     if (clean.nimbus) data.nimbus = clean.nimbus;
+    if (clean.colossus) data.colossus = clean.colossus;
     if (clean.gust) data.gust = clean.gust;
     if (clean.rain) data.rain = clean.rain;
     if (clean.thunder) data.thunder = clean.thunder;
