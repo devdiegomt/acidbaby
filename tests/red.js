@@ -16,7 +16,7 @@ const source =
     .readFileSync(ROOT + "game.js", "utf8")
     .replace(
       /\}\)\(\);\s*$/,
-      `globalThis.G = { get players(){return players}, get state(){return state}, get levelIndex(){return levelIndex}, get level(){return level}, get doors(){return doors} };\n})();`,
+      `globalThis.G = { get players(){return players}, get state(){return state}, get levelIndex(){return levelIndex}, get level(){return level}, get doors(){return doors}, get golem(){return golem}, get roomIndex(){return roomIndex} };\n})();`,
     );
 
 function makeGame(name) {
@@ -172,6 +172,27 @@ for (const [season, level, label] of LEVELS_TO_SYNC) {
   settle();
   check(`Corrige una desincronización en ${label}`, g2.J.net.syncs > before && sameWorld(), `${pos(g2)} / ${pos(host)}`);
 }
+
+// El desafío final: al pasar de sala, los tres pasan a la vez y siguen iguales; una
+// desincronización dentro de una sala se corrige sin volver a la primera.
+for (const g of games) g.J.net.receive({ t: "start", season: 2, level: 18 });
+step(60);
+settle();
+for (const g of games) {
+  g.G.golem.state = "dying";
+  g.G.golem.timer = 1;
+}
+step(150);
+settle();
+for (const g of games) for (const p of g.G.players) { const d = g.G.doors[p.ch.door]; p.x = d.c * 32 + 5; p.y = (d.r + 1) * 32 - p.h; p.vx = p.vy = 0; }
+step(30);
+settle();
+check("En el desafío final pasan los tres a la segunda sala a la vez", games.every((g) => g.G.roomIndex === 1 && g.G.state === "playing") && sameWorld(), games.map((g) => `sala ${g.G.roomIndex}`).join(", "));
+const syncsBefore = g2.J.net.syncs;
+g2.G.players[1].x += 30;
+step(100);
+settle();
+check("Una desincronización en la segunda sala se corrige sin volver a la primera", g2.J.net.syncs > syncsBefore && sameWorld() && games.every((g) => g.G.roomIndex === 1), `${g2.J.net.syncs}`);
 
 // Si alguien se va, la partida termina con un aviso.
 for (const g of games) g.J.net.end("Gota se desconectó");
