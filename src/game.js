@@ -134,7 +134,7 @@
 
   // Avisos de novedades: salen en la portada, en el menú de niveles y en la pausa.
   // Para cambiarlos (o quitarlos), basta con editar esta lista.
-  const NEWS = ["¡Nuevo! Temporada 3: Las alturas", "Mundo 3 completo: La tormenta"];
+  const NEWS = ["¡Nuevo! Temporada 3: Las alturas", "Nuevo: el desafío final (primeras salas)"];
 
   // Jefe del Mundo 3 (Temporada 2): la Sombra de la mina. Flota hacia Gota o Acidito atravesando
   // las paredes; si se queda un rato a la luz de una antorcha encendida se quema (un golpe), apaga
@@ -443,6 +443,8 @@
     const levels = [];
     const where = [];
     s.worlds.forEach((w, wi) => w.levels.forEach((lv, k) => {
+      // Un nivel con salas (el desafío final) se ve en el menú por su primera sala.
+      if (lv.rooms && !lv.map) lv.map = lv.rooms[0].map;
       levels.push(lv);
       where.push({ world: wi, num: k });
     }));
@@ -450,8 +452,9 @@
   });
 
   // Tamaño de la vista: el del nivel más grande de todas las temporadas.
-  const VIEW_COLS = Math.max(...SEASONS.flatMap((s) => s.levels.map((lv) => lv.map[0].length)));
-  const VIEW_ROWS = Math.max(...SEASONS.flatMap((s) => s.levels.map((lv) => lv.map.length)));
+  const allMaps = SEASONS.flatMap((s) => s.levels.flatMap((lv) => (lv.rooms ? lv.rooms.map((r) => r.map) : [lv.map])));
+  const VIEW_COLS = Math.max(...allMaps.map((m) => m[0].length));
+  const VIEW_ROWS = Math.max(...allMaps.map((m) => m.length));
 
   let seasonIndex = 0;
   const season = () => SEASONS[seasonIndex];
@@ -868,8 +871,23 @@
     return { kind, x, y, w, h, vx: 0, vy: 0, remX: 0, remY: 0 };
   }
 
-  function loadLevel(index) {
-    loadLevelData(seasonLevels()[index]);
+  // Niveles con salas (el desafío final): se juegan una tras otra sin volver al menú. Cada sala es
+  // un nivel completo (mapa, jefe…); al llegar a las puertas se pasa a la siguiente con las mismas
+  // vidas y el mismo reloj. Al caer se vuelve al principio de la sala (o a su bandera).
+  let roomIndex = 0;
+  function roomData(base, k) {
+    const room = base.rooms[k];
+    // En la primera sala se ve el consejo del desafío; en las demás, el de la sala.
+    return { ...room, name: base.name, hint: k === 0 ? base.hint : room.hint, roomName: room.name, base, room: k, rooms: base.rooms.length };
+  }
+  // Lo que se carga de un nivel: el nivel tal cual o, si tiene salas, la sala en la que se va.
+  function levelData(base, k = 0) {
+    roomIndex = base.rooms ? k : 0;
+    return base.rooms ? roomData(base, roomIndex) : base;
+  }
+
+  function loadLevel(index, room = 0) {
+    loadLevelData(levelData(seasonLevels()[index], room));
   }
 
   // Carga un nivel. Con lenient (el editor) no lanza errores: devuelve la lista de problemas
@@ -1230,8 +1248,22 @@
   }
 
   function restartLevel() {
-    loadLevelData(testLevel || seasonLevels()[levelIndex]);
+    loadLevelData(levelData(testLevel || seasonLevels()[levelIndex]));
     state = "playing";
+  }
+
+  // Pasa a la siguiente sala: mismo reloj, mismas vidas y quien maneja a quién no cambia.
+  function nextRoom() {
+    const keep = { levelFrames, cleanRun, retries, hearts: players.map((p) => p.hearts) };
+    loadLevelData(levelData(level.base, roomIndex + 1));
+    ({ levelFrames, cleanRun, retries } = keep);
+    players.forEach((p, i) => (p.hearts = Math.max(1, keep.hearts[i] ?? MAX_HEARTS)));
+    // Al caer en esta sala se vuelve aquí (no al principio del desafío).
+    checkpoint = structuredClone(liveState());
+    state = "playing";
+    toast = { text: `Sala ${roomIndex + 1} de ${level.rooms}: ${level.roomName}`, frames: TOAST_FRAMES };
+    for (const p of players) burst(p.x + p.w / 2, p.y + p.h / 2, ["#ffe08a", "#ffffff", p.ch.color], 16);
+    sound.play("flag");
   }
 
   // ---------------------------------------------------------------------------
@@ -4378,6 +4410,7 @@
     if (thunder) add(thunder.t);
     [levelFrames, STATE_CODE[state] || 0, tide ? tide.y : 0, gems.filter((g) => g.taken).length].forEach(add);
     for (const b of [boss, golem, hydra, shade, crab, automaton, yeti, storm, nimbus]) if (b) [b.x || 0, b.y || 0, b.hits || b.hp || 0].forEach(add);
+    add(roomIndex);
     return h;
   }
 
@@ -4491,7 +4524,7 @@
 
   function fullState() {
     return {
-      level: { season: seasonIndex, index: levelIndex },
+      level: { season: seasonIndex, index: levelIndex, room: roomIndex },
       world: packWorld(liveState()),
       checkpoint: checkpoint ? packWorld(checkpoint) : null,
       shots: shots.map((x) => ({ ...x, owner: players.indexOf(x.owner) })),
@@ -4501,11 +4534,11 @@
   }
 
   function applyFullState(s) {
-    if (seasonIndex !== s.level.season || levelIndex !== s.level.index || !level) {
+    if (seasonIndex !== s.level.season || levelIndex !== s.level.index || roomIndex !== (s.level.room || 0) || !level) {
       seasonIndex = s.level.season;
       levelIndex = s.level.index;
       testLevel = null;
-      loadLevel(levelIndex);
+      loadLevel(levelIndex, s.level.room || 0);
     }
     const w = unpackWorld(s.world);
     ({ grid, liquids, breakables, dissolving, barriers, fans, doors, boxes, gems, mechs, portals } = w);
@@ -4595,7 +4628,10 @@
         if (state === "playing") spikeContacts();
         if (shake > 0) shake--;
         if (toast && --toast.frames <= 0) toast = null;
-        if (state === "playing" && players.every((p) => p.inDoor)) winLevel();
+        if (state === "playing" && players.every((p) => p.inDoor)) {
+          if (level.base && roomIndex < level.rooms - 1) nextRoom();
+          else winLevel();
+        }
       }
     } else if (state === "dead") {
       deadTimer++;
@@ -4905,6 +4941,8 @@
   };
   // El tema sale del mundo del nivel o, si no tiene, de su temporada (los del editor, el del templo).
   function themeOf(lv) {
+    if (lv.theme && THEMES[lv.theme]) return THEMES[lv.theme]; // una sala del desafío lleva el de su mundo
+    lv = lv.base || lv;
     const s = SEASONS.find((x) => x.levels.includes(lv));
     const w = s?.worlds.find((x) => x.levels.includes(lv));
     return THEMES[w?.theme] || THEMES[s?.theme] || THEMES.temple;
@@ -6493,7 +6531,8 @@
   function drawHud() {
     ctx.fillStyle = "rgba(0,0,0,0.55)";
     ctx.fillRect(0, 0, W, T);
-    text(testLevel ? `Prueba · ${level.name}` : `Nivel ${levelNumber(levelIndex)} · ${level.name}`, 12, T / 2, 15, "#f3e6c8", "left");
+    const roomLabel = level.base ? ` · Sala ${roomIndex + 1}/${level.rooms}` : "";
+    text(testLevel ? `Prueba · ${level.name}` : `Nivel ${levelNumber(levelIndex)} · ${level.name}${roomLabel}`, 12, T / 2, 15, "#f3e6c8", "left");
     text(formatTime(levelFrames), W / 2 - 40, T / 2, 16, "#f3e6c8");
     const best = testLevel ? null : recordOf(levelIndex);
     if (best?.done) text(`récord ${formatTime(best.bestFrames)}`, W / 2 - 66, T / 2, 13, "#9c8d70", "right", "normal");

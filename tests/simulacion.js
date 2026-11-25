@@ -28,7 +28,7 @@ game = game.replace(
      get grid(){return grid}, get fans(){return fans}, get doors(){return doors}, get enemies(){return enemies}, get items(){return items}, get shots(){return shots},
      get save(){return save}, isUnlocked, get levelIndex(){return levelIndex}, get lastResult(){return lastResult},
      get menuIndex(){return menuIndex}, get levelFrames(){return levelFrames}, setLevel(i, si = 0){ testLevel = null; seasonIndex = si; levelIndex = i; loadLevel(i); state = "playing"; }, get darts(){return darts}, get crumbles(){return crumbles}, get boss(){return boss}, solidAt,
-     SEASONS, get seasonIndex(){return seasonIndex}, get titleIndex(){return titleIndex}, isSeasonUnlocked, levelNumber, get flags(){return flags}, get checkpoint(){return checkpoint}, get retries(){return retries}, get toast(){return toast}, get level(){return level}, worldRange, get spikes(){return spikes}, get obsidian(){return obsidian}, get liquids(){return liquids}, starsOf, starCount, get golem(){return golem}, get rocks(){return rocks}, get waves(){return waves}, get tide(){return tide}, get hydra(){return hydra}, get torches(){return torches}, lightSources, get shade(){return shade}, get geysers(){return geysers}, get mainIndex(){return mainIndex}, mainItems, get crab(){return crab}, get automaton(){return automaton}, get yeti(){return yeti}, get gust(){return gust}, get storm(){return storm}, get rain(){return rain}, get nimbus(){return nimbus}, get thunder(){return thunder}, get clouds(){return clouds}, get rocks2(){return rocks} };\n})();`,
+     SEASONS, get seasonIndex(){return seasonIndex}, get titleIndex(){return titleIndex}, isSeasonUnlocked, levelNumber, get flags(){return flags}, get checkpoint(){return checkpoint}, get retries(){return retries}, get toast(){return toast}, get level(){return level}, worldRange, get spikes(){return spikes}, get obsidian(){return obsidian}, get liquids(){return liquids}, starsOf, starCount, get golem(){return golem}, get rocks(){return rocks}, get waves(){return waves}, get tide(){return tide}, get hydra(){return hydra}, get torches(){return torches}, lightSources, get shade(){return shade}, get geysers(){return geysers}, get mainIndex(){return mainIndex}, mainItems, get crab(){return crab}, get automaton(){return automaton}, get yeti(){return yeti}, get gust(){return gust}, get storm(){return storm}, get rain(){return rain}, get nimbus(){return nimbus}, get roomIndex(){return roomIndex}, get thunder(){return thunder}, get clouds(){return clouds}, get rocks2(){return rocks} };\n})();`,
 );
 // editor.js va antes que game.js (como en index.html); sin DOM solo define EditorCore.
 eval(fs.readFileSync(ROOT + "levels.js", "utf8") + "\nglobalThis.LEVELS = LEVELS;\n" + fs.readFileSync(ROOT + "levels2.js", "utf8") + "\nglobalThis.SEASON_2 = SEASON_2;\n" + fs.readFileSync(ROOT + "levels3.js", "utf8") + "\nglobalThis.SEASON_3 = SEASON_3;\n" + fs.readFileSync(ROOT + "editor.js", "utf8") + "\n" + game);
@@ -3705,6 +3705,41 @@ guarded(250);
 check("Se hace vapor y se rompe el sello de las puertas", NB().state === "dead" && G.grid[14][34] === " ", NB().state);
 for (const p of [fire, water, acid]) guardedWalk(p, G.doors[p.ch.door].c);
 check("Llegan a sus puertas", G.state === "won", where());
+
+// --- Temporada 3, nivel 4-1: el desafío final (salas) ----------------------------------------------
+console.log("\nTemporada 3, nivel 4-1 (desafío final)");
+const challenge = () => { G.setLevel(18, 2); run(1); fire = P("Chispa"); water = P("Gota"); acid = P("Acidito"); };
+challenge();
+check("El desafío final es un nivel con salas: empieza en la del Gólem", G.level.base?.name === "El desafío final" && G.roomIndex === 0 && !!G.golem && G.level.rooms >= 2, G.level.name);
+check("Las salas no tienen gemas", G.gems.length === 0);
+run(200);
+// Se vence al Gólem (aquí, de una) y se llega a las puertas: siguiente sala.
+G.golem.state = "dying"; G.golem.timer = 1;
+run(200);
+check("Al vencer al Gólem se rompe el sello", G.golem.state === "dead");
+fire.hearts = 2;
+const framesBefore = G.levelFrames;
+toDoors();
+run(5);
+check("Al llegar a las puertas pasa a la sala del Cangrejo, sin volver al menú", G.state === "playing" && G.roomIndex === 1 && !!G.crab && !G.golem, `${G.state} sala ${G.roomIndex}`);
+check("…el reloj sigue corriendo y se conservan las vidas", G.levelFrames >= framesBefore && fire.hearts === 2, `${G.levelFrames} ${fire.hearts}`);
+check("…y avisa en qué sala están", /Sala 2 de/.test(G.toast?.text || ""), G.toast?.text);
+// Al caer en esta sala se vuelve a su principio (con las vidas llenas), no al Gólem.
+run(150);
+G.crab.hits = 2; water.hearts = 1;
+check("Si a mitad de la sala del Cangrejo reintentan (o alguien cae)…", G.state === "playing" && G.roomIndex === 1);
+tapKey("KeyR"); run(5);
+for (let i = 0; i < 200 && G.state !== "playing"; i++) run(1);
+check("…vuelven al principio de esa misma sala, con las vidas llenas", G.roomIndex === 1 && !!G.crab && G.crab.hits === 0 && G.players.every((p) => p.hearts === 3), `sala ${G.roomIndex}`);
+for (let k = G.roomIndex; k < G.level.rooms; k++) {
+  run(150);
+  for (const b of [G.golem, G.crab, G.yeti, G.storm, G.nimbus]) if (b && b.state !== "dead") { b.state = "dying"; b.timer = 1; }
+  run(250);
+  toDoors(); run(5);
+}
+check("Al salir por las puertas de la última sala se gana el desafío (y se guarda el récord)", G.state === "won" && G.save.levels["t3:El desafío final"]?.done, G.state);
+challenge();
+check("«Reiniciar nivel» vuelve a la primera sala", G.roomIndex === 0 && !!G.golem);
 
 // --- Código de progreso --------------------------------------------------------
 console.log("\nCódigo de progreso");
