@@ -134,7 +134,7 @@
 
   // Avisos de novedades: salen en la portada, en el menú de niveles y en la pausa.
   // Para cambiarlos (o quitarlos), basta con editar esta lista.
-  const NEWS = ["¡Nuevo! Temporada 3: Las alturas", "Mundo 3: La tormenta"];
+  const NEWS = ["¡Nuevo! Temporada 3: Las alturas", "Mundo 3 completo: La tormenta"];
 
   // Jefe del Mundo 3 (Temporada 2): la Sombra de la mina. Flota hacia Gota o Acidito atravesando
   // las paredes; si se queda un rato a la luz de una antorcha encendida se quema (un golpe), apaga
@@ -217,6 +217,19 @@
   const STORM_FLAP_WARN = 60;
   const STORM_FLAP_BLOW = 110;
   const STORM_GUST = 1.6;
+
+  // Jefe del Mundo 3 de la temporada 3: la Nube negra. Persigue a Chispa por arriba y le llueve
+  // encima (la lluvia también disuelve la sal, enfría la lava y apaga antorchas). Cuando su lluvia
+  // apaga una antorcha encendida, el calor la hace hervir: un golpe (aguanta 4). Chispa enciende
+  // las antorchas y se la lleva detrás.
+  const NIMBUS_TILE = "☈";
+  const NIMBUS_W = 5 * T;
+  const NIMBUS_H = 64;
+  const NIMBUS_Y = 3 * T;
+  const NIMBUS_HP = 4;
+  const NIMBUS_SPEED = [0.9, 1.1, 1.3, 1.5];
+  const NIMBUS_HURT = 130; // frames hirviendo (sin llover) tras un golpe
+  const TORCH_WET = 600; // frames que una antorcha apagada por la lluvia tarda en secarse
 
   const FONT = '"Segoe UI", system-ui, sans-serif';
   const MECH_COLORS = ["#f2c14e", "#c86bff", "#ff6fa8", "#4fd6c8", "#f0f0f0"];
@@ -810,6 +823,7 @@
   let automaton = null; // el Autómata de la forja (jefe del Mundo 5 de la temporada 2)
   let yeti = null; // el Yeti de la cumbre (jefe del Mundo 1 de la temporada 3)
   let storm = null; // el Ave de la tormenta (jefe del Mundo 2 de la temporada 3)
+  let nimbus = null; // la Nube negra (jefe del Mundo 3 de la temporada 3)
   let torches = []; // antorchas: { c, r, lit }
   let shade = null; // la Sombra de la mina (jefe del Mundo 3 de la temporada 2)
   let hydra = null; // la Hidra del aljibe (jefe del Mundo 2 de la temporada 2)
@@ -904,6 +918,7 @@
     automaton = null;
     yeti = null;
     storm = null;
+    nimbus = null;
     hydra = null;
     torches = [];
     shade = null;
@@ -1014,6 +1029,10 @@
         }
         if (t === YETI_TILE) {
           yeti = { c, r }; // se completa al final, cuando ya se conoce el lago
+          continue;
+        }
+        if (t === NIMBUS_TILE) {
+          nimbus = { c, r }; // se completa al final, cuando ya se conocen las antorchas
           continue;
         }
         if (t === STORM_TILE) {
@@ -1163,6 +1182,10 @@
       });
     } else if (level.geyser) fail("hay \"geyser\" pero el mapa no tiene géiseres (↥ ↟ ⇞)");
 
+    if (nimbus) {
+      if (!torches.length) fail("la Nube negra necesita al menos una antorcha (†)");
+      nimbus = makeNimbus(nimbus.c);
+    }
     if (storm) {
       if (level.gust) fail("el Ave de la tormenta hace sus propias ráfagas: quiten \"gust\" del nivel");
       storm = makeStorm(storm.c, storm.r);
@@ -1226,7 +1249,7 @@
   function liveState() {
     return {
       grid, liquids, breakables, dissolving, barriers, fans, doors, boxes, gems, mechs, portals,
-      enemies, items, springs, crumbles, spikes, flags, obsidian, boss, bossDefeatedAt, golem, crab, automaton, yeti, storm, dispensers, tide, hydra, torches, shade, geysers, gust, rain, thunder,
+      enemies, items, springs, crumbles, spikes, flags, obsidian, boss, bossDefeatedAt, golem, crab, automaton, yeti, storm, nimbus, dispensers, tide, hydra, torches, shade, geysers, gust, rain, thunder,
       players: players.map((p) => ({
         ...p,
         ch: CHARACTERS.indexOf(p.ch),
@@ -1249,7 +1272,7 @@
   function backToCheckpoint() {
     const s = structuredClone(checkpoint);
     ({ grid, liquids, breakables, dissolving, barriers, fans, doors, boxes, gems, mechs, portals } = s);
-    ({ enemies, items, springs, crumbles, spikes, flags, obsidian, boss, bossDefeatedAt, golem, crab, automaton, yeti, storm, dispensers, tide, hydra, torches, shade, geysers, gust, rain, thunder } = s);
+    ({ enemies, items, springs, crumbles, spikes, flags, obsidian, boss, bossDefeatedAt, golem, crab, automaton, yeti, storm, nimbus, dispensers, tide, hydra, torches, shade, geysers, gust, rain, thunder } = s);
     players = s.players.map((p) =>
       Object.assign(p, {
         ch: CHARACTERS[p.ch],
@@ -1687,33 +1710,52 @@
     rain.warn = warn;
     if (!on) return;
     for (const { c, r } of stormClouds) {
-      const bottom = rainBottom(c, r);
-      // Lo que moja: la sal se disuelve y la lava se enfría en obsidiana.
-      const t = tileAt(c, bottom);
-      if (t === "=" && !dissolving.has(key(c, bottom))) startDissolve(c, bottom);
-      else if (t === "L") {
-        grid[bottom][c] = OBSIDIAN_TILE;
-        obsidian.push({ c, r: bottom, age: 0 });
-        liquids = liquids.filter((l) => grid[l.r][l.c] !== OBSIDIAN_TILE);
-        burst(c * T + T / 2, bottom * T + 4, ["#e8e8f0", "#b9b4cc", "#ffffff"], 10);
-        sound.play("hiss");
-      }
-      // A Chispa (al de fuego) la lluvia le quita vidas.
-      for (const p of players) {
-        if (p.alive && p.hurt === 0 && p.ch.immune === "fire" && intersects(c * T + 6, (r + 1) * T, T - 12, (bottom - r - 1) * T, p)) {
-          hurtPlayer(p, { x: c * T, w: T }, "se mojó con la lluvia");
-          if (state !== "playing") return;
-        }
-      }
+      rainColumn(c, r);
+      if (state !== "playing") return;
     }
   }
 
-  // ¿Toca suelo de metal? (de pie encima o pegado de lado)
-  function touchesMetal(p) {
-    for (let r = Math.floor((p.y - 1) / T); r <= Math.floor((p.y + p.h) / T); r++) {
-      for (let c = Math.floor((p.x - 1) / T); c <= Math.floor((p.x + p.w) / T); c++) {
-        if (tileAt(c, r) === METAL_TILE && intersects(c * T, r * T, T, T, { x: p.x - 1, y: p.y - 1, w: p.w + 2, h: p.h + 2 })) return true;
+  // Lluvia en la columna c desde debajo de la fila r: la sal que moja se disuelve, la lava se enfría
+  // en obsidiana, las antorchas se apagan y a Chispa (al de fuego) le quita vidas. Devuelve cuántas
+  // antorchas apagó.
+  function rainColumn(c, r) {
+    const bottom = rainBottom(c, r);
+    const t = tileAt(c, bottom);
+    if (t === "=" && !dissolving.has(key(c, bottom))) startDissolve(c, bottom);
+    else if (t === "L") {
+      grid[bottom][c] = OBSIDIAN_TILE;
+      obsidian.push({ c, r: bottom, age: 0 });
+      liquids = liquids.filter((l) => grid[l.r][l.c] !== OBSIDIAN_TILE);
+      burst(c * T + T / 2, bottom * T + 4, ["#e8e8f0", "#b9b4cc", "#ffffff"], 10);
+      sound.play("hiss");
+    }
+    let doused = 0;
+    for (const tc of torches) {
+      if (tc.lit && tc.c === c && tc.r > r && tc.r < bottom) {
+        tc.lit = false;
+        tc.wet = TORCH_WET;
+        doused++;
+        burst(c * T + T / 2, tc.r * T + 6, ["#e8e8f0", "#b9b4cc", "#ffffff"], 12);
+        sound.play("hiss");
       }
+    }
+    for (const p of players) {
+      if (p.alive && p.hurt === 0 && p.ch.immune === "fire" && intersects(c * T + 6, (r + 1) * T, T - 12, (bottom - r - 1) * T, p)) {
+        hurtPlayer(p, { x: c * T, w: T }, "se mojó con la lluvia");
+        if (state !== "playing") return doused;
+      }
+    }
+    return doused;
+  }
+
+  // ¿Toca suelo de metal? (de pie encima o pegado de lado; no vale rozar una esquina)
+  function touchesMetal(p) {
+    const feet = p.y + p.h;
+    if (feet % T === 0) {
+      for (let c = Math.floor(p.x / T); c <= Math.floor((p.x + p.w - 1) / T); c++) if (tileAt(c, feet / T) === METAL_TILE) return true;
+    }
+    for (let r = Math.floor(p.y / T); r <= Math.floor((feet - 1) / T); r++) {
+      if (tileAt(Math.floor((p.x - 1) / T), r) === METAL_TILE || tileAt(Math.floor((p.x + p.w) / T), r) === METAL_TILE) return true;
     }
     return false;
   }
@@ -3492,6 +3534,107 @@
     breakSeals();
   }
 
+  // ---------------------------------------------------------------------------
+  // La Nube negra
+  // ---------------------------------------------------------------------------
+  function makeNimbus(c) {
+    const cfg = level.nimbus || {};
+    const minX = (cfg.left ?? 1) * T;
+    const maxX = ((cfg.right ?? grid[0].length - 2) + 1) * T - NIMBUS_W;
+    return {
+      name: cfg.name || "La Nube negra",
+      x: Math.max(minX, Math.min(maxX, c * T + T / 2 - NIMBUS_W / 2)),
+      y: NIMBUS_Y,
+      minX,
+      maxX,
+      hits: 0,
+      state: "intro", // intro | chase | hurt | dying | dead
+      timer: 120,
+      flash: 0,
+      anim: 0,
+    };
+  }
+
+  // Columnas en las que llueve (las tres de debajo del centro de la nube).
+  function nimbusColumns(n) {
+    const cc = Math.floor((n.x + NIMBUS_W / 2) / T);
+    return [cc - 1, cc, cc + 1];
+  }
+
+  function updateNimbus() {
+    const n = nimbus;
+    if (n.flash > 0) n.flash--;
+    n.anim++;
+    if (n.state === "dead") return;
+    if (n.state === "dying") {
+      shake = Math.max(shake, 3);
+      if (n.timer % 5 === 0) burst(n.x + Math.random() * NIMBUS_W, n.y + Math.random() * NIMBUS_H, ["#e8e8f0", "#b9b4cc", "#ffffff"], 10);
+      if (--n.timer <= 0) defeatNimbus(n);
+      return;
+    }
+    if (n.state === "intro") {
+      if (--n.timer <= 0) {
+        n.state = "chase";
+        sound.play("flood");
+        toast = { text: "¡Chispa, enciende las antorchas y llévatela detrás! Su lluvia las apaga… y la hace hervir.", frames: TOAST_FRAMES };
+      }
+      return;
+    }
+    const lvl = Math.min(n.hits, NIMBUS_SPEED.length - 1);
+    // Persigue a Chispa (al de fuego); si no está, al más cercano.
+    const alive = players.filter((p) => p.alive);
+    const cx = n.x + NIMBUS_W / 2;
+    const target = alive.find((p) => p.ch.immune === "fire") || alive.reduce((a, p) => (!a || Math.abs(p.x - cx) < Math.abs(a.x - cx) ? p : a), null);
+    if (n.state === "hurt") {
+      if (n.timer % 6 === 0) burst(n.x + 20 + Math.random() * (NIMBUS_W - 40), n.y + NIMBUS_H - 10, ["#ffffff", "#e8e8f0"], 4); // vapor
+      if (--n.timer <= 0) {
+        n.state = "chase";
+        sound.play("flood");
+      }
+      return;
+    }
+    if (target) {
+      const dx = target.x + target.w / 2 - cx;
+      n.x = Math.max(n.minX, Math.min(n.maxX, n.x + Math.sign(dx) * Math.min(Math.abs(dx), NIMBUS_SPEED[lvl])));
+    }
+    n.y = NIMBUS_Y + Math.sin(n.anim * 0.04) * 4;
+    const r = Math.floor((n.y + NIMBUS_H - 1) / T);
+    let doused = 0;
+    for (const c of nimbusColumns(n)) {
+      doused += rainColumn(c, r);
+      if (state !== "playing") return;
+    }
+    if (doused) hitNimbus(n);
+  }
+
+  function hitNimbus(n) {
+    n.hits++;
+    n.flash = 30;
+    shake = Math.max(shake, 8);
+    burst(n.x + NIMBUS_W / 2, n.y + NIMBUS_H, ["#ffffff", "#e8e8f0", "#ffd166"], 40);
+    sound.play("bossHit");
+    if (n.hits >= NIMBUS_HP) {
+      n.state = "dying";
+      n.timer = 110;
+      sound.play("roar");
+      return;
+    }
+    n.state = "hurt";
+    n.timer = NIMBUS_HURT;
+    toast = { text: `¡La antorcha la hizo hervir! Le quedan ${NIMBUS_HP - n.hits}`, frames: TOAST_FRAMES / 2 };
+  }
+
+  function defeatNimbus(n) {
+    n.state = "dead";
+    bossDefeatedAt = levelFrames;
+    shake = 30;
+    burst(n.x + NIMBUS_W / 2, n.y + NIMBUS_H / 2, ["#ffffff", "#e8e8f0", "#ffd166"], 90);
+    sound.play("boom");
+    sound.play("win");
+    for (const e of enemies) if (e.alive) defeatEnemy(e);
+    breakSeals();
+  }
+
   // La marea espera un rato y luego sube; un desagüe activo la hace bajar. Quien no es de su
   // elemento y se queda con la cabeza por debajo de la superficie se hunde.
   function updateTide() {
@@ -3637,6 +3780,10 @@
         continue;
       }
       if (tc.lit) continue;
+      if (tc.wet > 0) {
+        tc.wet--; // empapada: no prende hasta que se seque
+        continue;
+      }
       const x = tc.c * T + 8;
       const y = tc.r * T + 4;
       const byChispa = players.some((p) => p.alive && p.ch.immune === "fire" && intersects(x, y, T - 16, T - 4, p));
@@ -4230,7 +4377,7 @@
     if (rain) add(rain.t);
     if (thunder) add(thunder.t);
     [levelFrames, STATE_CODE[state] || 0, tide ? tide.y : 0, gems.filter((g) => g.taken).length].forEach(add);
-    for (const b of [boss, golem, hydra, shade, crab, automaton, yeti, storm]) if (b) [b.x || 0, b.y || 0, b.hits || b.hp || 0].forEach(add);
+    for (const b of [boss, golem, hydra, shade, crab, automaton, yeti, storm, nimbus]) if (b) [b.x || 0, b.y || 0, b.hits || b.hp || 0].forEach(add);
     return h;
   }
 
@@ -4362,7 +4509,7 @@
     }
     const w = unpackWorld(s.world);
     ({ grid, liquids, breakables, dissolving, barriers, fans, doors, boxes, gems, mechs, portals } = w);
-    ({ enemies, items, springs, crumbles, spikes, flags, obsidian, boss, bossDefeatedAt, golem, crab, automaton, yeti, storm, dispensers, tide, hydra, torches, shade, geysers, gust, rain, thunder } = w);
+    ({ enemies, items, springs, crumbles, spikes, flags, obsidian, boss, bossDefeatedAt, golem, crab, automaton, yeti, storm, nimbus, dispensers, tide, hydra, torches, shade, geysers, gust, rain, thunder } = w);
     players = w.players.map((p) => Object.assign(p, { ch: CHARACTERS[p.ch], controls: CHARACTERS[p.controls].keys }));
     checkpoint = s.checkpoint ? unpackWorld(s.checkpoint) : null;
     shots = s.shots.map((x) => ({ ...x, owner: players[x.owner] }));
@@ -4426,6 +4573,7 @@
         if (automaton && state === "playing") updateAutomaton();
         if (yeti && state === "playing") updateYeti();
         if (storm && state === "playing") updateStorm();
+        if (nimbus && state === "playing") updateNimbus();
         if (hydra && state === "playing") updateHydra();
         updateDispensers();
         updateBreakables();
@@ -7600,6 +7748,121 @@
     }
   }
 
+  // Nube negra: un nubarrón enorme con cara de enojo, relámpagos por dentro y una cortina de lluvia
+  // debajo; al hervir, se pone blanca y suelta vapor.
+  function drawNimbus(t) {
+    const n = nimbus;
+    if (!n || n.state === "dead") return;
+    const raining = n.state === "chase";
+    if (raining) {
+      const r = Math.floor((n.y + NIMBUS_H - 1) / T);
+      for (const c of nimbusColumns(n)) {
+        const x = c * T;
+        const top = n.y + NIMBUS_H - 8;
+        const bottom = rainBottom(c, r) * T;
+        ctx.fillStyle = "rgba(120,170,230,0.2)";
+        ctx.fillRect(x + 2, top, T - 4, bottom - top);
+        ctx.strokeStyle = "rgba(170,210,255,0.8)";
+        ctx.lineWidth = 1.5;
+        for (let k = 0; k < 4; k++) {
+          const off = (t * 560 + k * 37 + c * 13) % 40;
+          for (let yy = top + off - 40; yy < bottom; yy += 40) {
+            const y0 = Math.max(top, yy);
+            const y1 = Math.min(bottom, yy + 14);
+            if (y1 <= y0) continue;
+            ctx.beginPath();
+            ctx.moveTo(x + 6 + k * 7, y0);
+            ctx.lineTo(x + 4 + k * 7, y1);
+            ctx.stroke();
+          }
+        }
+      }
+    }
+    ctx.save();
+    if (n.state === "dying") ctx.globalAlpha = Math.max(0.15, n.timer / 110);
+    const x = n.x;
+    const y = n.y;
+    const white = n.flash > 0 && n.flash % 6 < 3;
+    const hurt = n.state === "hurt";
+    ctx.fillStyle = white ? "#ffffff" : hurt ? "#8d93a3" : "#2f3440";
+    for (const [dx, dy, rad] of [[24, 40, 24], [56, 26, 32], [96, 22, 36], [132, 38, 26], [80, 46, 28], [40, 50, 20], [118, 52, 20]]) {
+      ctx.beginPath();
+      ctx.arc(x + dx, y + dy, rad, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    // Relámpago que se asoma por dentro
+    if (!hurt && Math.floor(t * 3 + n.hits) % 4 === 0) {
+      ctx.strokeStyle = "#ffe066";
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.moveTo(x + 110, y + 18);
+      ctx.lineTo(x + 102, y + 32);
+      ctx.lineTo(x + 112, y + 34);
+      ctx.lineTo(x + 104, y + 50);
+      ctx.stroke();
+    }
+    // Cara: cejas enojadas y ojos amarillos (cerrados mientras hierve)
+    const cx = x + NIMBUS_W / 2;
+    if (hurt) {
+      ctx.strokeStyle = "#2f3440";
+      ctx.lineWidth = 3;
+      for (const side of [-1, 1]) {
+        ctx.beginPath();
+        ctx.moveTo(cx + side * 22 - 7, y + 34);
+        ctx.lineTo(cx + side * 22 + 7, y + 34);
+        ctx.stroke();
+      }
+    } else {
+      for (const side of [-1, 1]) {
+        ctx.fillStyle = "#ffe066";
+        ctx.beginPath();
+        ctx.ellipse(cx + side * 22, y + 36, 7, 5, 0, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.fillStyle = "#1b1b24";
+        ctx.beginPath();
+        ctx.arc(cx + side * 22, y + 37, 2.5, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.strokeStyle = "#151820";
+        ctx.lineWidth = 3;
+        ctx.beginPath();
+        ctx.moveTo(cx + side * 32, y + 24);
+        ctx.lineTo(cx + side * 13, y + 30);
+        ctx.stroke();
+      }
+    }
+    ctx.restore();
+  }
+
+  function drawNimbusBar() {
+    const n = nimbus;
+    if (n.state === "dead") {
+      const since = levelFrames - bossDefeatedAt;
+      if (since < 240) {
+        ctx.save();
+        ctx.globalAlpha = Math.min(1, since / 20, (240 - since) / 40);
+        ctx.fillStyle = "rgba(10,8,5,0.75)";
+        ctx.fillRect(0, H / 2 - 50, W, 100);
+        text(`¡${n.name} se hizo vapor!`, W / 2, H / 2 - 12, 34, "#ffe08a");
+        text("El sello de las puertas se rompe…", W / 2, H / 2 + 26, 18, "#d9c9a6", "center", "normal");
+        ctx.restore();
+      }
+      return;
+    }
+    const w = Math.min(420, W - 120);
+    const x = W / 2 - w / 2;
+    const yy = T + 12;
+    text(n.name, W / 2, yy, 15, "#ffe9b8");
+    const seg = w / NIMBUS_HP;
+    for (let i = 0; i < NIMBUS_HP; i++) {
+      ctx.fillStyle = "rgba(0,0,0,0.6)";
+      ctx.fillRect(x + i * seg + 2, yy + 12, seg - 4, 10);
+      if (i >= n.hits) {
+        ctx.fillStyle = mix("#9fb4d6", "#3a4458", i / NIMBUS_HP);
+        ctx.fillRect(x + i * seg + 2, yy + 12, seg - 4, 10);
+      }
+    }
+  }
+
   // Marea: una capa translúcida del líquido que lo cubre todo por debajo de la superficie.
   function drawTide(t) {
     if (!tide || tide.y >= tide.bottom) return;
@@ -7785,6 +8048,12 @@
       ctx.lineTo(x - 4, top + 6);
       ctx.closePath();
       ctx.fill();
+      if (!tc.lit && tc.wet > 0) {
+        // Empapada: gotea.
+        ctx.fillStyle = "rgba(170,210,255,0.85)";
+        ctx.fillRect(x - 4, top + 7 + ((t * 40 + tc.c * 7) % 14), 2, 4);
+        ctx.fillRect(x + 3, top + 7 + ((t * 40 + tc.c * 7 + 7) % 14), 2, 4);
+      }
       if (!tc.lit) continue;
       ctx.save();
       ctx.shadowColor = "#ff8a1a";
@@ -8034,6 +8303,7 @@
     drawAutomaton(t);
     drawYeti(t);
     drawStorm(t);
+    drawNimbus(t);
     drawHydra(t);
     drawShade(t);
     drawGeyserJets(t);
@@ -8081,6 +8351,9 @@
         drawToast(true);
       } else if (storm && levelFrames > HINT_FRAMES / 2) {
         drawStormBar();
+        drawToast(true);
+      } else if (nimbus && levelFrames > HINT_FRAMES / 2) {
+        drawNimbusBar();
         drawToast(true);
       }
       else if (shade && levelFrames > HINT_FRAMES / 2) {
