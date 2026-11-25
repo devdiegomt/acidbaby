@@ -24,6 +24,11 @@
 //          lanza un rayo sobre la columna de cada uno (avisa; bajo un techo no llega). Si se estrella
 //          contra el suelo queda mareada: saltarle encima es un golpe (aguanta 4).
 //          storm: { name, left, right }. Al caer se rompen los sellos /.
+//   Ѫ      el Coloso de la cumbre (jefe final del desafío): flota entre las repisas con un núcleo
+//          de fuego, luego de agua y luego de ácido (dos golpes cada uno); solo le dañan disparos
+//          de ese elemento en el núcleo (orbes *). Ataca con bolas de nieve, lluvia y, al final,
+//          ráfagas y rayos. colossus: { name, left, right, aimRow } (aimRow: fila de los pies
+//          desde la que se le da al núcleo; 10 por defecto).
 
 // La tormenta (Mundo 3):
 //   ▓      nubarrón: no es sólido. Cada calm + pour frames llueve debajo durante pour frames (avisa
@@ -43,8 +48,32 @@ const SEASON_3 = {
   subtitle: "Las alturas",
   theme: "ice",
   ending: {
-    title: "¡Llegaron a la cumbre!",
-    text: "Chispa, Gota y Acidito miran el mundo desde lo más alto, juntos.",
+    title: "¡Vencieron el desafío final!",
+    text: "Chispa, Gota y Acidito miran el mundo desde lo más alto de la cumbre, juntos.",
+    // Créditos del final del juego (las líneas en MAYÚSCULAS van como títulos).
+    credits: [
+      "ACIDITO",
+      "Un juego de fuego, agua y ácido para tres",
+      "",
+      "PROTAGONISTAS",
+      "Chispa · Gota · Acidito",
+      "",
+      "TEMPORADAS",
+      "El templo · Las profundidades · Las alturas",
+      "",
+      "JEFES VENCIDOS",
+      "El Guardián del Templo",
+      "El Gólem de magma · La Hidra del aljibe · La Sombra de la mina",
+      "El Cangrejo hirviente · El Autómata de la forja",
+      "El Yeti de la cumbre · El Ave de la tormenta · La Nube negra",
+      "y el Coloso de la cumbre",
+      "",
+      "IDEA, DISEÑO Y PRUEBAS",
+      "El equipo de Acidito, nivel por nivel",
+      "",
+      "PROGRAMACIÓN",
+      "Con ayuda de Claude Code",
+    ],
   },
   worlds: [
     {
@@ -532,7 +561,7 @@ const SEASON_3 = {
 };
 
 // La cumbre (Mundo 4): el desafío final. Un solo nivel con varias salas seguidas, una por jefe de
-// las temporadas 2 y 3 (con sus mismas reglas y sin gemas), y al final un jefe nuevo. Se pasa de
+// las temporadas 2 y 3 (Gólem, Cangrejo, Yeti, Ave de la tormenta y Nube negra) (con sus mismas reglas y sin gemas), y al final un jefe nuevo. Se pasa de
 // sala al llegar a las puertas, con las mismas vidas y el mismo reloj; al caer se vuelve al
 // principio de la sala. Cada sala lleva el tema de su mundo.
 (() => {
@@ -557,6 +586,36 @@ const SEASON_3 = {
         rooms: [
           room(SEASON_2, "Corazón de magma", { name: "El Gólem de magma" }),
           room(SEASON_2, "El Cangrejo hirviente"),
+          room(SEASON_3, "El Yeti de la cumbre"),
+          room(SEASON_3, "El Ave de la tormenta"),
+          room(SEASON_3, "La Nube negra"),
+          {
+            name: "El Coloso de la cumbre",
+            theme: "ice",
+            hint: "El último jefe: su núcleo cambia de elemento. Dispárenle desde las repisas con el elemento que toque.",
+            colossus: { name: "El Coloso de la cumbre", left: 8, right: 30 },
+            thunder: { calm: 300, zap: 24 },
+            map: [
+              "########################################",
+              "#                                      #",
+              "#                                      #",
+              "#                                      #",
+              "#                                      #",
+              "#                  Ѫ                   #",
+              "#                                      #",
+              "#                                      #",
+              "#                                      #",
+              "#                                      #",
+              "#                                      #",
+              "########  ☁☁☁  ☁☁☁☁☁☁☁☁☁☁  ☁☁☁ #########",
+              "#                                 /    #",
+              "#                                 /    #",
+              "#                                 /    #",
+              "#                                 /    #",
+              "#fwb ***;                     ;   /123 #",
+              "############≡≡≡≡≡≡####≡≡≡≡≡≡############",
+            ],
+          },
         ],
       },
     ],

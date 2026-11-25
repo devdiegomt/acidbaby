@@ -28,7 +28,7 @@ game = game.replace(
      get grid(){return grid}, get fans(){return fans}, get doors(){return doors}, get enemies(){return enemies}, get items(){return items}, get shots(){return shots},
      get save(){return save}, isUnlocked, get levelIndex(){return levelIndex}, get lastResult(){return lastResult},
      get menuIndex(){return menuIndex}, get levelFrames(){return levelFrames}, setLevel(i, si = 0){ testLevel = null; seasonIndex = si; levelIndex = i; loadLevel(i); state = "playing"; }, get darts(){return darts}, get crumbles(){return crumbles}, get boss(){return boss}, solidAt,
-     SEASONS, get seasonIndex(){return seasonIndex}, get titleIndex(){return titleIndex}, isSeasonUnlocked, levelNumber, get flags(){return flags}, get checkpoint(){return checkpoint}, get retries(){return retries}, get toast(){return toast}, get level(){return level}, worldRange, get spikes(){return spikes}, get obsidian(){return obsidian}, get liquids(){return liquids}, starsOf, starCount, get golem(){return golem}, get rocks(){return rocks}, get waves(){return waves}, get tide(){return tide}, get hydra(){return hydra}, get torches(){return torches}, lightSources, get shade(){return shade}, get geysers(){return geysers}, get mainIndex(){return mainIndex}, mainItems, get crab(){return crab}, get automaton(){return automaton}, get yeti(){return yeti}, get gust(){return gust}, get storm(){return storm}, get rain(){return rain}, get nimbus(){return nimbus}, get roomIndex(){return roomIndex}, get thunder(){return thunder}, get clouds(){return clouds}, get rocks2(){return rocks} };\n})();`,
+     SEASONS, get seasonIndex(){return seasonIndex}, get titleIndex(){return titleIndex}, isSeasonUnlocked, levelNumber, get flags(){return flags}, get checkpoint(){return checkpoint}, get retries(){return retries}, get toast(){return toast}, get level(){return level}, worldRange, get spikes(){return spikes}, get obsidian(){return obsidian}, get liquids(){return liquids}, starsOf, starCount, get golem(){return golem}, get rocks(){return rocks}, get waves(){return waves}, get tide(){return tide}, get hydra(){return hydra}, get torches(){return torches}, lightSources, get shade(){return shade}, get geysers(){return geysers}, get mainIndex(){return mainIndex}, mainItems, get crab(){return crab}, get automaton(){return automaton}, get yeti(){return yeti}, get gust(){return gust}, get storm(){return storm}, get rain(){return rain}, get nimbus(){return nimbus}, get roomIndex(){return roomIndex}, get colossus(){return colossus}, get colossus(){return colossus}, get thunder(){return thunder}, get clouds(){return clouds}, get rocks2(){return rocks} };\n})();`,
 );
 // editor.js va antes que game.js (como en index.html); sin DOM solo define EditorCore.
 eval(fs.readFileSync(ROOT + "levels.js", "utf8") + "\nglobalThis.LEVELS = LEVELS;\n" + fs.readFileSync(ROOT + "levels2.js", "utf8") + "\nglobalThis.SEASON_2 = SEASON_2;\n" + fs.readFileSync(ROOT + "levels3.js", "utf8") + "\nglobalThis.SEASON_3 = SEASON_3;\n" + fs.readFileSync(ROOT + "editor.js", "utf8") + "\n" + game);
@@ -256,7 +256,7 @@ const playing = () => G.state === "playing";
 // Camina hasta el centro de la columna c y espera a que el personaje se pare.
 function walkTo(p, c, max = 600) {
   const k = keysOf(p), target = c * 32 + 16, dir = target > center(p) ? 1 : -1;
-  hold([dir > 0 ? k.r : k.l], max, () => (target - center(p)) * dir <= 3 || !playing());
+  hold([dir > 0 ? k.r : k.l], max, () => (target - center(p)) * dir <= 3 || !playing() || !G.players.includes(p));
   run(25);
 }
 // Va a la columna c y salta en el sitio (para coger gemas flotantes).
@@ -1472,7 +1472,7 @@ function runRightTo(p, c) {
   const pool = { L: "fire", "~": "water", A: "acid" };
   let jumping = 0;
   down(k.r);
-  for (let i = 0; i < 900 && center(p) < c * 32 + 16 && playing(); i++) {
+  for (let i = 0; i < 900 && center(p) < c * 32 + 16 && playing() && G.players.includes(p); i++) {
     // Salta cuando un charco ajeno (o unos pinchos) empieza justo delante de los pies.
     const c = Math.floor((p.x + p.w + 8) / 32);
     const ahead = pool[G.grid[feetRow(p) + 1]?.[c]];
@@ -2254,7 +2254,7 @@ const sh = () => G.shade;
 check("La Sombra está en la mina, a oscuras", sh() && G.level.dark);
 // (Para probar la mecánica, a nadie le hace daño tocarla; se prueba aparte.)
 const guarded = (n, until) => { for (let i = 0; i < n && !(until && until()) && playing(); i++) { for (const p of G.players) p.hurt = 5; run(1); } };
-const guardedWalk = (p, c) => { const k = keysOf(p), dir = c * 32 + 16 > center(p) ? k.r : k.l; down(dir); guarded(600, () => Math.abs(c * 32 + 16 - center(p)) <= 3); up(dir); guarded(10); };
+const guardedWalk = (p, c) => { const k = keysOf(p), dir = c * 32 + 16 > center(p) ? k.r : k.l; down(dir); guarded(600, () => Math.abs(c * 32 + 16 - center(p)) <= 3 || !G.players.includes(p)); up(dir); guarded(10); };
 guarded(130);
 check("Tras la presentación persigue a Gota o a Acidito, no a Chispa", (() => { const d0 = Math.hypot(sh().x - water.x, sh().y - water.y); guarded(30); return Math.hypot(sh().x - water.x, sh().y - water.y) < d0 || Math.hypot(sh().x - acid.x, sh().y - acid.y) < 9999; })());
 const torch15 = G.torches.find((t) => t.c === 15 && t.r === 16);
@@ -3708,7 +3708,8 @@ check("Llegan a sus puertas", G.state === "won", where());
 
 // --- Temporada 3, nivel 4-1: el desafío final (salas) ----------------------------------------------
 console.log("\nTemporada 3, nivel 4-1 (desafío final)");
-const challenge = () => { G.setLevel(18, 2); run(1); fire = P("Chispa"); water = P("Gota"); acid = P("Acidito"); };
+const refreshP = () => { fire = P("Chispa"); water = P("Gota"); acid = P("Acidito"); }; // al cambiar de sala hay personajes nuevos
+const challenge = () => { G.setLevel(18, 2); run(1); refreshP(); };
 challenge();
 check("El desafío final es un nivel con salas: empieza en la del Gólem", G.level.base?.name === "El desafío final" && G.roomIndex === 0 && !!G.golem && G.level.rooms >= 2, G.level.name);
 check("Las salas no tienen gemas", G.gems.length === 0);
@@ -3720,7 +3721,7 @@ check("Al vencer al Gólem se rompe el sello", G.golem.state === "dead");
 fire.hearts = 2;
 const framesBefore = G.levelFrames;
 toDoors();
-run(5);
+run(5); refreshP();
 check("Al llegar a las puertas pasa a la sala del Cangrejo, sin volver al menú", G.state === "playing" && G.roomIndex === 1 && !!G.crab && !G.golem, `${G.state} sala ${G.roomIndex}`);
 check("…el reloj sigue corriendo y se conservan las vidas", G.levelFrames >= framesBefore && fire.hearts === 2, `${G.levelFrames} ${fire.hearts}`);
 check("…y avisa en qué sala están", /Sala 2 de/.test(G.toast?.text || ""), G.toast?.text);
@@ -3730,14 +3731,111 @@ G.crab.hits = 2; water.hearts = 1;
 check("Si a mitad de la sala del Cangrejo reintentan (o alguien cae)…", G.state === "playing" && G.roomIndex === 1);
 tapKey("KeyR"); run(5);
 for (let i = 0; i < 200 && G.state !== "playing"; i++) run(1);
+refreshP();
 check("…vuelven al principio de esa misma sala, con las vidas llenas", G.roomIndex === 1 && !!G.crab && G.crab.hits === 0 && G.players.every((p) => p.hearts === 3), `sala ${G.roomIndex}`);
-for (let k = G.roomIndex; k < G.level.rooms; k++) {
-  run(150);
-  for (const b of [G.golem, G.crab, G.yeti, G.storm, G.nimbus]) if (b && b.state !== "dead") { b.state = "dying"; b.timer = 1; }
-  run(250);
-  toDoors(); run(5);
+// Del Cangrejo (aquí, de una) a las salas de la temporada 3, que se juegan de verdad.
+run(150); G.crab.state = "dying"; G.crab.timer = 1; run(250); toDoors(); run(5); refreshP();
+check("Tercera sala: el Yeti, con el tema de la montaña helada", G.roomIndex === 2 && !!G.yeti && G.level.theme === "ice", `sala ${G.roomIndex}`);
+let chHits = 0;
+for (let n = 0; n < 4 && playing(); n++) if (yetiHit()) chHits++;
+run(220);
+check("En el desafío, el Yeti se vence igual: cuatro chapuzones", chHits === 4 && G.yeti.state === "dead", `${chHits} ${where()}`);
+for (const p of G.players) place(p, 33, 16);
+run(5);
+for (const p of [fire, water, acid]) walkTo(p, G.doors[p.ch.door].c);
+refreshP();
+check("Cuarta sala: el Ave de la tormenta", G.roomIndex === 3 && !!G.storm && G.level.theme === "sky", `sala ${G.roomIndex} ${where()}`);
+for (const p of [fire, water, acid]) place(p, restCol[p.ch.name], 13);
+guarded(130);
+for (let n = 0; n < 8000 && ST().hits < 4 && playing(); n++) {
+  if (ST().state === "stunned" && ST().timer < 150) {
+    const c = stCol();
+    const p = [fire, water, acid].reduce((a, b) => (Math.abs(center(b) / 32 - c) < Math.abs(center(a) / 32 - c) ? b : a));
+    const before = ST().hits;
+    if (Math.abs(center(p) / 32 - c) > 1) guardedWalk(p, c);
+    down(keysOf(p).j); guarded(16); up(keysOf(p).j);
+    guarded(60, () => ST().hits > before);
+    guarded(30);
+    for (const q of [fire, water, acid]) if (Math.abs(center(q) / 32 - restCol[q.ch.name]) > 0.5) guardedWalk(q, restCol[q.ch.name]);
+  }
+  for (const q of [fire, water, acid]) if (q.onGround && Math.abs(center(q) / 32 - restCol[q.ch.name]) > 1.5 && !G.gust.blowing) guardedWalk(q, restCol[q.ch.name]);
+  guarded(1);
 }
+guarded(240);
+check("En el desafío, el Ave cae con cuatro saltos encima", ST().state === "dead", `${ST().hits} ${ST().state}`);
+for (const p of [fire, water, acid]) { runRightTo(p, 33); walkTo(p, G.doors[p.ch.door].c); }
+refreshP();
+check("Quinta sala: la Nube negra", G.roomIndex === 4 && !!G.nimbus && G.level.theme === "storm", `sala ${G.roomIndex} ${where()}`);
+guarded(130);
+lureOver(4, 1, 1);
+guardedWalk(water, 15); guarded(120);
+lureOver(17, 1, 13);
+guardedWalk(acid, 25); hold([keysOf(acid).r], 10); guardedWalk(acid, 24); guarded(120);
+lureOver(27, -1, 31);
+for (let k = 0; k < 3 && NB().hits < 4; k++) { guarded(1000, () => !torchAt(4).wet); lureOver(4, 1, 1); }
+guarded(250);
+check("En el desafío, la Nube negra también se hace vapor", NB().state === "dead", `${NB().hits} ${NB().state}`);
+for (const p of [fire, water, acid]) guardedWalk(p, G.doors[p.ch.door].c);
+refreshP();
+// Sala final: el Coloso de la cumbre.
+const CO = () => G.colossus;
+check("Sexta sala: el Coloso de la cumbre", G.roomIndex === 5 && !!CO() && CO().state === "intro", `sala ${G.roomIndex}`);
+// Cada uno agarra su orbe y sube por el muelle a la repisa de la izquierda.
+for (const [p, c] of [[fire, 5], [water, 6], [acid, 7]]) guardedWalk(p, c);
+check("Cada uno agarra un orbe para disparar", G.players.every((p) => p.inv.weapon), G.players.map((p) => p.inv.weapon).join());
+function toLeftLedge(p, c) {
+  const k = keysOf(p);
+  down(k.r); guarded(120, () => p.vy < -5); up(k.r); // pisa el muelle y sale disparado
+  guarded(40, () => p.vy > -3 && p.y + p.h < 11 * 32); // casi arriba: ya por encima de la repisa
+  down(k.l); guarded(60, () => p.onGround && feetRow(p) === 10); up(k.l);
+  guardedWalk(p, c);
+}
+toLeftLedge(acid, 3); toLeftLedge(water, 5); toLeftLedge(fire, 7);
+check("El muelle los sube a la repisa (la altura de su núcleo)", G.players.every((p) => feetRow(p) === 10), where());
+guarded(150);
+check("Tras presentarse empieza la pelea (núcleo de lava: le toca a Chispa)", CO().state === "fight" && CO().hits === 0);
+// Dispara quien toca, desde el borde de la repisa, cuando el núcleo pasa por delante.
+const coreCol = () => (CO().x + 48) / 32;
+function shootWhenInFront(p, frames, until) {
+  const k = keysOf(p);
+  guardedWalk(p, 7);
+  hold([k.r], 2); // mirando hacia el Coloso
+  for (let i = 0; i < frames && !until() && playing(); i++) {
+    if (CO().state === "fight" && coreCol() > 8.5 && coreCol() < 20) { down(k.fire); guarded(1); up(k.fire); }
+    guarded(1);
+  }
+}
+const h0c = CO().hits;
+shootWhenInFront(water, 400, () => false);
+check("Con el núcleo de lava, el agua de Gota no le hace nada", CO().hits === h0c, `${CO().hits}`);
+guardedWalk(water, 5);
+// Las bolas de nieve: a Chispa no le hacen nada; a Gota sí.
+for (const p of G.players) p.hurt = 0;
+const hc = [fire.hearts, water.hearts];
+for (let i = 0; i < 400 && water.hearts === hc[1]; i++) { fire.hurt = Math.min(fire.hurt, 0); run(1); }
+check("Lanza bolas de nieve: a Gota le quitan vida…", water.hearts < hc[1], `${water.hearts}`);
+guarded(1);
+const order = ["fire", "water", "acid"];
+for (let n = 0; n < 6 && CO().hits < 6; n++) {
+  const el = order[Math.floor(CO().hits / 2)];
+  const p = G.players.find((q) => q.ch.immune === el);
+  const before = CO().hits;
+  shootWhenInFront(p, 3000, () => CO().hits > before);
+  guardedWalk(p, { fire: 7, water: 5, acid: 3 }[el]);
+  if (CO().hits === 2) check("Con el núcleo de agua, ahora le toca a Gota (y llueve debajo de él)", /Gota/.test(G.toast?.text || "") || CO().hits > 2);
+}
+check("Chispa, Gota y Acidito le dan dos veces cada uno en el núcleo: seis golpes", CO().hits === 6, `${CO().hits} ${where()}`);
+guarded(300);
+check("Se desmorona y se rompe el sello de las puertas", CO().state === "dead" && G.grid[14][34] === " ", CO().state);
+// Bajan de la repisa y saltan el muelle de la derecha hasta las puertas.
+for (const p of [fire, water, acid]) { guardedWalk(p, 27); runJump(p, 29, 32); guardedWalk(p, G.doors[p.ch.door].c); }
 check("Al salir por las puertas de la última sala se gana el desafío (y se guarda el récord)", G.state === "won" && G.save.levels["t3:El desafío final"]?.done, G.state);
+tapKey("Enter"); run(2);
+check("Es el último nivel del juego: ENTER lleva al final de la temporada", G.state === "ending", G.state);
+tapKey("Enter"); run(30);
+check("…otro ENTER enseña los créditos", G.state === "ending");
+tapKey("Enter"); run(2);
+check("…y otro vuelve a los niveles", G.state === "levels", G.state);
 challenge();
 check("«Reiniciar nivel» vuelve a la primera sala", G.roomIndex === 0 && !!G.golem);
 

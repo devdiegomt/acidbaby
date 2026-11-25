@@ -134,7 +134,7 @@
 
   // Avisos de novedades: salen en la portada, en el menú de niveles y en la pausa.
   // Para cambiarlos (o quitarlos), basta con editar esta lista.
-  const NEWS = ["¡Nuevo! Temporada 3: Las alturas", "Nuevo: el desafío final (primeras salas)"];
+  const NEWS = ["¡Nuevo! Temporada 3: Las alturas", "Nuevo: el desafío final, con el Coloso de la cumbre"];
 
   // Jefe del Mundo 3 (Temporada 2): la Sombra de la mina. Flota hacia Gota o Acidito atravesando
   // las paredes; si se queda un rato a la luz de una antorcha encendida se quema (un golpe), apaga
@@ -229,7 +229,24 @@
   const NIMBUS_HP = 4;
   const NIMBUS_SPEED = [0.9, 1.1, 1.3, 1.5];
   const NIMBUS_HURT = 130; // frames hirviendo (sin llover) tras un golpe
-  const TORCH_WET = 600; // frames que una antorcha apagada por la lluvia tarda en secarse
+  const TORCH_WET = 600;
+
+  // Jefe final del desafío (temporada 3): el Coloso de la cumbre. Flota entre las repisas con un
+  // núcleo que cambia de elemento: primero de fuego, luego de agua y al final de ácido (dos golpes
+  // cada uno). Solo le hacen daño los disparos de ese elemento en el núcleo, desde las repisas y
+  // las nubes. En cada fase ataca con lo de un mundo: bolas de nieve (a Chispa no le hacen nada),
+  // lluvia (a Chispa sí) y, al final, ráfagas y rayos.
+  const COLOSSUS_TILE = "Ѫ";
+  const COLOSSUS_W = 96;
+  const COLOSSUS_H = 112;
+  const COLOSSUS_CORE_Y = 60; // centro del núcleo, desde arriba
+  const COLOSSUS_PHASES = ["fire", "water", "acid"];
+  const COLOSSUS_HITS_PER_PHASE = 2;
+  const COLOSSUS_HP = COLOSSUS_PHASES.length * COLOSSUS_HITS_PER_PHASE;
+  const COLOSSUS_SPEED = [1.0, 1.25, 1.5];
+  const COLOSSUS_HURT = 90;
+  const COLOSSUS_SNOW_RATE = 110;
+  const COLOSSUS_STORM_RATE = 200; // en la fase del ácido, cada cuánto alterna ráfaga y rayos // frames que una antorcha apagada por la lluvia tarda en secarse
 
   const FONT = '"Segoe UI", system-ui, sans-serif';
   const MECH_COLORS = ["#f2c14e", "#c86bff", "#ff6fa8", "#4fd6c8", "#f0f0f0"];
@@ -827,6 +844,7 @@
   let yeti = null; // el Yeti de la cumbre (jefe del Mundo 1 de la temporada 3)
   let storm = null; // el Ave de la tormenta (jefe del Mundo 2 de la temporada 3)
   let nimbus = null; // la Nube negra (jefe del Mundo 3 de la temporada 3)
+  let colossus = null; // el Coloso de la cumbre (jefe final del desafío)
   let torches = []; // antorchas: { c, r, lit }
   let shade = null; // la Sombra de la mina (jefe del Mundo 3 de la temporada 2)
   let hydra = null; // la Hidra del aljibe (jefe del Mundo 2 de la temporada 2)
@@ -845,6 +863,8 @@
   let particles = [];
   let background = null;
   let tick = 0;
+  let endingPage = 0; // 0: la tabla de la temporada; 1: los créditos (si la temporada los trae)
+  let creditsStart = 0;
   let levelFrames = 0;
   let deadTimer = 0;
   let deathMessage = "";
@@ -937,6 +957,7 @@
     yeti = null;
     storm = null;
     nimbus = null;
+    colossus = null;
     hydra = null;
     torches = [];
     shade = null;
@@ -1047,6 +1068,10 @@
         }
         if (t === YETI_TILE) {
           yeti = { c, r }; // se completa al final, cuando ya se conoce el lago
+          continue;
+        }
+        if (t === COLOSSUS_TILE) {
+          colossus = { c, r }; // se completa al final, junto con sus ráfagas
           continue;
         }
         if (t === NIMBUS_TILE) {
@@ -1200,6 +1225,11 @@
       });
     } else if (level.geyser) fail("hay \"geyser\" pero el mapa no tiene géiseres (↥ ↟ ⇞)");
 
+    if (colossus) {
+      if (level.gust) fail("el Coloso hace sus propias ráfagas: quiten \"gust\" del nivel");
+      colossus = makeColossus(colossus.c);
+      gust = { t: 0, dir: 1, blowing: false, warn: false, boss: true, cfg: { ...GUST_DEFAULTS, strength: STORM_GUST } };
+    }
     if (nimbus) {
       if (!torches.length) fail("la Nube negra necesita al menos una antorcha (†)");
       nimbus = makeNimbus(nimbus.c);
@@ -1281,7 +1311,7 @@
   function liveState() {
     return {
       grid, liquids, breakables, dissolving, barriers, fans, doors, boxes, gems, mechs, portals,
-      enemies, items, springs, crumbles, spikes, flags, obsidian, boss, bossDefeatedAt, golem, crab, automaton, yeti, storm, nimbus, dispensers, tide, hydra, torches, shade, geysers, gust, rain, thunder,
+      enemies, items, springs, crumbles, spikes, flags, obsidian, boss, bossDefeatedAt, golem, crab, automaton, yeti, storm, nimbus, colossus, dispensers, tide, hydra, torches, shade, geysers, gust, rain, thunder,
       players: players.map((p) => ({
         ...p,
         ch: CHARACTERS.indexOf(p.ch),
@@ -1304,7 +1334,7 @@
   function backToCheckpoint() {
     const s = structuredClone(checkpoint);
     ({ grid, liquids, breakables, dissolving, barriers, fans, doors, boxes, gems, mechs, portals } = s);
-    ({ enemies, items, springs, crumbles, spikes, flags, obsidian, boss, bossDefeatedAt, golem, crab, automaton, yeti, storm, nimbus, dispensers, tide, hydra, torches, shade, geysers, gust, rain, thunder } = s);
+    ({ enemies, items, springs, crumbles, spikes, flags, obsidian, boss, bossDefeatedAt, golem, crab, automaton, yeti, storm, nimbus, colossus, dispensers, tide, hydra, torches, shade, geysers, gust, rain, thunder } = s);
     players = s.players.map((p) =>
       Object.assign(p, {
         ch: CHARACTERS[p.ch],
@@ -2450,6 +2480,10 @@
       s.x += s.vx;
       s.life--;
       if (boss && hitBoss(s)) {
+        s.life = 0;
+        continue;
+      }
+      if (colossus && hitColossus(s)) {
         s.life = 0;
         continue;
       }
@@ -3667,6 +3701,194 @@
     breakSeals();
   }
 
+  // ---------------------------------------------------------------------------
+  // El Coloso de la cumbre (jefe final del desafío)
+  // ---------------------------------------------------------------------------
+  function makeColossus(c) {
+    const cfg = level.colossus || {};
+    const aimRow = cfg.aimRow ?? 10; // fila de los pies desde la que los disparos le dan al núcleo
+    const shotY = (aimRow + 1) * T - PH + 13; // altura del centro de un disparo desde esa fila
+    const minX = (cfg.left ?? 6) * T;
+    const maxX = ((cfg.right ?? grid[0].length - 7) + 1) * T - COLOSSUS_W;
+    return {
+      name: cfg.name || "El Coloso de la cumbre",
+      x: Math.max(minX, Math.min(maxX, c * T + T / 2 - COLOSSUS_W / 2)),
+      y: shotY - COLOSSUS_CORE_Y,
+      hoverY: shotY - COLOSSUS_CORE_Y,
+      minX,
+      maxX,
+      dir: 1,
+      hits: 0,
+      state: "intro", // intro | fight | hurt | dying | dead
+      timer: 140,
+      attackTimer: 90,
+      storm: 0, // en la fase del ácido: cuántos ataques lleva (ráfaga, rayos, ráfaga…)
+      flapping: 0,
+      bolts: [],
+      flash: 0,
+      anim: 0,
+    };
+  }
+
+  const colossusPhase = (k) => COLOSSUS_PHASES[Math.min(COLOSSUS_PHASES.length - 1, Math.floor(k.hits / COLOSSUS_HITS_PER_PHASE))];
+  const colossusCore = (k) => ({ x: k.x + COLOSSUS_W / 2 - 16, y: k.y + COLOSSUS_CORE_Y - 16, w: 32, h: 32 });
+  const COLOSSUS_SHOOTER = { fire: "Chispa", water: "Gota", acid: "Acidito" };
+  function colossusPhaseText(k) {
+    const el = colossusPhase(k);
+    const who = players.find((p) => p.ch.immune === el)?.ch.name || COLOSSUS_SHOOTER[el];
+    return `Su núcleo es de ${ELEMENTS[el].label}: ¡${who}, dispárale desde las repisas!`;
+  }
+
+  // Un disparo que llega al núcleo se gasta: solo le hace daño si es del elemento de la fase.
+  function hitColossus(s) {
+    const k = colossus;
+    if (k.state === "dead" || k.state === "dying") return false;
+    // El cuerpo es de roca hueca: los disparos lo atraviesan hasta el núcleo.
+    const core = colossusCore(k);
+    if (!intersects(core.x, core.y, core.w, core.h, s)) return false;
+    if (k.state === "fight" && s.type === colossusPhase(k)) {
+      hurtColossus(k);
+    } else {
+      burst(s.x + s.w / 2, s.y + s.h / 2, ["#d8e2ee", "#ffffff"], 6);
+      sound.play("clink");
+    }
+    return true;
+  }
+
+  function updateColossus() {
+    const k = colossus;
+    if (k.flash > 0) k.flash--;
+    k.anim++;
+    updateRocksAndWaves();
+    if (k.state === "dead") return;
+    if (k.state === "dying") {
+      shake = Math.max(shake, 4);
+      if (k.timer % 5 === 0) burst(k.x + Math.random() * COLOSSUS_W, k.y + Math.random() * COLOSSUS_H, ["#ffd166", "#9fd8ff", "#7dff4d", "#ffffff"], 10);
+      if (--k.timer <= 0) defeatColossus(k);
+      return;
+    }
+    if (k.state === "intro") {
+      if (--k.timer <= 0) {
+        k.state = "fight";
+        toast = { text: colossusPhaseText(k), frames: TOAST_FRAMES };
+      }
+      return;
+    }
+    const lvl = Math.min(COLOSSUS_SPEED.length - 1, Math.floor(k.hits / COLOSSUS_HITS_PER_PHASE));
+    updateBolts(k);
+    if (state !== "playing") return;
+    // Flota de lado a lado por delante de las repisas.
+    if (!k.flapping) {
+      k.x += k.dir * COLOSSUS_SPEED[lvl] * (k.state === "hurt" ? 2 : 1);
+      if (k.x <= k.minX || k.x >= k.maxX) {
+        k.x = Math.max(k.minX, Math.min(k.maxX, k.x));
+        k.dir = -k.dir;
+      }
+    }
+    k.y = k.hoverY + Math.sin(k.anim * 0.05) * 3;
+    if (k.state === "hurt") {
+      if (--k.timer <= 0) k.state = "fight";
+      return;
+    }
+    const phase = colossusPhase(k);
+    const cx = k.x + COLOSSUS_W / 2;
+    const alive = players.filter((p) => p.alive);
+    if (phase === "fire") {
+      // Bolas de nieve en arco hacia cada uno (a Chispa no le hacen nada).
+      if (--k.attackTimer <= 0) {
+        k.attackTimer = COLOSSUS_SNOW_RATE;
+        for (const p of alive) {
+          const vx = Math.max(-6, Math.min(6, (p.x + p.w / 2 - cx) / 45));
+          rocks.push({ x: cx - 7, y: k.y + 20, w: 14, h: 14, vx, vy: -6, snow: true, cause: "recibió una bola de nieve del Coloso" });
+        }
+        sound.play("shot");
+      }
+    } else if (phase === "water") {
+      // Llueve debajo de él (a Chispa le quita vidas).
+      const r = Math.floor((k.y + COLOSSUS_H - 1) / T);
+      const cc = Math.floor(cx / T);
+      for (const c of [cc - 1, cc, cc + 1]) {
+        rainColumn(c, r);
+        if (state !== "playing") return;
+      }
+    } else {
+      // Ácido: alterna una ráfaga (sopla alejándose de él) y rayos sobre la columna de cada uno.
+      if (k.flapping) {
+        k.flapping--;
+        if (k.flapping === STORM_FLAP_BLOW) {
+          gust.warn = false;
+          gust.blowing = true;
+          sound.play("wind");
+        }
+        if (gust.blowing) gust.t++;
+        if (k.flapping === 0) gust.blowing = gust.warn = false;
+      } else if (--k.attackTimer <= 0) {
+        k.attackTimer = COLOSSUS_STORM_RATE;
+        if (k.storm++ % 2 === 0) {
+          const mid = (k.minX + k.maxX + COLOSSUS_W) / 2;
+          gust.dir = cx < mid ? 1 : -1;
+          gust.warn = true;
+          k.flapping = STORM_FLAP_WARN + STORM_FLAP_BLOW;
+        } else {
+          for (const p of alive) {
+            const c = Math.floor((p.x + p.w / 2) / T);
+            if (!k.bolts.some((b) => b.c === c)) k.bolts.push({ c, t: STORM_BOLT_WARN, strike: false, bottom: 0 });
+          }
+          sound.play("hiss");
+        }
+      }
+    }
+    // Tocarlo duele.
+    for (const p of players) {
+      if (p.alive && p.hurt === 0 && intersects(k.x + 14, k.y + 14, COLOSSUS_W - 28, COLOSSUS_H - 20, p)) {
+        hurtPlayer(p, { x: k.x, w: COLOSSUS_W }, "chocó con el Coloso");
+        if (state !== "playing") return;
+      }
+    }
+  }
+
+  function hurtColossus(k) {
+    const before = colossusPhase(k);
+    k.hits++;
+    k.flash = 30;
+    shake = Math.max(shake, 8);
+    burst(k.x + COLOSSUS_W / 2, k.y + COLOSSUS_CORE_Y, [ELEMENTS[before].top, ELEMENTS[before].body, "#ffffff"], 40);
+    sound.play("bossHit");
+    if (k.hits >= COLOSSUS_HP) {
+      k.state = "dying";
+      k.timer = 140;
+      k.bolts = [];
+      gust.blowing = gust.warn = false;
+      rocks = [];
+      sound.play("roar");
+      return;
+    }
+    k.state = "hurt";
+    k.timer = COLOSSUS_HURT;
+    if (colossusPhase(k) !== before) {
+      // Cambia de fase: lo de la anterior se acaba.
+      k.attackTimer = 120;
+      k.flapping = 0;
+      gust.blowing = gust.warn = false;
+      rocks = [];
+      toast = { text: colossusPhaseText(k), frames: TOAST_FRAMES };
+    } else toast = { text: `¡En el núcleo! Le quedan ${COLOSSUS_HP - k.hits}`, frames: TOAST_FRAMES / 2 };
+  }
+
+  function defeatColossus(k) {
+    k.state = "dead";
+    bossDefeatedAt = levelFrames;
+    shake = 40;
+    burst(k.x + COLOSSUS_W / 2, k.y + COLOSSUS_H / 2, ["#ffd166", "#9fd8ff", "#7dff4d", "#ffffff", "#ff8a3d"], 120);
+    sound.play("boom");
+    sound.play("win");
+    for (const e of enemies) if (e.alive) defeatEnemy(e);
+    rocks = [];
+    k.bolts = [];
+    gust.blowing = gust.warn = false;
+    breakSeals();
+  }
+
   // La marea espera un rato y luego sube; un desagüe activo la hace bajar. Quien no es de su
   // elemento y se queda con la cabeza por debajo de la superficie se hunde.
   function updateTide() {
@@ -4409,7 +4631,7 @@
     if (rain) add(rain.t);
     if (thunder) add(thunder.t);
     [levelFrames, STATE_CODE[state] || 0, tide ? tide.y : 0, gems.filter((g) => g.taken).length].forEach(add);
-    for (const b of [boss, golem, hydra, shade, crab, automaton, yeti, storm, nimbus]) if (b) [b.x || 0, b.y || 0, b.hits || b.hp || 0].forEach(add);
+    for (const b of [boss, golem, hydra, shade, crab, automaton, yeti, storm, nimbus, colossus]) if (b) [b.x || 0, b.y || 0, b.hits || b.hp || 0].forEach(add);
     add(roomIndex);
     return h;
   }
@@ -4542,7 +4764,7 @@
     }
     const w = unpackWorld(s.world);
     ({ grid, liquids, breakables, dissolving, barriers, fans, doors, boxes, gems, mechs, portals } = w);
-    ({ enemies, items, springs, crumbles, spikes, flags, obsidian, boss, bossDefeatedAt, golem, crab, automaton, yeti, storm, nimbus, dispensers, tide, hydra, torches, shade, geysers, gust, rain, thunder } = w);
+    ({ enemies, items, springs, crumbles, spikes, flags, obsidian, boss, bossDefeatedAt, golem, crab, automaton, yeti, storm, nimbus, colossus, dispensers, tide, hydra, torches, shade, geysers, gust, rain, thunder } = w);
     players = w.players.map((p) => Object.assign(p, { ch: CHARACTERS[p.ch], controls: CHARACTERS[p.controls].keys }));
     checkpoint = s.checkpoint ? unpackWorld(s.checkpoint) : null;
     shots = s.shots.map((x) => ({ ...x, owner: players[x.owner] }));
@@ -4607,6 +4829,7 @@
         if (yeti && state === "playing") updateYeti();
         if (storm && state === "playing") updateStorm();
         if (nimbus && state === "playing") updateNimbus();
+        if (colossus && state === "playing") updateColossus();
         if (hydra && state === "playing") updateHydra();
         updateDispensers();
         updateBreakables();
@@ -4643,7 +4866,10 @@
         if (levelIndex + 1 < seasonLevels().length) {
           net.send?.({ t: "start", season: seasonIndex, level: levelIndex + 1 });
           netStartLevel(seasonIndex, levelIndex + 1);
-        } else state = "ending";
+        } else {
+          state = "ending";
+          endingPage = 0;
+        }
       } else if (net.host && menuKey("back")) {
         net.send?.({ t: "menu" });
         openLevelMenu();
@@ -4663,12 +4889,20 @@
           restartLevel();
         } else {
           state = "ending";
+          endingPage = 0;
         }
       } else if (menuKey("back")) {
         openLevelMenu();
       }
     } else if (state === "ending") {
-      if (menuKey("ok") || menuKey("back") || clicked) openLevelMenu();
+      if (menuKey("ok") || menuKey("back") || clicked) {
+        // Si la temporada trae créditos, primero se ven los créditos.
+        if (season().ending.credits && endingPage === 0 && !menuKey("back")) {
+          endingPage = 1;
+          creditsStart = tick;
+          sound.play("select");
+        } else openLevelMenu();
+      }
     }
 
     updateParticles();
@@ -7020,7 +7254,33 @@
     }
   }
 
+  // Créditos del final del juego: suben despacio por la pantalla.
+  function drawCredits(t) {
+    dim(0.92);
+    const { ending } = season();
+    const lines = [...ending.credits];
+    const i = seasonLevels().findIndex((lv) => lv.rooms);
+    const rec = i >= 0 ? recordOf(i) : null;
+    if (rec?.done) lines.push("", `Su mejor tiempo en el desafío final: ${formatTime(rec.bestFrames)}`);
+    lines.push("", "¡Gracias por jugar!");
+    const rowH = 34;
+    const scroll = Math.min((tick - creditsStart) * 0.7, Math.max(0, lines.length * rowH + 60 - H / 2));
+    lines.forEach((line, k) => {
+      const y = H - 40 + k * rowH - scroll;
+      if (y < 30 || y > H - 20) return;
+      const title = k === 0 || /^[A-ZÁÉÍÓÚÑ¡, ]{4,}$/.test(line);
+      text(line, W / 2, y, title ? 30 : 18, title ? "#ffe9b8" : "#d9c9a6", "center", title ? "bold" : "normal");
+    });
+    ctx.globalAlpha = 0.6 + Math.sin(t * 4) * 0.4;
+    text("ENTER: volver a los niveles", W / 2, H - 20, 16, "#ffffff");
+    ctx.globalAlpha = 1;
+  }
+
   function drawEnding(t) {
+    if (endingPage === 1 && season().ending.credits) {
+      drawCredits(t);
+      return;
+    }
     dim(0.85);
     ctx.globalAlpha = 0.8 + Math.sin(t * 3) * 0.2;
     const { ending } = season();
@@ -7074,7 +7334,7 @@
     }
 
     ctx.globalAlpha = 0.6 + Math.sin(t * 4) * 0.4;
-    text("ENTER: volver a los niveles", W / 2, H - 40, 20, "#ffffff");
+    text(season().ending.credits && !net.active ? "ENTER: ver los créditos" : "ENTER: volver a los niveles", W / 2, H - 40, 20, "#ffffff");
     ctx.globalAlpha = 1;
   }
 
@@ -7639,36 +7899,7 @@
   function drawStorm(t) {
     const s = storm;
     if (!s) return;
-    // Rayos: primero la columna que avisa; luego el relámpago hasta el primer techo.
-    for (const b of s.bolts) {
-      const x = b.c * T;
-      if (!b.strike) {
-        ctx.fillStyle = `rgba(255,236,120,${0.12 + 0.1 * Math.sin(t * 14)})`;
-        ctx.fillRect(x + 4, 0, T - 8, LH);
-        ctx.fillStyle = "rgba(60,70,95,0.85)";
-        for (const [dx, rad] of [[6, 9], [16, 12], [26, 9]]) {
-          ctx.beginPath();
-          ctx.arc(x + dx, T + 6, rad, 0, Math.PI * 2);
-          ctx.fill();
-        }
-      } else {
-        ctx.save();
-        ctx.strokeStyle = "rgba(255,240,150,0.45)";
-        ctx.lineWidth = 12;
-        ctx.beginPath();
-        ctx.moveTo(x + T / 2, 0);
-        ctx.lineTo(x + T / 2, b.bottom);
-        ctx.stroke();
-        ctx.strokeStyle = "#fffbe0";
-        ctx.lineWidth = 3;
-        ctx.beginPath();
-        ctx.moveTo(x + T / 2, 0);
-        for (let y = 24; y < b.bottom; y += 24) ctx.lineTo(x + T / 2 + ((y / 24 + b.t) % 2 ? 7 : -7), y);
-        ctx.lineTo(x + T / 2, b.bottom);
-        ctx.stroke();
-        ctx.restore();
-      }
-    }
+    drawBolts(s.bolts, t);
     if (s.state === "dead") return;
     const shakeX = s.state === "divewarn" ? Math.sin(t * 60) * 2 : 0;
     const x = s.x + shakeX;
@@ -7755,6 +7986,39 @@
     ctx.stroke();
     ctx.restore();
     if (s.state === "divewarn") text("!", cx, y - 18, 22, "#ff3b3b");
+  }
+
+  // Rayos: primero la columna que avisa; luego el relámpago hasta el primer techo.
+  function drawBolts(bolts, t) {
+    for (const b of bolts) {
+      const x = b.c * T;
+      if (!b.strike) {
+        ctx.fillStyle = `rgba(255,236,120,${0.12 + 0.1 * Math.sin(t * 14)})`;
+        ctx.fillRect(x + 4, 0, T - 8, LH);
+        ctx.fillStyle = "rgba(60,70,95,0.85)";
+        for (const [dx, rad] of [[6, 9], [16, 12], [26, 9]]) {
+          ctx.beginPath();
+          ctx.arc(x + dx, T + 6, rad, 0, Math.PI * 2);
+          ctx.fill();
+        }
+      } else {
+        ctx.save();
+        ctx.strokeStyle = "rgba(255,240,150,0.45)";
+        ctx.lineWidth = 12;
+        ctx.beginPath();
+        ctx.moveTo(x + T / 2, 0);
+        ctx.lineTo(x + T / 2, b.bottom);
+        ctx.stroke();
+        ctx.strokeStyle = "#fffbe0";
+        ctx.lineWidth = 3;
+        ctx.beginPath();
+        ctx.moveTo(x + T / 2, 0);
+        for (let y = 24; y < b.bottom; y += 24) ctx.lineTo(x + T / 2 + ((y / 24 + b.t) % 2 ? 7 : -7), y);
+        ctx.lineTo(x + T / 2, b.bottom);
+        ctx.stroke();
+        ctx.restore();
+      }
+    }
   }
 
   function drawStormBar() {
@@ -7897,6 +8161,130 @@
       ctx.fillRect(x + i * seg + 2, yy + 12, seg - 4, 10);
       if (i >= n.hits) {
         ctx.fillStyle = mix("#9fb4d6", "#3a4458", i / NIMBUS_HP);
+        ctx.fillRect(x + i * seg + 2, yy + 12, seg - 4, 10);
+      }
+    }
+  }
+
+  // El Coloso: un gigante de roca y hielo con un núcleo que brilla del color de su elemento;
+  // al hervir parpadea en blanco.
+  function drawColossus(t) {
+    const k = colossus;
+    if (!k) return;
+    drawBolts(k.bolts, t);
+    if (k.state === "dead") return;
+    const el = ELEMENTS[colossusPhase(k)];
+    const x = k.x;
+    const y = k.y;
+    const cx = x + COLOSSUS_W / 2;
+    ctx.save();
+    if (k.state === "dying") ctx.globalAlpha = Math.max(0.15, k.timer / 140);
+    const white = k.flash > 0 && k.flash % 6 < 3;
+    // Brazos de roca que flotan a los lados
+    const sway = Math.sin(k.anim * 0.06) * 4;
+    ctx.fillStyle = white ? "#ffffff" : "#6f7d8f";
+    roundRectPath(ctx, x - 18, y + 44 + sway, 22, 46, 8);
+    ctx.fill();
+    roundRectPath(ctx, x + COLOSSUS_W - 4, y + 44 - sway, 22, 46, 8);
+    ctx.fill();
+    // Cuerpo
+    ctx.fillStyle = white ? "#ffffff" : "#8a98ab";
+    roundRectPath(ctx, x + 8, y + 18, COLOSSUS_W - 16, COLOSSUS_H - 24, 18);
+    ctx.fill();
+    ctx.fillStyle = white ? "#ffffff" : "#5d6a7b";
+    roundRectPath(ctx, x + 8, y + COLOSSUS_H - 30, COLOSSUS_W - 16, 24, 10);
+    ctx.fill();
+    // Corona de hielo
+    ctx.fillStyle = "#cfefff";
+    for (let i = 0; i < 4; i++) {
+      const px = x + 20 + i * 18;
+      ctx.beginPath();
+      ctx.moveTo(px, y + 20);
+      ctx.lineTo(px + 8, y - 4 - (i % 2) * 6);
+      ctx.lineTo(px + 16, y + 20);
+      ctx.closePath();
+      ctx.fill();
+    }
+    // Ojos
+    ctx.fillStyle = "#1b1f2a";
+    for (const side of [-1, 1]) {
+      ctx.beginPath();
+      ctx.ellipse(cx + side * 18, y + 34, 7, 5, 0, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    ctx.fillStyle = el.top;
+    for (const side of [-1, 1]) {
+      ctx.beginPath();
+      ctx.arc(cx + side * 18, y + 34, 2.5, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    // Núcleo del elemento de la fase
+    const pulse = 1 + Math.sin(t * 6) * 0.08;
+    ctx.save();
+    ctx.shadowColor = el.top;
+    ctx.shadowBlur = 20;
+    ctx.fillStyle = el.body;
+    ctx.beginPath();
+    ctx.arc(cx, y + COLOSSUS_CORE_Y, 15 * pulse, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = el.top;
+    ctx.beginPath();
+    ctx.arc(cx - 4, y + COLOSSUS_CORE_Y - 4, 6, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+    // Lluvia en la fase del agua
+    if (colossusPhase(k) === "water" && k.state === "fight") {
+      const r = Math.floor((y + COLOSSUS_H - 1) / T);
+      const cc = Math.floor(cx / T);
+      ctx.strokeStyle = "rgba(170,210,255,0.8)";
+      ctx.lineWidth = 1.5;
+      for (const c of [cc - 1, cc, cc + 1]) {
+        const top = y + COLOSSUS_H - 6;
+        const bottom = rainBottom(c, r) * T;
+        ctx.fillStyle = "rgba(120,170,230,0.18)";
+        ctx.fillRect(c * T + 2, top, T - 4, bottom - top);
+        for (let q = 0; q < 4; q++) {
+          const off = (t * 560 + q * 37 + c * 13) % 40;
+          for (let yy = top + off - 40; yy < bottom; yy += 40) {
+            const y0 = Math.max(top, yy);
+            const y1 = Math.min(bottom, yy + 14);
+            if (y1 <= y0) continue;
+            ctx.beginPath();
+            ctx.moveTo(c * T + 6 + q * 7, y0);
+            ctx.lineTo(c * T + 4 + q * 7, y1);
+            ctx.stroke();
+          }
+        }
+      }
+    }
+    ctx.restore();
+  }
+
+  function drawColossusBar() {
+    const k = colossus;
+    if (k.state === "dead") {
+      const since = levelFrames - bossDefeatedAt;
+      if (since < 260) {
+        ctx.save();
+        ctx.globalAlpha = Math.min(1, since / 20, (260 - since) / 40);
+        ctx.fillStyle = "rgba(10,8,5,0.8)";
+        ctx.fillRect(0, H / 2 - 56, W, 112);
+        text(`¡${k.name} se desmoronó!`, W / 2, H / 2 - 16, 34, "#ffe08a");
+        text("Chispa, Gota y Acidito son los dueños de la cumbre…", W / 2, H / 2 + 24, 18, "#d9c9a6", "center", "normal");
+        ctx.restore();
+      }
+      return;
+    }
+    const w = Math.min(460, W - 120);
+    const x = W / 2 - w / 2;
+    const yy = T + 12;
+    text(`${k.name} · núcleo de ${ELEMENTS[colossusPhase(k)].label}`, W / 2, yy, 15, "#ffe9b8");
+    const seg = w / COLOSSUS_HP;
+    for (let i = 0; i < COLOSSUS_HP; i++) {
+      ctx.fillStyle = "rgba(0,0,0,0.6)";
+      ctx.fillRect(x + i * seg + 2, yy + 12, seg - 4, 10);
+      if (i >= k.hits) {
+        ctx.fillStyle = ELEMENTS[COLOSSUS_PHASES[Math.floor(i / COLOSSUS_HITS_PER_PHASE)]].body;
         ctx.fillRect(x + i * seg + 2, yy + 12, seg - 4, 10);
       }
     }
@@ -8343,6 +8731,7 @@
     drawYeti(t);
     drawStorm(t);
     drawNimbus(t);
+    drawColossus(t);
     drawHydra(t);
     drawShade(t);
     drawGeyserJets(t);
@@ -8393,6 +8782,9 @@
         drawToast(true);
       } else if (nimbus && levelFrames > HINT_FRAMES / 2) {
         drawNimbusBar();
+        drawToast(true);
+      } else if (colossus && levelFrames > HINT_FRAMES / 2) {
+        drawColossusBar();
         drawToast(true);
       }
       else if (shade && levelFrames > HINT_FRAMES / 2) {
